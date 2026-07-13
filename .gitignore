@@ -1,0 +1,11 @@
+node_modules
+dist
+dist-vscode
+coverage
+*.local
+.DS_Store
+# vscode extension build products
+apps/vscode/out
+apps/vscode/media
+apps/vscode/LICENSE
+sbomlens.vsix

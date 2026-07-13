@@ -1,0 +1,6 @@
+{
+  "SchemaVersion": 2,
+  "ArtifactName": "example:latest",
+  "ArtifactType": "container_image",
+  "Results": []
+}

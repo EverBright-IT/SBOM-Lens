@@ -1,0 +1,72 @@
+{
+  "schema": "sbomlens-profile/v1",
+  "name": "ACME minimum elements",
+  "description": "Demo enterprise profile: NTIA basics plus supplier pattern and coverage gates.",
+  "checks": [
+    {
+      "id": "creators",
+      "type": "document-field",
+      "field": "creators",
+      "label": "SBOM author (creators)"
+    },
+    {
+      "id": "created",
+      "type": "document-field",
+      "field": "created",
+      "label": "Timestamp (created)"
+    },
+    {
+      "id": "namespace",
+      "type": "document-field",
+      "field": "namespace",
+      "label": "Document namespace",
+      "pattern": "^https://"
+    },
+    {
+      "id": "fresh",
+      "type": "created-recency",
+      "maxAgeDays": 365,
+      "label": "Created within a year"
+    },
+    {
+      "id": "relationships",
+      "type": "relationships",
+      "label": "Dependency relationships"
+    },
+    {
+      "id": "pkg-version",
+      "type": "package-coverage",
+      "field": "version",
+      "threshold": 100,
+      "label": "Version"
+    },
+    {
+      "id": "pkg-supplier",
+      "type": "package-coverage",
+      "field": "supplier",
+      "threshold": 95,
+      "label": "Supplier"
+    },
+    {
+      "id": "pkg-acme-suppliers",
+      "type": "package-coverage",
+      "field": "supplier",
+      "pattern": "^Organization: (ACME|Alpine)",
+      "threshold": 90,
+      "label": "Approved suppliers"
+    },
+    {
+      "id": "pkg-unique-id",
+      "type": "package-coverage",
+      "field": "uniqueId",
+      "threshold": 90,
+      "label": "Unique IDs (purl/refs)"
+    },
+    {
+      "id": "pkg-license",
+      "type": "package-coverage",
+      "field": "license",
+      "label": "License"
+    }
+  ]
+}

@@ -1,0 +1,18 @@
+SPDXVersion: SPDX-2.3
+DataLicense: CC0-1.0
+SPDXID: SPDXRef-DOCUMENT
+DocumentName: acme-platform
+DocumentNamespace: https://example.org/spdxdocs/acme-platform
+# WEBSTACK resolves by checksum — the SHA-1 below is the real hash of mid.spdx.
+# Note the deliberate version drift: the ref says 2.2, the file says 2.1.0.
+ExternalDocumentRef: DocumentRef-WEBSTACK-2.2 https://artifacts.example.org/webstack/webstack.spdx SHA1:713a310076de17921a7cd602b984d9cb3a110352
+Creator: Tool: sbomlens-fixtures
+Created: 2026-04-04T00:00:00Z
+
+PackageName: platform
+SPDXID: SPDXRef-Package-platform
+PackageVersion: 1.0.0
+PackageDownloadLocation: NOASSERTION
+
+Relationship: SPDXRef-DOCUMENT DESCRIBES SPDXRef-Package-platform
+Relationship: SPDXRef-Package-platform CONTAINS DocumentRef-WEBSTACK-2.2:SPDXRef-Package-webstack

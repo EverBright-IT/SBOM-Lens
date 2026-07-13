@@ -1,0 +1,20 @@
+SPDXVersion: SPDX-2.3
+DataLicense: CC0-1.0
+SPDXID: SPDXRef-DOCUMENT
+DocumentName: acme-auth-service
+DocumentNamespace: https://example.org/spdxdocs/acme-auth-service
+Creator: Tool: sbomlens-fixtures
+Created: 2026-04-03T00:00:00Z
+
+PackageName: auth-service
+SPDXID: SPDXRef-Package-auth-service
+PackageVersion: 2.0.1
+PackageDownloadLocation: NOASSERTION
+
+PackageName: libjwt
+SPDXID: SPDXRef-Package-libjwt
+PackageVersion: 1.15.3
+PackageDownloadLocation: NOASSERTION
+
+Relationship: SPDXRef-DOCUMENT DESCRIBES SPDXRef-Package-auth-service
+Relationship: SPDXRef-Package-auth-service CONTAINS SPDXRef-Package-libjwt

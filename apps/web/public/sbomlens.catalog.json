@@ -1,0 +1,30 @@
+{
+  "title": "Demo catalog",
+  "sources": [
+    {
+      "label": "ACME Platform 1.0 (demo cascade)",
+      "description": "Three-document cascade with one deliberately unresolved reference to explore.",
+      "urls": [
+        "examples/acme-platform-1.0.spdx",
+        "examples/acme-webstack-2.1.spdx.json",
+        "examples/acme-runtime-image-3.0.spdx"
+      ]
+    },
+    {
+      "label": "ACME Platform 1.0 — full tree",
+      "description": "Same cascade, but every referenced document is fetched recursively.",
+      "urls": [
+        "examples/acme-platform-1.0.spdx",
+        "examples/acme-webstack-2.1.spdx.json",
+        "examples/acme-runtime-image-3.0.spdx"
+      ],
+      "resolveRefs": true
+    }
+  ],
+  "profiles": [
+    {
+      "name": "ACME minimum elements",
+      "url": "examples/acme-profile.sbomlens-profile.json"
+    }
+  ]
+}

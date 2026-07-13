@@ -1,0 +1,10 @@
+{
+  "@context": "https://spdx.org/rdf/3.0.1/spdx-context.jsonld",
+  "@graph": [
+    {
+      "type": "SpdxDocument",
+      "spdxId": "https://example.org/spdx3/doc",
+      "creationInfo": "_:creationinfo"
+    }
+  ]
+}

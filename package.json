@@ -1,0 +1,55 @@
+{
+  "name": "@sbomlens/monorepo",
+  "version": "0.10.5",
+  "description": "A fast, minimal viewer for SPDX SBOMs — including cascading document hierarchies.",
+  "license": "Apache-2.0",
+  "private": true,
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://gitlab.com/everbrightit-group/sbom-lens.git"
+  },
+  "keywords": [
+    "spdx",
+    "sbom",
+    "viewer",
+    "supply-chain",
+    "software-bill-of-materials"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w @sbomlens/web",
+    "build": "npm run typecheck && npm run build -w @sbomlens/web",
+    "preview": "npm run preview -w @sbomlens/web",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "check-corpus": "vitest run packages/core/src/corpus.check.test.ts",
+    "generate:spec-docs": "npm run generate:spec-docs -w @sbomlens/core",
+    "generate:examples": "npm run generate:examples -w @sbomlens/web"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.7.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17.7.0",
+    "prettier": "^3.9.5",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.63.0",
+    "vitest": "^4.1.10"
+  },
+  "author": "EverBright IT GmbH (https://everbright-it.de)",
+  "homepage": "https://sbom-lens.everbright-it.de/",
+  "bugs": {
+    "url": "https://gitlab.com/everbrightit-group/sbom-lens/-/issues"
+  }
+}

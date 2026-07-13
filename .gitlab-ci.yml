@@ -1,0 +1,194 @@
+# test → build → GitLab Pages on the default branch (landing page at /, the
+# viewer at /app/); container image, vsix, image scan, and a self-SBOM on
+# tags. Security scanning runs on every push; Renovate runs in its own
+# scheduled pipeline (see docs/ci-security.md).
+stages: [test, build, deploy]
+
+include:
+  - template: Jobs/SAST.gitlab-ci.yml
+  - template: Security/Secret-Detection.gitlab-ci.yml
+
+variables:
+  SAST_EXCLUDED_PATHS: '**/dist, **/dist-vscode, apps/vscode/media, packages/core/fixtures, apps/web/public/examples'
+
+default:
+  image: node:22-alpine
+  cache:
+    key:
+      files: [package-lock.json]
+    paths: [.npm/]
+  before_script:
+    - npm ci --cache .npm --prefer-offline
+
+test:
+  stage: test
+  rules:
+    - if: $RENOVATE_RUN == "true"
+      when: never
+    - when: on_success
+  script:
+    - npm run lint
+    - npm run typecheck
+    - npm run test
+
+# Known-vulnerability gate over the lockfile (blocking). Ignores, when ever
+# needed, go into osv-scanner.toml — see docs/ci-security.md.
+osv-scan:
+  stage: test
+  image:
+    name: ghcr.io/google/osv-scanner:latest
+    entrypoint: ['']
+  cache: []
+  before_script: []
+  rules:
+    - if: $RENOVATE_RUN == "true"
+      when: never
+    - when: on_success
+  script:
+    - /osv-scanner --lockfile=package-lock.json
+
+# The security templates run per push too, but never in the Renovate schedule.
+semgrep-sast:
+  rules:
+    - if: $RENOVATE_RUN == "true"
+      when: never
+    - if: $CI_COMMIT_BRANCH || $CI_COMMIT_TAG
+
+secret_detection:
+  rules:
+    - if: $RENOVATE_RUN == "true"
+      when: never
+    - if: $CI_COMMIT_BRANCH || $CI_COMMIT_TAG
+
+# Dependency updates as merge requests. Runs ONLY in a scheduled pipeline
+# that sets RENOVATE_RUN=true; needs the RENOVATE_TOKEN CI variable
+# (bot PAT, scopes api + write_repository). Setup: docs/ci-security.md.
+renovate:
+  stage: test
+  image: renovate/renovate:latest
+  cache: []
+  before_script: []
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule" && $RENOVATE_RUN == "true"
+  variables:
+    RENOVATE_PLATFORM: gitlab
+    RENOVATE_ENDPOINT: $CI_API_V4_URL
+    RENOVATE_REPOSITORIES: $CI_PROJECT_PATH
+  script:
+    - renovate
+
+build:
+  stage: build
+  rules:
+    - if: $RENOVATE_RUN == "true"
+      when: never
+    - when: on_success
+  script:
+    - npm run build
+  artifacts:
+    paths: [apps/web/dist]
+    expire_in: 1 week
+
+# Landing page at https://<namespace>.gitlab.io/<project>/, the viewer at
+# …/<project>/app/. The landing page lives in its own repo (internal:
+# everbright/oss-sbom-lens-web, public mirror: everbrightit-group/
+# sbom-lens-web) and is pulled in at deploy time; pushing there does NOT
+# redeploy — re-run this pipeline for landing-only changes. The clone defaults
+# to the same-instance repo via the job token (the landing project must
+# allowlist this project under Settings → CI/CD → Job token permissions); on
+# gitlab.com it uses the public repo. LANDING_REPO_URL/REF override both.
+# public/sw.js is the self-destroying stub that migrates clients away from the
+# service worker the viewer registered when it still lived at the root scope.
+pages:
+  stage: deploy
+  dependencies: [build]
+  image: alpine:3.22
+  cache: []
+  before_script:
+    - apk add --no-cache git
+  variables:
+    LANDING_REPO_REF: 'main'
+  script:
+    - |
+      if [ -z "${LANDING_REPO_URL:-}" ]; then
+        if [ "$CI_SERVER_HOST" = "gitlab.com" ]; then
+          LANDING_REPO_URL='https://gitlab.com/everbrightit-group/sbom-lens-web.git'
+        else
+          LANDING_REPO_URL="${CI_SERVER_PROTOCOL}://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}:${CI_SERVER_PORT}/everbright/oss-sbom-lens-web.git"
+        fi
+      fi
+    - rm -rf public landing-src
+    - git clone --depth 1 --branch "$LANDING_REPO_REF" "$LANDING_REPO_URL" landing-src
+    - cp -a landing-src/site public
+    - test -f public/index.html && test -f public/sw.js
+    - cp -a apps/web/dist public/app
+  artifacts:
+    paths: [public]
+  rules:
+    - if: $RENOVATE_RUN == "true"
+      when: never
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+# VS Code extension package on tags (Marketplace publishing stays manual).
+vsix:
+  stage: deploy
+  script:
+    - npm run build:vscode -w @sbomlens/web
+    - npm run compile -w sbomlens
+    - npm run package -w sbomlens
+  artifacts:
+    paths: [sbomlens.vsix]
+    expire_in: 4 weeks
+  rules:
+    - if: $CI_COMMIT_TAG
+
+# Self-hosting image, pushed to the project's container registry on tags.
+docker:
+  stage: deploy
+  image:
+    name: gcr.io/kaniko-project/executor:v1.23.2-debug
+    entrypoint: ['']
+  cache: []
+  before_script: []
+  script:
+    - /kaniko/executor
+      --context "$CI_PROJECT_DIR"
+      --dockerfile "$CI_PROJECT_DIR/deploy/Dockerfile"
+      --destination "$CI_REGISTRY_IMAGE:$CI_COMMIT_TAG"
+      --destination "$CI_REGISTRY_IMAGE:latest"
+  rules:
+    - if: $CI_COMMIT_TAG
+
+# Blocks a release whose image ships known HIGH/CRITICAL fixable CVEs.
+image-scan:
+  stage: deploy
+  needs: [docker]
+  image:
+    name: aquasec/trivy:latest
+    entrypoint: ['']
+  cache: []
+  before_script: []
+  variables:
+    TRIVY_USERNAME: $CI_REGISTRY_USER
+    TRIVY_PASSWORD: $CI_REGISTRY_PASSWORD
+  script:
+    - trivy image --exit-code 1 --severity HIGH,CRITICAL --ignore-unfixed "$CI_REGISTRY_IMAGE:$CI_COMMIT_TAG"
+  rules:
+    - if: $CI_COMMIT_TAG
+
+# Dogfooding: every release ships its own SPDX SBOM — open it in SBOM Lens.
+self-sbom:
+  stage: deploy
+  needs: []
+  image:
+    name: anchore/syft:latest
+    entrypoint: ['']
+  cache: []
+  before_script: []
+  script:
+    - /syft dir:. --source-name sbomlens --source-version "$CI_COMMIT_TAG" -o "spdx-json=sbomlens-$CI_COMMIT_TAG.spdx.json"
+  artifacts:
+    paths: [sbomlens-*.spdx.json]
+    expire_in: 1 year
+  rules:
+    - if: $CI_COMMIT_TAG

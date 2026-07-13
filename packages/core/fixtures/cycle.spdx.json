@@ -1,0 +1,15 @@
+{
+  "spdxVersion": "SPDX-2.3",
+  "SPDXID": "SPDXRef-DOCUMENT",
+  "name": "cycle",
+  "documentNamespace": "https://example.org/spdxdocs/cycle",
+  "documentDescribes": ["SPDXRef-A"],
+  "packages": [
+    { "name": "a", "SPDXID": "SPDXRef-A", "downloadLocation": "NOASSERTION" },
+    { "name": "b", "SPDXID": "SPDXRef-B", "downloadLocation": "NOASSERTION" }
+  ],
+  "relationships": [
+    { "spdxElementId": "SPDXRef-A", "relationshipType": "CONTAINS", "relatedSpdxElement": "SPDXRef-B" },
+    { "spdxElementId": "SPDXRef-B", "relationshipType": "CONTAINS", "relatedSpdxElement": "SPDXRef-A" }
+  ]
+}

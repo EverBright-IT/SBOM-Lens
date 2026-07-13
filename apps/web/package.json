@@ -1,0 +1,40 @@
+{
+  "name": "@sbomlens/web",
+  "version": "0.10.5",
+  "description": "SBOM Lens web app — a fast, minimal viewer for SPDX SBOMs.",
+  "license": "Apache-2.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./vscode-protocol": "./src/host/vscode-protocol.ts"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "build:vscode": "vite build --mode vscode",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "generate:examples": "node scripts/generate-examples.mjs",
+    "screenshot": "node scripts/screenshot.mjs"
+  },
+  "dependencies": {
+    "@sbomlens/core": "*",
+    "@tanstack/react-virtual": "^3.14.5",
+    "clsx": "^2.1.1",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "yaml": "^2.9.0",
+    "zustand": "^5.0.14"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.2",
+    "@types/node": "^26.1.1",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.3",
+    "playwright-core": "^1.61.1",
+    "tailwindcss": "^4.3.2",
+    "vite": "^8.1.4",
+    "vite-plugin-pwa": "^1.3.0"
+  }
+}

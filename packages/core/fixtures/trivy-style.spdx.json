@@ -1,0 +1,57 @@
+{
+  "spdxVersion": "SPDX-2.3",
+  "dataLicense": "CC0-1.0",
+  "SPDXID": "SPDXRef-DOCUMENT",
+  "name": "container-image",
+  "documentNamespace": "http://example.aquasec.invalid/container_image/uuid-1234",
+  "creationInfo": {
+    "created": "2026-02-01T00:00:00Z",
+    "creators": ["Tool: trivy-0.55.0"]
+  },
+  "packages": [
+    {
+      "name": "example-image",
+      "SPDXID": "SPDXRef-Package-image",
+      "downloadLocation": "NOASSERTION",
+      "primaryPackagePurpose": "CONTAINER"
+    },
+    {
+      "name": "alpine-baselayout",
+      "SPDXID": "SPDXRef-Package-abc",
+      "downloadLocation": "NOASSERTION",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:apk/alpine/alpine-baselayout@3.4.3-r2?distro=3.19"
+        }
+      ]
+    }
+  ],
+  "files": [
+    { "fileName": "lib/apk/db/installed", "SPDXID": "SPDXRef-File-1" },
+    { "fileName": "lib/apk/db/installed", "SPDXID": "SPDXRef-File-1" }
+  ],
+  "relationships": [
+    {
+      "spdxElementId": "SPDXRef-DOCUMENT",
+      "relationshipType": "DESCRIBES",
+      "relatedSpdxElement": "SPDXRef-Package-image"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-image",
+      "relationshipType": "CONTAINS",
+      "relatedSpdxElement": "SPDXRef-Package-abc"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-abc",
+      "relationshipType": "DEPENDENCY_OF",
+      "relatedSpdxElement": "SPDXRef-Package-image"
+    },
+    {
+      "spdxElementId": "SPDXRef-File-1",
+      "relationshipType": "OTHER",
+      "relatedSpdxElement": "SPDXRef-Package-abc"
+    }
+  ]
+}

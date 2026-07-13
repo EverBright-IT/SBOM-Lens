@@ -1,0 +1,61 @@
+meta:
+  schemaVersion: v2
+component:
+  name: acme.org/webstack
+  version: 2.1.0
+  provider: ACME Corp
+  creationTime: "2026-06-01T10:00:00Z"
+  repositoryContexts:
+    - type: OCIRegistry
+      baseUrl: registry.example.org/acme
+  componentReferences:
+    - name: identity
+      componentName: acme.org/identity
+      version: 1.4.2
+    - name: runtime
+      componentName: acme.org/runtime
+      version: 3.0.0
+  sources:
+    - name: webstack-src
+      version: 2.1.0
+      type: git
+      access:
+        type: github
+        repoUrl: https://example.org/acme/webstack
+        ref: refs/tags/v2.1.0
+  resources:
+    - name: gateway-image
+      version: 2.1.0
+      type: ociImage
+      relation: local
+      access:
+        type: ociArtifact
+        imageReference: registry.example.org/acme/gateway:2.1.0@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+      digest:
+        hashAlgorithm: SHA-256
+        normalisationAlgorithm: ociArtifactDigest/v1
+        value: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+    - name: deploy-chart
+      version: 2.1.0
+      type: helmChart
+      relation: local
+      access:
+        type: localBlob
+        localReference: sha256.1111111111111111111111111111111111111111111111111111111111111111
+        mediaType: application/vnd.oci.image.layer.v1.tar+gzip
+    - name: webstack-sbom
+      version: 2.1.0
+      type: sbom
+      relation: local
+      access:
+        type: localBlob
+        localReference: sha256.2222222222222222222222222222222222222222222222222222222222222222
+        mediaType: application/spdx+json
+    - name: telemetry-bundle
+      version: 2.1.0
+      type: blob
+      relation: external
+      access:
+        type: s3
+        bucket: acme-artifacts
+        key: telemetry/2.1.0.tgz

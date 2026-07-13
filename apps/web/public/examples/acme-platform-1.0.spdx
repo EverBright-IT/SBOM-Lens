@@ -1,0 +1,25 @@
+SPDXVersion: SPDX-2.3
+DataLicense: CC0-1.0
+SPDXID: SPDXRef-DOCUMENT
+DocumentName: acme-platform
+DocumentNamespace: https://example.org/spdxdocs/acme-platform-1.0
+# Release-level SBOM. Component SBOMs are linked as external documents
+# and resolved by checksum — note the version drift in the DocumentRef
+# name (2.2) vs the actual file (2.1): only the hash is trusted.
+ExternalDocumentRef: DocumentRef-WEBSTACK-2.2 https://registry.example.org/acme/webstack/2.1/acme-webstack-2.1.spdx.json SHA1:e7d23659f53d78e2bcf83c23bc7d5412d4d3ca7d
+ExternalDocumentRef: DocumentRef-RELEASE-NOTES https://example.org/acme/platform/1.0/release-notes.pdf SHA1:aa0000000000000000000000000000000000aa00
+Creator: Organization: ACME Corp
+Creator: Tool: acme-sbom-composer-1.1
+Created: 2026-06-01T10:00:00Z
+DocumentComment: <text>Demo cascade for SBOM Lens. Synthetic data — any resemblance to real packages is incidental.</text>
+
+PackageName: ACME Platform
+SPDXID: SPDXRef-Package-platform
+PackageVersion: 1.0.0
+PackageDownloadLocation: NOASSERTION
+PrimaryPackagePurpose: APPLICATION
+PackageSupplier: Organization: ACME Corp
+PackageLicenseConcluded: NOASSERTION
+
+Relationship: SPDXRef-DOCUMENT DESCRIBES SPDXRef-Package-platform
+Relationship: SPDXRef-Package-platform CONTAINS DocumentRef-WEBSTACK-2.2:SPDXRef-Package-webstack

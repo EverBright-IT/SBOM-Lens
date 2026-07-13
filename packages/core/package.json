@@ -1,0 +1,20 @@
+{
+  "name": "@sbomlens/core",
+  "version": "0.10.5",
+  "description": "Framework-free SPDX model, parsers, cascade resolution, and analysis for SBOM Lens.",
+  "license": "Apache-2.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./test-fixtures": "./src/test-fixtures.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "generate:spec-docs": "node scripts/extract-spec-docs.mjs",
+    "generate:ocm-fixtures": "node scripts/generate-ocm-fixtures.mjs"
+  },
+  "devDependencies": {
+    "yaml": "^2.9.0"
+  }
+}

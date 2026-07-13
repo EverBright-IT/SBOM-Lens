@@ -1,0 +1,4 @@
+# Fixture and example SPDX files are matched by SHA-1 checksum — any
+# line-ending conversion would break cascade resolution. Keep bytes exact.
+packages/core/fixtures/** -text
+apps/web/public/examples/** -text

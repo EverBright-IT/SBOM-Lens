@@ -1,0 +1,52 @@
+{
+  "spdxVersion": "SPDX-2.3",
+  "dataLicense": "CC0-1.0",
+  "SPDXID": "SPDXRef-DOCUMENT",
+  "name": "acme-runtime-image",
+  "documentNamespace": "https://example.org/spdxdocs/acme-runtime-image",
+  "creationInfo": {
+    "created": "2026-04-01T00:00:00Z",
+    "creators": ["Tool: sbomlens-fixtures"]
+  },
+  "documentDescribes": ["SPDXRef-Package-runtime-image"],
+  "packages": [
+    {
+      "name": "runtime-image",
+      "SPDXID": "SPDXRef-Package-runtime-image",
+      "versionInfo": "3.0.0",
+      "downloadLocation": "NOASSERTION",
+      "primaryPackagePurpose": "CONTAINER"
+    },
+    {
+      "name": "busybox",
+      "SPDXID": "SPDXRef-Package-busybox",
+      "versionInfo": "1.36.1",
+      "downloadLocation": "NOASSERTION",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:apk/alpine/busybox@1.36.1"
+        }
+      ]
+    },
+    {
+      "name": "openssl",
+      "SPDXID": "SPDXRef-Package-openssl",
+      "versionInfo": "3.3.2",
+      "downloadLocation": "NOASSERTION"
+    }
+  ],
+  "relationships": [
+    {
+      "spdxElementId": "SPDXRef-Package-runtime-image",
+      "relationshipType": "CONTAINS",
+      "relatedSpdxElement": "SPDXRef-Package-busybox"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-openssl",
+      "relationshipType": "DEPENDENCY_OF",
+      "relatedSpdxElement": "SPDXRef-Package-runtime-image"
+    }
+  ]
+}

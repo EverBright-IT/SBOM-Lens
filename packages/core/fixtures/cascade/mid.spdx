@@ -1,0 +1,22 @@
+SPDXVersion: SPDX-2.3
+DataLicense: CC0-1.0
+SPDXID: SPDXRef-DOCUMENT
+DocumentName: acme-webstack
+DocumentNamespace: https://example.org/spdxdocs/acme-webstack
+# RUNTIME resolves by namespace (URI == the leaf's documentNamespace, no checksum).
+ExternalDocumentRef: DocumentRef-RUNTIME https://example.org/spdxdocs/acme-runtime-image
+# AUTH-2.0 has a checksum that matches no fixture — stays unresolved, suggestion by name.
+ExternalDocumentRef: DocumentRef-AUTH-2.0 https://artifacts.example.org/auth/2.0/auth.spdx SHA1:dddddddddddddddddddddddddddddddddddddddd
+# SCAN-REPORT is referenced by no relationship — informational.
+ExternalDocumentRef: DocumentRef-SCAN-REPORT https://artifacts.example.org/scan/webstack-scan.tar.gz SHA1:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
+Creator: Tool: sbomlens-fixtures
+Created: 2026-04-02T00:00:00Z
+
+PackageName: webstack
+SPDXID: SPDXRef-Package-webstack
+PackageVersion: 2.1.0
+PackageDownloadLocation: NOASSERTION
+
+Relationship: SPDXRef-DOCUMENT DESCRIBES SPDXRef-Package-webstack
+Relationship: SPDXRef-Package-webstack CONTAINS DocumentRef-RUNTIME:SPDXRef-Package-runtime-image
+Relationship: SPDXRef-Package-webstack CONTAINS DocumentRef-AUTH-2.0:SPDXRef-DOCUMENT

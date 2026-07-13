@@ -1,0 +1,34 @@
+{
+  "spdxVersion": "SPDX-2.3",
+  "dataLicense": "CC0-1.0",
+  "SPDXID": "SPDXRef-DOCUMENT",
+  "name": "syft-style",
+  "documentNamespace": "https://anchore.invalid/syft/dir/syft-style-98fa2b",
+  "creationInfo": {
+    "created": "2026-03-01T00:00:00Z",
+    "creators": ["Tool: syft-1.22.0"]
+  },
+  "documentDescribes": ["SPDXRef-Package-root"],
+  "packages": [
+    {
+      "name": "root-app",
+      "SPDXID": "SPDXRef-Package-root",
+      "versionInfo": "4.2.0",
+      "downloadLocation": "NOASSERTION"
+    },
+    {
+      "name": "leftpad",
+      "SPDXID": "SPDXRef-Package-leftpad",
+      "versionInfo": "0.0.3",
+      "downloadLocation": "NOASSERTION"
+    }
+  ],
+  "files": [{ "fileName": "package.json", "SPDXID": "SPDXRef-File-pkgjson" }],
+  "relationships": [
+    {
+      "spdxElementId": "SPDXRef-Package-root",
+      "relationshipType": "CONTAINS",
+      "relatedSpdxElement": "SPDXRef-Package-leftpad"
+    }
+  ]
+}

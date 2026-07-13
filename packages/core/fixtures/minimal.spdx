@@ -1,0 +1,24 @@
+SPDXVersion: SPDX-2.3
+DataLicense: CC0-1.0
+SPDXID: SPDXRef-DOCUMENT
+DocumentName: minimal-example
+DocumentNamespace: https://example.org/spdxdocs/minimal-example
+Creator: Tool: sbomlens-fixtures
+Created: 2026-01-01T00:00:00Z
+
+PackageName: app
+SPDXID: SPDXRef-Package-app
+PackageVersion: 1.0.0
+PackageDownloadLocation: NOASSERTION
+PackageLicenseConcluded: MIT
+PackageLicenseDeclared: MIT
+PackageSupplier: Organization: Example Corp
+
+PackageName: libfoo
+SPDXID: SPDXRef-Package-libfoo
+PackageVersion: 2.3.4
+PackageDownloadLocation: https://example.org/libfoo-2.3.4.tar.gz
+ExternalRef: PACKAGE-MANAGER purl pkg:generic/libfoo@2.3.4
+
+Relationship: SPDXRef-DOCUMENT DESCRIBES SPDXRef-Package-app
+Relationship: SPDXRef-Package-app CONTAINS SPDXRef-Package-libfoo

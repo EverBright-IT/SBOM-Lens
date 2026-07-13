@@ -1,0 +1,11 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "sbomlens: compile extension",
+      "type": "shell",
+      "command": "npm run build:vscode -w @sbomlens/web && npm run compile -w sbomlens",
+      "problemMatcher": []
+    }
+  ]
+}

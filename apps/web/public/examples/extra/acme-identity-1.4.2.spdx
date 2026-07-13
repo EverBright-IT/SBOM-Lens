@@ -1,0 +1,33 @@
+SPDXVersion: SPDX-2.3
+DataLicense: CC0-1.0
+SPDXID: SPDXRef-DOCUMENT
+DocumentName: acme-identity
+DocumentNamespace: https://example.org/spdxdocs/acme-identity-1.4.2
+Creator: Organization: ACME Corp
+Creator: Tool: acme-sbom-composer-1.1
+Created: 2026-05-12T14:00:00Z
+
+PackageName: identity-service
+SPDXID: SPDXRef-Package-identity-service
+PackageVersion: 1.4.2
+PackageDownloadLocation: NOASSERTION
+PrimaryPackagePurpose: APPLICATION
+PackageSupplier: Organization: ACME Corp
+
+PackageName: libjwt
+SPDXID: SPDXRef-Package-libjwt
+PackageVersion: 1.15.3
+PackageDownloadLocation: https://github.com/benmcollins/libjwt/archive/v1.15.3.tar.gz
+PrimaryPackagePurpose: LIBRARY
+PackageLicenseConcluded: MPL-2.0
+
+PackageName: argon2
+SPDXID: SPDXRef-Package-argon2
+PackageVersion: 20190702
+PackageDownloadLocation: NOASSERTION
+PrimaryPackagePurpose: LIBRARY
+PackageLicenseConcluded: Apache-2.0 OR CC0-1.0
+
+Relationship: SPDXRef-DOCUMENT DESCRIBES SPDXRef-Package-identity-service
+Relationship: SPDXRef-Package-identity-service CONTAINS SPDXRef-Package-libjwt
+Relationship: SPDXRef-Package-identity-service CONTAINS SPDXRef-Package-argon2

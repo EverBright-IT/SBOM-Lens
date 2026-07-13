@@ -1,0 +1,209 @@
+{
+  "spdxVersion": "SPDX-2.3",
+  "dataLicense": "CC0-1.0",
+  "SPDXID": "SPDXRef-DOCUMENT",
+  "name": "acme-webstack",
+  "documentNamespace": "https://example.org/spdxdocs/acme-webstack-2.1",
+  "creationInfo": {
+    "created": "2026-05-15T09:00:00Z",
+    "creators": [
+      "Organization: ACME Corp",
+      "Tool: acme-sbom-composer-1.1"
+    ]
+  },
+  "externalDocumentRefs": [
+    {
+      "externalDocumentId": "DocumentRef-RUNTIME-3.0",
+      "spdxDocument": "https://registry.example.org/acme/runtime/3.0/acme-runtime-image-3.0.spdx",
+      "checksum": {
+        "algorithm": "SHA1",
+        "checksumValue": "c6d845b4741192e76ee958b7f34bbf3a61f7fa39"
+      }
+    },
+    {
+      "externalDocumentId": "DocumentRef-IDENTITY-1.4",
+      "spdxDocument": "examples/extra/acme-identity-1.4.2.spdx",
+      "checksum": {
+        "algorithm": "SHA1",
+        "checksumValue": "e82da141ea4e37587a71538415ae39dcfc007c9d"
+      }
+    },
+    {
+      "externalDocumentId": "DocumentRef-CONTAINER-SCAN",
+      "spdxDocument": "https://artifacts.example.org/scan/acme-webstack-2.1-container-scan.tar.gz",
+      "checksum": {
+        "algorithm": "SHA1",
+        "checksumValue": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+      }
+    }
+  ],
+  "documentDescribes": [
+    "SPDXRef-Package-webstack"
+  ],
+  "packages": [
+    {
+      "name": "webstack",
+      "SPDXID": "SPDXRef-Package-webstack",
+      "versionInfo": "2.1.0",
+      "downloadLocation": "NOASSERTION",
+      "primaryPackagePurpose": "APPLICATION",
+      "supplier": "Organization: ACME Corp",
+      "description": "ACME web stack: gateway, API, workers, and data stores.",
+      "licenseConcluded": "Apache-2.0"
+    },
+    {
+      "name": "nginx-gateway",
+      "SPDXID": "SPDXRef-Package-nginx-gateway",
+      "versionInfo": "1.27.1",
+      "downloadLocation": "NOASSERTION",
+      "primaryPackagePurpose": "APPLICATION",
+      "supplier": "Organization: ACME Corp",
+      "licenseConcluded": "BSD-2-Clause"
+    },
+    {
+      "name": "api-server",
+      "SPDXID": "SPDXRef-Package-api-server",
+      "versionInfo": "2.1.0",
+      "downloadLocation": "NOASSERTION",
+      "primaryPackagePurpose": "APPLICATION",
+      "supplier": "Organization: ACME Corp",
+      "licenseConcluded": "Apache-2.0",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/%40acme/api-server@2.1.0"
+        }
+      ]
+    },
+    {
+      "name": "background-worker",
+      "SPDXID": "SPDXRef-Package-worker",
+      "versionInfo": "2.1.0",
+      "downloadLocation": "NOASSERTION",
+      "primaryPackagePurpose": "APPLICATION",
+      "supplier": "Organization: ACME Corp",
+      "licenseConcluded": "Apache-2.0"
+    },
+    {
+      "name": "frontend-spa",
+      "SPDXID": "SPDXRef-Package-frontend-spa",
+      "versionInfo": "2.1.0",
+      "downloadLocation": "NOASSERTION",
+      "primaryPackagePurpose": "APPLICATION",
+      "supplier": "Organization: ACME Corp",
+      "licenseConcluded": "MIT"
+    },
+    {
+      "name": "postgresql",
+      "SPDXID": "SPDXRef-Package-postgres",
+      "versionInfo": "16.4",
+      "downloadLocation": "NOASSERTION",
+      "primaryPackagePurpose": "DATABASE",
+      "supplier": "Organization: ACME Corp",
+      "licenseConcluded": "PostgreSQL"
+    },
+    {
+      "name": "redis",
+      "SPDXID": "SPDXRef-Package-redis",
+      "versionInfo": "7.4.0",
+      "downloadLocation": "NOASSERTION",
+      "primaryPackagePurpose": "DATABASE",
+      "supplier": "Organization: ACME Corp",
+      "licenseConcluded": "BSD-3-Clause"
+    },
+    {
+      "name": "otel-collector",
+      "SPDXID": "SPDXRef-Package-otel",
+      "versionInfo": "0.109.0",
+      "downloadLocation": "NOASSERTION",
+      "primaryPackagePurpose": "APPLICATION",
+      "supplier": "Organization: ACME Corp",
+      "licenseConcluded": "Apache-2.0"
+    },
+    {
+      "name": "openssl",
+      "SPDXID": "SPDXRef-Package-openssl-bundled",
+      "versionInfo": "3.0.9",
+      "downloadLocation": "NOASSERTION",
+      "primaryPackagePurpose": "LIBRARY",
+      "supplier": "Organization: ACME Corp",
+      "licenseConcluded": "Apache-2.0",
+      "description": "Bundled/statically linked copy inside the api-server binary.",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:apk/alpine/openssl@3.0.9"
+        }
+      ]
+    }
+  ],
+  "relationships": [
+    {
+      "spdxElementId": "SPDXRef-Package-webstack",
+      "relationshipType": "CONTAINS",
+      "relatedSpdxElement": "SPDXRef-Package-nginx-gateway"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-webstack",
+      "relationshipType": "CONTAINS",
+      "relatedSpdxElement": "SPDXRef-Package-api-server"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-webstack",
+      "relationshipType": "CONTAINS",
+      "relatedSpdxElement": "SPDXRef-Package-worker"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-webstack",
+      "relationshipType": "CONTAINS",
+      "relatedSpdxElement": "SPDXRef-Package-frontend-spa"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-webstack",
+      "relationshipType": "CONTAINS",
+      "relatedSpdxElement": "SPDXRef-Package-postgres"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-webstack",
+      "relationshipType": "CONTAINS",
+      "relatedSpdxElement": "SPDXRef-Package-redis"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-webstack",
+      "relationshipType": "CONTAINS",
+      "relatedSpdxElement": "SPDXRef-Package-otel"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-postgres",
+      "relationshipType": "DEPENDENCY_OF",
+      "relatedSpdxElement": "SPDXRef-Package-api-server"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-redis",
+      "relationshipType": "DEPENDENCY_OF",
+      "relatedSpdxElement": "SPDXRef-Package-api-server"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-openssl-bundled",
+      "relationshipType": "DEPENDENCY_OF",
+      "relatedSpdxElement": "SPDXRef-Package-api-server"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-api-server",
+      "relationshipType": "DEPENDENCY_OF",
+      "relatedSpdxElement": "SPDXRef-Package-frontend-spa"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-api-server",
+      "relationshipType": "DESCRIBED_BY",
+      "relatedSpdxElement": "DocumentRef-RUNTIME-3.0:SPDXRef-DOCUMENT"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-webstack",
+      "relationshipType": "CONTAINS",
+      "relatedSpdxElement": "DocumentRef-IDENTITY-1.4:SPDXRef-Package-identity-service"
+    }
+  ]
+}

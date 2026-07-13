@@ -1,0 +1,9 @@
+# The GitHub repo is a read-only mirror; development happens on GitLab.
+blank_issues_enabled: false
+contact_links:
+  - name: Issues & merge requests (canonical, GitLab)
+    url: https://gitlab.com/everbrightit-group/sbom-lens/-/issues
+    about: Please file bugs and feature requests in the GitLab project.
+  - name: Security reports
+    url: https://gitlab.com/everbrightit-group/sbom-lens/-/blob/main/SECURITY.md
+    about: Please report vulnerabilities privately — see SECURITY.md.

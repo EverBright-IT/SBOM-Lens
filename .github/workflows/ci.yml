@@ -1,0 +1,32 @@
+# Mirror CI for GitHub. GitLab (.gitlab-ci.yml) is the primary pipeline and
+# owns the Pages deploy + container image; this keeps a GitHub mirror honest.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+
+  # Same known-vulnerability gate as the GitLab pipeline (osv-scan job).
+  osv-scan:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/google/osv-scanner:latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: /osv-scanner --lockfile=package-lock.json

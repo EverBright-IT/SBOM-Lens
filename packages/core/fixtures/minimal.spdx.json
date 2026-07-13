@@ -1,0 +1,43 @@
+{
+  "spdxVersion": "SPDX-2.3",
+  "dataLicense": "CC0-1.0",
+  "SPDXID": "SPDXRef-DOCUMENT",
+  "name": "minimal-example",
+  "documentNamespace": "https://example.org/spdxdocs/minimal-example",
+  "creationInfo": {
+    "created": "2026-01-01T00:00:00Z",
+    "creators": ["Tool: sbomlens-fixtures"]
+  },
+  "documentDescribes": ["SPDXRef-Package-app"],
+  "packages": [
+    {
+      "name": "app",
+      "SPDXID": "SPDXRef-Package-app",
+      "versionInfo": "1.0.0",
+      "downloadLocation": "NOASSERTION",
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "supplier": "Organization: Example Corp"
+    },
+    {
+      "name": "libfoo",
+      "SPDXID": "SPDXRef-Package-libfoo",
+      "versionInfo": "2.3.4",
+      "downloadLocation": "https://example.org/libfoo-2.3.4.tar.gz",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:generic/libfoo@2.3.4"
+        }
+      ]
+    }
+  ],
+  "relationships": [
+    {
+      "spdxElementId": "SPDXRef-Package-app",
+      "relationshipType": "CONTAINS",
+      "relatedSpdxElement": "SPDXRef-Package-libfoo"
+    }
+  ]
+}

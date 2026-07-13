@@ -1,0 +1,101 @@
+{
+  "name": "sbomlens",
+  "displayName": "SBOM Lens",
+  "icon": "icon.png",
+  "description": "View SPDX SBOMs — including cascading document hierarchies — right in your editor.",
+  "version": "0.10.5",
+  "publisher": "everbright-it",
+  "license": "Apache-2.0",
+  "private": true,
+  "repository": {
+    "type": "git",
+    "url": "https://gitlab.com/everbrightit-group/sbom-lens.git"
+  },
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Visualization",
+    "Other"
+  ],
+  "keywords": [
+    "spdx",
+    "sbom",
+    "supply-chain"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "customEditors": [
+      {
+        "viewType": "sbomlens.viewer",
+        "displayName": "SBOM Lens",
+        "selector": [
+          {
+            "filenamePattern": "*.spdx"
+          },
+          {
+            "filenamePattern": "*.spdx.json"
+          },
+          {
+            "filenamePattern": "*.spdx.yaml"
+          },
+          {
+            "filenamePattern": "*.spdx.yml"
+          },
+          {
+            "filenamePattern": "*.ctf"
+          }
+        ],
+        "priority": "option"
+      }
+    ],
+    "commands": [
+      {
+        "command": "sbomlens.openWith",
+        "title": "Open with SBOM Lens"
+      },
+      {
+        "command": "sbomlens.openFolder",
+        "title": "Open folder with SBOM Lens"
+      },
+      {
+        "command": "sbomlens.scanWorkspace",
+        "title": "SBOM Lens: Scan workspace for SBOMs"
+      }
+    ],
+    "menus": {
+      "explorer/context": [
+        {
+          "command": "sbomlens.openWith",
+          "when": "!explorerResourceIsFolder && resourceFilename =~ /\\.(spdx|spdx\\.json|spdx\\.ya?ml|ctf|tar|tgz)$/",
+          "group": "navigation@50"
+        },
+        {
+          "command": "sbomlens.openFolder",
+          "when": "explorerResourceIsFolder",
+          "group": "navigation@51"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "sbomlens.openWith",
+          "when": "false"
+        },
+        {
+          "command": "sbomlens.openFolder",
+          "when": "false"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "compile": "node esbuild.mjs && rm -rf media && cp -R ../web/dist-vscode media && cp ../../LICENSE .",
+    "package": "vsce package --no-dependencies -o ../../sbomlens.vsix"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.90.0",
+    "@vscode/vsce": "^3.3.0",
+    "esbuild": "^0.25.6"
+  }
+}

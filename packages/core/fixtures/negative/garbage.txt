@@ -1,0 +1,2 @@
+Hello, this is not an SBOM at all.
+Just some text.

@@ -1,0 +1,23 @@
+apiVersion: ocm.software/v3alpha1
+kind: ComponentVersion
+metadata:
+  name: acme.org/webstack
+  version: 2.1.0
+  provider:
+    name: ACME Corp
+repositoryContexts:
+  - type: OCIRegistry
+    baseUrl: registry.example.org/acme
+spec:
+  references:
+    - name: identity
+      componentName: acme.org/identity
+      version: 1.4.2
+  resources:
+    - name: gateway-image
+      version: 2.1.0
+      type: ociImage
+      relation: local
+      access:
+        type: ociArtifact
+        imageReference: registry.example.org/acme/gateway:2.1.0

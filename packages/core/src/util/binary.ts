@@ -1,0 +1,37 @@
+/**
+ * Container sniffing and decompression for delivery archives. Detection is
+ * magic-byte based — file names prove nothing here either.
+ */
+
+export type ContainerKind = 'gzip' | 'tar' | 'zip' | 'binary' | 'text';
+
+const NUL_SCAN_LIMIT = 8192;
+
+export function sniffContainer(bytes: Uint8Array): ContainerKind {
+  if (bytes.length >= 2 && bytes[0] === 0x1f && bytes[1] === 0x8b) return 'gzip';
+  if (bytes.length >= 4 && bytes[0] === 0x50 && bytes[1] === 0x4b && bytes[2] === 0x03 && bytes[3] === 0x04) {
+    return 'zip';
+  }
+  if (looksLikeTar(bytes)) return 'tar';
+  const limit = Math.min(bytes.length, NUL_SCAN_LIMIT);
+  for (let i = 0; i < limit; i++) {
+    if (bytes[i] === 0) return 'binary';
+  }
+  return 'text';
+}
+
+function looksLikeTar(bytes: Uint8Array): boolean {
+  if (bytes.length < 263) return false;
+  // POSIX ustar magic at offset 257: "ustar\0" or GNU "ustar  ".
+  const magic = String.fromCharCode(...bytes.subarray(257, 262));
+  return magic === 'ustar';
+}
+
+/** Single-member gzip (what tgz tooling writes). Node ≥18 and all browsers. */
+export async function gunzip(bytes: Uint8Array): Promise<Uint8Array> {
+  // Fresh ArrayBuffer-backed copy: subarray views and SharedArrayBuffer-typed
+  // inputs are not valid BlobParts under the DOM lib.
+  const copy = new Uint8Array(bytes);
+  const stream = new Blob([copy]).stream().pipeThrough(new DecompressionStream('gzip'));
+  return new Uint8Array(await new Response(stream).arrayBuffer());
+}

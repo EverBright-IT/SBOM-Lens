@@ -1,0 +1,169 @@
+import { describe, expect, it } from 'vitest';
+import { loadFixture } from '../../test-fixtures';
+import { fakeSha1 } from '../../test-fixtures';
+import { detect } from '../detect';
+import { parseDocument } from '../parser';
+import type { SourceInput } from '../parser';
+import { parseOcmComponentDescriptor } from './cd';
+
+function inputFor(name: string, text: string): SourceInput {
+  return { fileName: name, text, sha1: fakeSha1(name), byteSize: text.length };
+}
+
+function parseFixture(name: string) {
+  const text = loadFixture(name);
+  const result = parseDocument(inputFor(name, text));
+  expect(result.document, `${name} should produce a document`).not.toBeNull();
+  return result.document!;
+}
+
+describe('OCM detection', () => {
+  it('detects v2 YAML, v3alpha1 YAML, and JSON descriptors', () => {
+    expect(detect(loadFixture('ocm/cd-v2.yaml'))).toMatchObject({ format: 'ocm-cd', serialization: 'yaml' });
+    expect(detect(loadFixture('ocm/cd-v3alpha1.yaml'))).toMatchObject({ format: 'ocm-cd', serialization: 'yaml' });
+    const json = JSON.stringify({ meta: { schemaVersion: 'v2' }, component: { name: 'a', version: '1' } });
+    expect(detect(json)).toMatchObject({ format: 'ocm-cd', serialization: 'json' });
+  });
+
+  it('rejects descriptors without name/version and keeps Trivy/CDX detection intact', () => {
+    const broken = parseDocument(inputFor('broken.yaml', loadFixture('negative/ocm-broken.yaml')));
+    expect(broken.document).toBeNull();
+    expect(broken.diagnostics[0]!.code).toBe('OCM_CD_MALFORMED');
+    expect(detect(loadFixture('negative/trivy-native.json'))).toMatchObject({
+      format: 'unsupported',
+      code: 'TRIVY_NATIVE_NOT_SUPPORTED',
+    });
+    expect(detect(loadFixture('negative/cyclonedx.json'))).toMatchObject({
+      format: 'unsupported',
+      code: 'CYCLONEDX_NOT_SUPPORTED',
+    });
+  });
+});
+
+describe('OCM CD mapping (v2)', () => {
+  const doc = parseFixture('ocm/cd-v2.yaml');
+
+  it('maps component identity to document + root pseudo-package', () => {
+    expect(doc.spec).toEqual({ model: 'ocm', version: 'OCM-CD/v2', serialization: 'yaml' });
+    expect(doc.name).toBe('acme.org/webstack');
+    expect(doc.namespace).toBe('ocm://acme.org/webstack/2.1.0');
+    expect(doc.describes).toEqual(['SPDXRef-component']);
+    expect(doc.creators).toEqual(['Organization: ACME Corp']);
+    expect(doc.created).toBe('2026-06-01T10:00:00Z');
+    const root = doc.elements.find((e) => e.spdxId === 'SPDXRef-component')!;
+    expect(root).toMatchObject({ name: 'acme.org/webstack', version: '2.1.0', purpose: 'APPLICATION' });
+  });
+
+  it('maps resources and sources to CONTAINS-ed package elements', () => {
+    const names = doc.elements.map((e) => e.name);
+    expect(names).toEqual(
+      expect.arrayContaining(['gateway-image', 'deploy-chart', 'webstack-sbom', 'telemetry-bundle', 'webstack-src']),
+    );
+    const gateway = doc.elements.find((e) => e.name === 'gateway-image')!;
+    expect(gateway.purpose).toBe('ociImage');
+    expect(gateway.downloadLocation).toContain('registry.example.org/acme/gateway');
+    expect(gateway.checksums).toEqual([
+      { algorithm: 'SHA256', value: '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef' },
+    ]);
+    expect(gateway.purl).toBe(
+      'pkg:oci/gateway@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef?repository_url=registry.example.org/acme',
+    );
+    const src = doc.elements.find((e) => e.name === 'webstack-src')!;
+    expect(src.purpose).toBe('SOURCE');
+    const contains = doc.relationships.filter(
+      (r) => r.type === 'CONTAINS' && r.from.kind === 'local' && r.from.spdxId === 'SPDXRef-component',
+    );
+    expect(contains.length).toBeGreaterThanOrEqual(5); // 4 resources + 1 source (+ 2 external refs)
+  });
+
+  it('maps componentReferences to ocm:// refs without checksums', () => {
+    expect(doc.externalDocumentRefs).toEqual(
+      expect.arrayContaining([
+        { docRef: 'DocumentRef-ref-identity', uri: 'ocm://acme.org/identity/1.4.2' },
+        { docRef: 'DocumentRef-ref-runtime', uri: 'ocm://acme.org/runtime/3.0.0' },
+      ]),
+    );
+    const external = doc.relationships.filter((r) => r.to.kind === 'external');
+    expect(external).toHaveLength(2);
+    expect(external.every((r) => r.to.kind === 'external' && r.to.spdxId === null)).toBe(true);
+  });
+
+  it('reports archive-only SBOM resources and unsupported access types', () => {
+    const codes = doc.diagnostics.map((d) => d.code);
+    expect(codes).toContain('OCM_SBOM_IN_ARCHIVE'); // standalone CD: blob not at hand
+    expect(codes).toContain('OCM_ACCESS_UNSUPPORTED'); // the s3 resource
+    expect(codes).toContain('OCM_DIGESTS_NOT_VERIFIED');
+  });
+
+  it('wires SBOM refs by byte checksum when a blob context resolves them', () => {
+    const text = loadFixture('ocm/cd-v2.yaml');
+    const detection = detect(text);
+    expect(detection.format).toBe('ocm-cd');
+    if (detection.format !== 'ocm-cd') return;
+    const result = parseOcmComponentDescriptor(inputFor('cd-v2.yaml', text), detection.parsed, 'yaml', {
+      sbomChecksumFor: (ref) =>
+        ref === 'sha256.2222222222222222222222222222222222222222222222222222222222222222'
+          ? 'aaaa000000000000000000000000000000000000'
+          : undefined,
+    });
+    const sbomRef = result.document!.externalDocumentRefs.find((r) => r.docRef.startsWith('DocumentRef-sbom-'));
+    expect(sbomRef).toEqual({
+      docRef: 'DocumentRef-sbom-webstack-sbom',
+      uri: 'ocm-blob://acme.org/webstack/2.1.0/webstack-sbom',
+      checksum: { algorithm: 'SHA1', value: 'aaaa000000000000000000000000000000000000' },
+    });
+    const describedBy = result.document!.relationships.find((r) => r.type === 'DESCRIBED_BY');
+    expect(describedBy?.from).toEqual({ kind: 'local', spdxId: 'SPDXRef-resource-webstack-sbom' });
+    expect(describedBy?.to).toEqual({ kind: 'external', docRef: 'DocumentRef-sbom-webstack-sbom', spdxId: null });
+  });
+});
+
+describe('ociPurl edge cases', () => {
+  it('treats a registry port as part of the host, not as a tag', () => {
+    const cd = {
+      meta: { schemaVersion: 'v2' },
+      component: {
+        name: 'acme.org/ported',
+        version: '1.0.0',
+        resources: [
+          {
+            name: 'img-port-no-tag',
+            version: '1.0.0',
+            type: 'ociImage',
+            access: { type: 'ociArtifact', imageReference: 'registry.example.org:5000/acme/gateway' },
+          },
+          {
+            name: 'img-port-and-tag',
+            version: '1.0.0',
+            type: 'ociImage',
+            access: { type: 'ociArtifact', imageReference: 'registry.example.org:5000/acme/gateway:2.1.0' },
+          },
+        ],
+      },
+    };
+    const result = parseOcmComponentDescriptor(
+      inputFor('ported.json', JSON.stringify(cd)),
+      cd as never,
+      'json',
+    );
+    const [noTag, withTag] = result.document!.elements.filter((e) => e.name.startsWith('img-'));
+    // No tag: falls back to the resource version — the port must never leak in.
+    expect(noTag!.purl).toBe('pkg:oci/gateway@1.0.0?repository_url=registry.example.org:5000/acme');
+    expect(withTag!.purl).toBe('pkg:oci/gateway@2.1.0?repository_url=registry.example.org:5000/acme');
+  });
+});
+
+describe('OCM CD mapping (v3alpha1)', () => {
+  const doc = parseFixture('ocm/cd-v3alpha1.yaml');
+
+  it('maps metadata/spec shape with a best-effort diagnostic', () => {
+    expect(doc.spec.version).toBe('OCM-CD/v3alpha1');
+    expect(doc.namespace).toBe('ocm://acme.org/webstack/2.1.0');
+    expect(doc.creators).toEqual(['Organization: ACME Corp']);
+    expect(doc.externalDocumentRefs).toEqual([
+      { docRef: 'DocumentRef-ref-identity', uri: 'ocm://acme.org/identity/1.4.2' },
+    ]);
+    expect(doc.diagnostics.some((d) => d.code === 'OCM_V3ALPHA1')).toBe(true);
+    expect(doc.elements.some((e) => e.name === 'gateway-image')).toBe(true);
+  });
+});

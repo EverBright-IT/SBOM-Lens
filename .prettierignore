@@ -1,0 +1,12 @@
+# Build output and lockfile
+dist
+coverage
+package-lock.json
+
+# SPDX fixtures and examples are byte-exact test/demo data.
+# The example cascade is resolved via SHA-1 checksums — reformatting breaks it.
+packages/core/fixtures
+apps/web/public/examples
+dist-vscode
+apps/vscode/media
+apps/vscode/out

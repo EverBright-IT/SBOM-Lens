@@ -1,0 +1,68 @@
+## Deliberately nasty SPDX 2.3 tag-value fixture.
+## Every quirk in here was observed in real-world SBOMs and must parse.
+SPDXVersion: SPDX-2.3
+DataLicense: CC0-1.0
+SPDXID: SPDXRef-DOCUMENT
+DocumentName: quirks
+DocumentNamespace: https://example.org/spdxdocs/quirks
+# Checksum without a space after SHA1:
+ExternalDocumentRef: DocumentRef-NOSPACE https://example.org/child-a.spdx SHA1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+# Checksum with a space after SHA1:
+ExternalDocumentRef: DocumentRef-SPACED https://example.org/child-b.spdx SHA1: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+# Missing checksum entirely (spec violation, common in the wild)
+ExternalDocumentRef: DocumentRef-NOCHECKSUM https://example.org/report.pdf
+# Referenced by no relationship at all (informational ref)
+ExternalDocumentRef: DocumentRef-ORPHAN https://example.org/orphan.spdx SHA1:cccccccccccccccccccccccccccccccccccccccc
+Creator: Organization: Example Corp
+Creator: Tool: quirk-writer 1.0
+Created: 2026-01-02T03:04:05Z
+DocumentComment: <text>Multi-line
+document comment.</text>
+
+PackageName: main-product
+SPDXID: SPDXRef-Package-main
+PackageVersion: 9.9.9
+PackageDownloadLocation: NOASSERTION
+#PackageVerificationCode: deadbeefdeadbeefdeadbeefdeadbeefdeadbeef
+PackageLicenseConcluded: NOASSERTION
+PrimaryPackagePurpose: APPLICATION
+PackageDescription: <text>Line one
+line two</text>
+ExternalRef: PACKAGE-MANAGER purl pkg:npm/%40scope/main-product@9.9.9
+
+PackageName: dup-package
+SPDXID: SPDXRef-Package-dup
+PackageVersion: 1.0.0
+PackageDownloadLocation: NOASSERTION
+
+PackageName: dup-package
+SPDXID: SPDXRef-Package-dup
+PackageVersion: 1.0.0
+PackageDownloadLocation: NOASSERTION
+
+PackageName: no-id-package
+PackageVersion: 0.1.0
+PackageDownloadLocation: NOASSERTION
+
+FileName: ./src/index.js
+SPDXID: SPDXRef-File-index
+FileChecksum: SHA1: D6A770BA38583ED4BB4525BD96E50461655D2758
+FileChecksum: MD5:624c1abb3664f4b35547e7c73864ad24
+LicenseConcluded: MIT
+
+SnippetSPDXID: SPDXRef-Snippet-1
+SnippetFromFileSPDXID: SPDXRef-File-index
+
+LicenseID: LicenseRef-custom
+ExtractedText: <text>Custom license text.</text>
+
+this line is garbage
+
+Relationship: SPDXRef-DOCUMENT DESCRIBES SPDXRef-Package-main
+Relationship: SPDXRef-Package-main CONTAINS DocumentRef-NOSPACE:SPDXRef-Package-child
+Relationship: SPDXRef-Package-main DESCRIBED_BY DocumentRef-SPACED:SPDXRef-DOCUMENT
+RelationshipComment: <text>Cross-document link.</text>
+Relationship: DocumentRef-NOCHECKSUM HAS_QUALITY_ASSERTION SPDXRef-Package-main
+Relationship: SPDXRef-Package-main DEPENDS_ON NOASSERTION
+Relationship: SPDXRef-Package-main CONTAINS SPDXRef-Package-dup
+Relationship: SPDXRef-Package-main CONTAINS DocumentRef-MISSING:SPDXRef-x
