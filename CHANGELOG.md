@@ -18,6 +18,9 @@ All notable changes to SBOM Lens. The format follows
 - The sidebar/detail divider is now visible (grip handle), keyboard-operable
   (arrow keys — Shift for larger steps, Home/End, double-click to reset),
   drag-robust via pointer capture, and allows a wider sidebar (220–800 px).
+- GitLab Pages now serves the viewer directly — the Pages root IS the app,
+  no landing-repo clone at deploy time (the landing page deploys to
+  <https://sbom-lens.everbright-it.de/> from its own repo).
 
 ## [0.10.5] — 2026-07-13
 

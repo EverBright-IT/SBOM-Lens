@@ -1,6 +1,6 @@
-# test → build → GitLab Pages on the default branch (landing page at /, the
-# viewer at /app/); container image, vsix, image scan, and a self-SBOM on
-# tags. Security scanning runs on every push; Renovate runs in its own
+# test → build → GitLab Pages on the default branch (Pages root = the
+# viewer); container image, vsix, image scan, and a self-SBOM on tags.
+# Security scanning runs on every push; Renovate runs in its own
 # scheduled pipeline (see docs/ci-security.md).
 stages: [test, build, deploy]
 
@@ -92,39 +92,19 @@ build:
     paths: [apps/web/dist]
     expire_in: 1 week
 
-# Landing page at https://<namespace>.gitlab.io/<project>/, the viewer at
-# …/<project>/app/. The landing page lives in its own repo (internal:
-# everbright/oss-sbom-lens-web, public mirror: everbrightit-group/
-# sbom-lens-web) and is pulled in at deploy time; pushing there does NOT
-# redeploy — re-run this pipeline for landing-only changes. The clone defaults
-# to the same-instance repo via the job token (the landing project must
-# allowlist this project under Settings → CI/CD → Job token permissions); on
-# gitlab.com it uses the public repo. LANDING_REPO_URL/REF override both.
-# public/sw.js is the self-destroying stub that migrates clients away from the
-# service worker the viewer registered when it still lived at the root scope.
+# Pages serves the viewer itself — https://<namespace>.gitlab.io/<project>/
+# IS the app (vite base './' keeps the build relocatable). No landing-repo
+# clone, no redirect: the landing page deploys to its own host from its own
+# repo and is not part of this deployment.
 pages:
   stage: deploy
   dependencies: [build]
   image: alpine:3.22
   cache: []
-  before_script:
-    - apk add --no-cache git
-  variables:
-    LANDING_REPO_REF: 'main'
+  before_script: []
   script:
-    - |
-      if [ -z "${LANDING_REPO_URL:-}" ]; then
-        if [ "$CI_SERVER_HOST" = "gitlab.com" ]; then
-          LANDING_REPO_URL='https://gitlab.com/everbrightit-group/sbom-lens-web.git'
-        else
-          LANDING_REPO_URL="${CI_SERVER_PROTOCOL}://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}:${CI_SERVER_PORT}/everbright/oss-sbom-lens-web.git"
-        fi
-      fi
-    - rm -rf public landing-src
-    - git clone --depth 1 --branch "$LANDING_REPO_REF" "$LANDING_REPO_URL" landing-src
-    - cp -a landing-src/site public
-    - test -f public/index.html && test -f public/sw.js
-    - cp -a apps/web/dist public/app
+    - rm -rf public
+    - cp -a apps/web/dist public
   artifacts:
     paths: [public]
   rules:
