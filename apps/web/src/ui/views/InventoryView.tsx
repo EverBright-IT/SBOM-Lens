@@ -44,11 +44,16 @@ export function InventoryView() {
     [facets, filesHidden],
   );
 
+  const scope = useAppStore((s) => s.inventoryScope);
   const rows = useMemo(
     () => inventoryRows(ws, query.trim(), effectiveFacets),
     [ws, query, effectiveFacets],
   );
-  const sorted = useMemo(() => sortInventory(rows, sortKey, sortDir), [rows, sortKey, sortDir]);
+  const scoped = useMemo(
+    () => (scope ? rows.filter((row) => scope.ids.has(row.element.id)) : rows),
+    [rows, scope],
+  );
+  const sorted = useMemo(() => sortInventory(scoped, sortKey, sortDir), [scoped, sortKey, sortDir]);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const virtualizer = useVirtualizer({
@@ -71,6 +76,22 @@ export function InventoryView() {
   return (
     <div className="flex h-full min-w-0 flex-col">
       <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 px-4 py-2 dark:border-slate-800">
+        {scope && (
+          <button
+            type="button"
+            onClick={() => actions.setInventoryScope(null)}
+            title={
+              `Showing only the sub-components of ${scope.rootLabel}` +
+              (scope.capped ? ' (traversal capped — very large subtree)' : '') +
+              ' — click to show everything again'
+            }
+            className="flex items-center gap-1 rounded-full border border-sky-300 bg-sky-50 px-2 py-0.5 text-[11px] font-medium text-sky-800 hover:border-sky-400 dark:border-sky-700 dark:bg-sky-950 dark:text-sky-200"
+          >
+            ⊂ {scope.rootLabel}
+            {scope.capped && <span className="text-amber-600 dark:text-amber-400">· capped</span>}
+            <span aria-hidden>×</span>
+          </button>
+        )}
         <FacetChips />
         <span className="flex-1" />
         <span className="text-[11px] text-slate-400 tabular-nums">

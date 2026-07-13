@@ -1,3 +1,4 @@
+import { version } from '../../package.json';
 import { fetchAllReferences } from '../app/autofetch';
 import { useWorkspaceStats } from '../app/selectors';
 import { useAppStore } from '../app/store';
@@ -78,6 +79,15 @@ export function StatusBar() {
       <span className="hidden text-slate-300 sm:inline dark:text-slate-600">
         files never leave your machine
       </span>
+      <a
+        href="https://gitlab.com/everbrightit-group/sbom-lens/-/blob/main/CHANGELOG.md"
+        target="_blank"
+        rel="noreferrer"
+        title="SBOM Lens changelog"
+        className="hover:text-slate-600 hover:underline dark:hover:text-slate-300"
+      >
+        v{version}
+      </a>
     </footer>
   );
 }

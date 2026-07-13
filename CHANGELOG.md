@@ -4,6 +4,21 @@ All notable changes to SBOM Lens. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [SemVer](https://semver.org) (0.x — the API surface is the app itself).
 
+## [Unreleased]
+
+### Added
+- The status bar shows the app version (links to the changelog).
+- **Sub-component inventory per package**: "Show sub-components in Inventory"
+  on any selected package filters the Inventory to that package and everything
+  transitively below it — across resolved sub-SBOM boundaries, exactly as the
+  tree splices them. A dismissible chip shows the active scope; CSV/JSON
+  exports respect it.
+
+### Changed
+- The sidebar/detail divider is now visible (grip handle), keyboard-operable
+  (arrow keys — Shift for larger steps, Home/End, double-click to reset),
+  drag-robust via pointer capture, and allows a wider sidebar (220–800 px).
+
 ## [0.10.5] — 2026-07-13
 
 ### Changed

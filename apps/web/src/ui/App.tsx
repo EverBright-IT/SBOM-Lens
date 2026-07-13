@@ -1,5 +1,5 @@
 import clsx from 'clsx';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { initCatalog } from '../app/catalog';
 import { initProfiles } from '../app/profiles';
 import { host } from '../host/adapter';
@@ -204,11 +204,21 @@ function ViewSwitcher() {
   );
 }
 
+const SIDEBAR_MIN = 220;
+const SIDEBAR_MAX = 800;
+const SIDEBAR_DEFAULT = 320;
+const clampSidebar = (width: number) => Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, width));
+
 function Workspace() {
   const [sidebarWidth, setSidebarWidth] = useState(() => {
     const stored = Number(host().readPref(SIDEBAR_KEY));
-    return stored >= 220 && stored <= 640 ? stored : 320;
+    return Number.isFinite(stored) && stored > 0 ? clampSidebar(stored) : SIDEBAR_DEFAULT;
   });
+
+  const commit = (width: number) => {
+    setSidebarWidth(width);
+    host().persistPref(SIDEBAR_KEY, String(width));
+  };
 
   return (
     <div className="flex h-full min-h-0">
@@ -221,13 +231,7 @@ function Workspace() {
         </div>
         <DocumentMap />
       </aside>
-      <SplitHandle
-        onResize={(width) => {
-          setSidebarWidth(width);
-          host().persistPref(SIDEBAR_KEY, String(width));
-        }}
-        current={sidebarWidth}
-      />
+      <SplitHandle current={sidebarWidth} onResize={setSidebarWidth} onCommit={commit} />
       <main className="min-w-0 flex-1">
         <DetailPane />
       </main>
@@ -235,35 +239,66 @@ function Workspace() {
   );
 }
 
-function SplitHandle({ current, onResize }: { current: number; onResize: (width: number) => void }) {
+/**
+ * Draggable divider between tree sidebar and detail pane. Pointer capture
+ * keeps the drag alive when the cursor leaves the handle; arrow keys resize
+ * without a mouse; double-click resets. Width persists on release only.
+ */
+function SplitHandle({
+  current,
+  onResize,
+  onCommit,
+}: {
+  current: number;
+  onResize: (width: number) => void;
+  onCommit: (width: number) => void;
+}) {
   const dragging = useRef<{ startX: number; startWidth: number } | null>(null);
 
-  const onPointerMove = useCallback(
-    (event: PointerEvent) => {
-      if (!dragging.current) return;
-      const delta = event.clientX - dragging.current.startX;
-      onResize(Math.min(640, Math.max(220, dragging.current.startWidth + delta)));
-    },
-    [onResize],
-  );
-
-  const stop = useCallback(() => {
-    dragging.current = null;
-    window.removeEventListener('pointermove', onPointerMove);
-  }, [onPointerMove]);
-
-  useEffect(() => stop, [stop]);
+  const widthAt = (clientX: number) =>
+    dragging.current
+      ? clampSidebar(dragging.current.startWidth + clientX - dragging.current.startX)
+      : current;
 
   return (
     <div
       role="separator"
       aria-orientation="vertical"
-      className="-mx-1 w-2 shrink-0 cursor-col-resize hover:bg-sky-200/40 active:bg-sky-300/40 dark:hover:bg-sky-800/30"
+      aria-label="Resize sidebar — drag, arrow keys, double-click to reset"
+      aria-valuemin={SIDEBAR_MIN}
+      aria-valuemax={SIDEBAR_MAX}
+      aria-valuenow={current}
+      tabIndex={0}
+      title="Drag to resize — double-click to reset"
+      className="group -mx-1 flex w-2.5 shrink-0 cursor-col-resize touch-none items-center justify-center outline-none hover:bg-sky-200/30 active:bg-sky-300/30 focus-visible:bg-sky-200/40 dark:hover:bg-sky-800/20 dark:active:bg-sky-800/30 dark:focus-visible:bg-sky-800/30"
       onPointerDown={(event) => {
+        event.preventDefault();
+        event.currentTarget.setPointerCapture(event.pointerId);
         dragging.current = { startX: event.clientX, startWidth: current };
-        window.addEventListener('pointermove', onPointerMove);
-        window.addEventListener('pointerup', stop, { once: true });
       }}
-    />
+      onPointerMove={(event) => {
+        if (dragging.current) onResize(widthAt(event.clientX));
+      }}
+      onPointerUp={(event) => {
+        if (!dragging.current) return;
+        onCommit(widthAt(event.clientX));
+        dragging.current = null;
+      }}
+      onPointerCancel={() => {
+        dragging.current = null;
+      }}
+      onDoubleClick={() => onCommit(SIDEBAR_DEFAULT)}
+      onKeyDown={(event) => {
+        const step = event.shiftKey ? 64 : 16;
+        if (event.key === 'ArrowLeft') onCommit(clampSidebar(current - step));
+        else if (event.key === 'ArrowRight') onCommit(clampSidebar(current + step));
+        else if (event.key === 'Home') onCommit(SIDEBAR_MIN);
+        else if (event.key === 'End') onCommit(SIDEBAR_MAX);
+        else return;
+        event.preventDefault();
+      }}
+    >
+      <span className="h-8 w-1 rounded-full bg-slate-200 group-hover:bg-sky-400 group-active:bg-sky-500 group-focus-visible:bg-sky-400 dark:bg-slate-700 dark:group-hover:bg-sky-500" />
+    </div>
   );
 }

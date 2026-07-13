@@ -58,6 +58,7 @@ export type { NodeTarget, TreeNode } from './tree/derive';
 export {
   CHILD_EDGE_RULES,
   PATH_SEP,
+  collectElementSubtree,
   collectSubtreePaths,
   docRootSpdxIds,
   flattenVisible,

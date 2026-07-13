@@ -1,5 +1,12 @@
 import { create } from 'zustand';
-import type { Diagnostic, DocumentId, LoadedDocument, NodeTarget, WorkspaceState } from '@sbomlens/core';
+import type {
+  Diagnostic,
+  DocumentId,
+  ElementId,
+  LoadedDocument,
+  NodeTarget,
+  WorkspaceState,
+} from '@sbomlens/core';
 import {
   addDocuments,
   bindRef,
@@ -7,6 +14,7 @@ import {
   pruneExpandedPaths,
   removalPlan,
   removeDocuments,
+  splitElementId,
   targetDocId,
 } from '@sbomlens/core';
 import type { Catalog } from './catalog';
@@ -27,6 +35,14 @@ export interface ToastItem {
 export interface IngestFailure {
   fileName: string;
   diagnostics: Diagnostic[];
+}
+
+/** Inventory filtered to one package's transitive subtree (across documents). */
+export interface InventoryScope {
+  rootId: ElementId;
+  rootLabel: string;
+  ids: ReadonlySet<ElementId>;
+  capped: boolean;
 }
 
 interface AppState {
@@ -51,6 +67,8 @@ interface AppState {
   facetKinds: ReadonlySet<'package' | 'file'> | null;
   facetPurposes: ReadonlySet<string> | null;
   facetLicenses: ReadonlySet<string> | null;
+  /** When set, the Inventory shows only this package subtree. */
+  inventoryScope: InventoryScope | null;
 
   diffA: DocumentId | null;
   diffB: DocumentId | null;
@@ -99,6 +117,7 @@ interface AppState {
     setTreeFilter(on: boolean): void;
     toggleFacetDoc(docId: DocumentId): void;
     setFacetDocs(docIds: readonly DocumentId[] | null): void;
+    setInventoryScope(scope: InventoryScope | null): void;
     toggleFacetKind(kind: 'package' | 'file'): void;
     toggleFacetPurpose(purpose: string): void;
     toggleFacetLicense(license: string): void;
@@ -141,6 +160,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
   facetKinds: null,
   facetPurposes: null,
   facetLicenses: null,
+  inventoryScope: null,
 
   diffA: null,
   diffB: null,
@@ -192,12 +212,18 @@ export const useAppStore = create<AppState>()((set, get) => ({
         const facetDocs = s.facetDocs
           ? new Set([...s.facetDocs].filter((id) => !removedSet.has(id)))
           : null;
+        const inventoryScope =
+          s.inventoryScope &&
+          removedSet.has(splitElementId(s.inventoryScope.rootId).documentId)
+            ? null
+            : s.inventoryScope;
         return {
           ws,
           wsVersion: s.wsVersion + 1,
           selection,
           expanded: pruneExpandedPaths(s.expanded, removedSet),
           facetDocs: facetDocs && facetDocs.size > 0 ? facetDocs : null,
+          inventoryScope,
           diffA: s.diffA && removedSet.has(s.diffA) ? null : s.diffA,
           diffB: s.diffB && removedSet.has(s.diffB) ? null : s.diffB,
         };
@@ -244,6 +270,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
         facetKinds: null,
         facetPurposes: null,
         facetLicenses: null,
+        inventoryScope: null,
         diffA: null,
         diffB: null,
       }));
@@ -302,6 +329,9 @@ export const useAppStore = create<AppState>()((set, get) => ({
     },
     setFacetDocs(docIds) {
       set({ facetDocs: docIds && docIds.length > 0 ? new Set(docIds) : null });
+    },
+    setInventoryScope(scope) {
+      set({ inventoryScope: scope });
     },
     toggleFacetKind(kind) {
       set((s) => ({ facetKinds: toggleInSet(s.facetKinds, kind) }));

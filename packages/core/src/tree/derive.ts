@@ -337,6 +337,72 @@ export function collectSubtreePaths(
   return { paths, capped };
 }
 
+/**
+ * Collects the element ids of an element's entire subtree — everything a
+ * component transitively contains/depends on, across resolved document
+ * boundaries (sub-SBOM roots are spliced in exactly like the tree renders
+ * them). Unresolved references contribute nothing. The start element is
+ * included. Capped so a pathological graph cannot freeze the UI.
+ */
+export function collectElementSubtree(
+  ws: WorkspaceState,
+  start: ElementId,
+  cap = 50000,
+): { ids: Set<ElementId>; capped: boolean } {
+  const ids = new Set<ElementId>();
+  const stack: ElementId[] = [start];
+  let capped = false;
+  while (stack.length > 0) {
+    const id = stack.pop()!;
+    if (ids.has(id)) continue;
+    if (ids.size >= cap) {
+      capped = true;
+      break;
+    }
+    ids.add(id);
+    const { documentId, spdxId } = splitElementId(id);
+    const loaded = ws.documents.get(documentId);
+    if (!loaded) continue;
+    for (const rule of CHILD_EDGE_RULES) {
+      const edges =
+        rule.direction === 'forward'
+          ? loaded.indexes.outgoing.get(spdxId)
+          : loaded.indexes.incoming.get(spdxId);
+      if (!edges) continue;
+      for (const edge of edges) {
+        if (edge.type !== rule.type) continue;
+        const end: ElementRef = rule.direction === 'forward' ? edge.to : edge.from;
+        if (end.kind === 'special') continue;
+        if (rule.externalOnly && end.kind !== 'external') continue;
+
+        if (end.kind === 'local') {
+          if (loaded.indexes.elementBySpdxId.has(end.spdxId) && end.spdxId !== spdxId) {
+            stack.push(makeElementId(documentId, end.spdxId));
+          }
+          continue;
+        }
+
+        const resolution = ws.resolutions.get(refKey(documentId, end.docRef));
+        if (!resolution || resolution.status === 'unresolved') continue;
+        const target = ws.documents.get(resolution.targetDocId);
+        if (!target) continue;
+        if (
+          end.spdxId !== null &&
+          end.spdxId !== target.document.spdxId &&
+          target.indexes.elementBySpdxId.has(end.spdxId)
+        ) {
+          stack.push(makeElementId(target.document.id, end.spdxId));
+        } else {
+          for (const rootId of docRootSpdxIds(target)) {
+            stack.push(makeElementId(target.document.id, rootId));
+          }
+        }
+      }
+    }
+  }
+  return { ids, capped };
+}
+
 /** The document a node target belongs to. */
 export function targetDocId(target: NodeTarget): DocumentId {
   switch (target.kind) {

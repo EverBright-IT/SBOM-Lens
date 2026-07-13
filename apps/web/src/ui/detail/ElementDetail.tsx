@@ -1,5 +1,6 @@
 import type { LoadedDocument, SbomElement, WorkspaceState } from '@sbomlens/core';
-import { SPDX23_DOCS, makeElementId } from '@sbomlens/core';
+import { SPDX23_DOCS, collectElementSubtree, makeElementId } from '@sbomlens/core';
+import { useAppStore } from '../../app/store';
 import { revealElement, selectTarget } from '../navigate';
 import { RevealIcon } from '../icons';
 import { CopyButton, FieldRow, Section } from './FieldRow';
@@ -117,16 +118,52 @@ export function ElementDetail({
         </Section>
       )}
 
-      {!hasTreePath && (
-        <button
-          type="button"
-          onClick={() => revealElement(makeElementId(loaded.document.id, element.spdxId))}
-          className="inline-flex items-center gap-1.5 rounded border border-slate-200 px-2 py-1 text-xs text-slate-600 hover:border-sky-300 hover:text-sky-700 dark:border-slate-700 dark:text-slate-300 dark:hover:border-sky-700 dark:hover:text-sky-400"
-        >
-          <RevealIcon /> Reveal in tree
-        </button>
-      )}
+      <div className="flex flex-wrap gap-2">
+        {element.kind === 'package' && <SubtreeInventoryButton ws={ws} element={element} loaded={loaded} />}
+        {!hasTreePath && (
+          <button
+            type="button"
+            onClick={() => revealElement(makeElementId(loaded.document.id, element.spdxId))}
+            className="inline-flex items-center gap-1.5 rounded border border-slate-200 px-2 py-1 text-xs text-slate-600 hover:border-sky-300 hover:text-sky-700 dark:border-slate-700 dark:text-slate-300 dark:hover:border-sky-700 dark:hover:text-sky-400"
+          >
+            <RevealIcon /> Reveal in tree
+          </button>
+        )}
+      </div>
     </div>
+  );
+}
+
+function SubtreeInventoryButton({
+  ws,
+  element,
+  loaded,
+}: {
+  ws: WorkspaceState;
+  element: SbomElement;
+  loaded: LoadedDocument;
+}) {
+  const actions = useAppStore((s) => s.actions);
+  return (
+    <button
+      type="button"
+      title="Filter the Inventory to this package and everything reachable below it — across resolved sub-SBOM boundaries"
+      onClick={() => {
+        const rootId = makeElementId(loaded.document.id, element.spdxId);
+        const { ids, capped } = collectElementSubtree(ws, rootId);
+        const rootLabel = element.version ? `${element.name} ${element.version}` : element.name;
+        actions.setInventoryScope({ rootId, rootLabel, ids, capped });
+        actions.setView('inventory');
+        actions.toast(
+          `Inventory scoped to ${ids.size} sub-component${ids.size === 1 ? '' : 's'} of ${rootLabel}` +
+            (capped ? ' (capped)' : ''),
+          'info',
+        );
+      }}
+      className="rounded border border-slate-200 px-2 py-1 text-xs text-slate-600 hover:border-sky-300 hover:text-sky-700 dark:border-slate-700 dark:text-slate-300 dark:hover:border-sky-700 dark:hover:text-sky-400"
+    >
+      Show sub-components in Inventory
+    </button>
   );
 }
 

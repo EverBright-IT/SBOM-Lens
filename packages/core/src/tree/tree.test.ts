@@ -154,6 +154,50 @@ describe('collectSubtreePaths', () => {
   });
 });
 
+describe('collectElementSubtree', () => {
+  const ws = loadAll('cascade/leaf.spdx.json', 'cascade/mid.spdx', 'cascade/auth.spdx', 'cascade/root.spdx');
+
+  const elementName = (id: string) => {
+    const documentId = id.slice(0, id.lastIndexOf('#'));
+    const spdxId = id.slice(id.lastIndexOf('#') + 1);
+    const doc = ws.documents.get(documentId as never)!;
+    return doc.document.elements[doc.indexes.elementBySpdxId.get(spdxId)!]!.name;
+  };
+
+  it('collects sub-components across resolved document boundaries', async () => {
+    const { collectElementSubtree, getChildren: children } = await import('./derive');
+    const platformRoot = rootNodes(ws).find((n) => label(ws, n) === 'doc:acme-platform')!;
+    const platformNode = children(ws, platformRoot)[0]!;
+    if (platformNode.target.kind !== 'element') throw new Error('expected element node');
+
+    const { ids, capped } = collectElementSubtree(ws, platformNode.target.elementId);
+    expect(capped).toBe(false);
+    const names = [...ids].map(elementName);
+    expect(names).toContain('platform'); // the start element itself
+    expect(names).toContain('webstack'); // checksum-resolved hop into mid.spdx
+    expect(names).toContain('busybox'); // element hop into leaf.spdx.json
+  });
+
+  it('a leaf package is just itself', async () => {
+    const { collectElementSubtree } = await import('./derive');
+    const leafDoc = byName(ws, 'leaf.spdx.json');
+    const busybox = leafDoc.elements.find((e) => e.name === 'busybox')!;
+    const { ids, capped } = collectElementSubtree(ws, makeElementId(leafDoc.id, busybox.spdxId));
+    expect(capped).toBe(false);
+    expect([...ids].map(elementName)).toEqual(['busybox']);
+  });
+
+  it('respects the cap', async () => {
+    const { collectElementSubtree, getChildren: children } = await import('./derive');
+    const platformRoot = rootNodes(ws).find((n) => label(ws, n) === 'doc:acme-platform')!;
+    const platformNode = children(ws, platformRoot)[0]!;
+    if (platformNode.target.kind !== 'element') throw new Error('expected element node');
+    const { ids, capped } = collectElementSubtree(ws, platformNode.target.elementId, 2);
+    expect(ids.size).toBe(2);
+    expect(capped).toBe(true);
+  });
+});
+
 describe('removal helpers', () => {
   const ws = loadAll('cascade/leaf.spdx.json', 'cascade/mid.spdx', 'cascade/root.spdx');
   const leafId = byName(ws, 'leaf.spdx.json').id;
