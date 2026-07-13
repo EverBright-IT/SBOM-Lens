@@ -175,7 +175,10 @@ image-scan:
     TRIVY_USERNAME: $CI_REGISTRY_USER
     TRIVY_PASSWORD: $CI_REGISTRY_PASSWORD
   script:
-    - trivy image --exit-code 1 --severity HIGH,CRITICAL --ignore-unfixed "$CI_REGISTRY_IMAGE:$CI_COMMIT_TAG"
+    # --skip-dirs examples: the image ships synthetic demo SPDX documents
+    # (invented package versions); trivy discovers SBOM files inside images
+    # and would report their fictional packages as vulnerabilities.
+    - trivy image --exit-code 1 --severity HIGH,CRITICAL --ignore-unfixed --skip-dirs /usr/share/nginx/html/examples "$CI_REGISTRY_IMAGE:$CI_COMMIT_TAG"
   rules:
     - if: $CI_COMMIT_TAG
 
