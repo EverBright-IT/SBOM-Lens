@@ -13,5 +13,4 @@ apps/vscode/LICENSE
 apps/vscode-ocm/out
 apps/vscode-ocm/media
 apps/vscode-ocm/LICENSE
-sbomlens.vsix
-ocmlens.vsix
+*.vsix
