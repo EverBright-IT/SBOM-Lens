@@ -14,6 +14,10 @@ COPY . .
 RUN npm run build
 
 FROM nginx:1.31-alpine
+# The nginx image lags the alpine security repos by a few packages between
+# rebuilds (trivy gate: HIGH/CRITICAL with an available fix fails the tag
+# pipeline) — pull the fixed versions at build time.
+RUN apk upgrade --no-cache
 COPY deploy/nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/apps/web/dist /usr/share/nginx/html
 EXPOSE 80
