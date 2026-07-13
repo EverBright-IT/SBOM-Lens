@@ -1,4 +1,5 @@
 import type { SVGProps } from 'react';
+import { FLAVOR } from '../app/brand';
 
 type IconProps = SVGProps<SVGSVGElement>;
 
@@ -180,3 +181,16 @@ export const LensLogo = (props: IconProps) => (
     <circle cx="9.2" cy="8.9" r="0.95" fill="currentColor" stroke="none" />
   </svg>
 );
+
+/** OCM-flavor brand mark: the same lens over a component cube. */
+export const OcmLensLogo = (props: IconProps) => (
+  <svg {...base({ width: 18, height: 18, ...props })} strokeWidth={1.8}>
+    <circle cx="7" cy="7" r="5" />
+    <path d="M10.7 10.7L14.3 14.3" />
+    <path d="M4.7 5.9L7 4.6l2.3 1.3v2.5L7 9.7 4.7 8.4z" strokeWidth={1.1} />
+    <path d="M4.7 5.9L7 7.2l2.3-1.3M7 7.2v2.5" strokeWidth={1.1} />
+  </svg>
+);
+
+/** The active product's mark — flavor is a build-time constant. */
+export const BrandLogo = FLAVOR === 'ocm' ? OcmLensLogo : LensLogo;

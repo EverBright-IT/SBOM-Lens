@@ -97,16 +97,22 @@ describe('buildWebviewHtml', () => {
 });
 
 describe('prefsSnapshot', () => {
-  it('keeps only string values under the sbomlens prefix', () => {
+  it('keeps only string values under the given prefix', () => {
     const store = new Map<string, unknown>([
       ['sbomlens.sidebar', '400'],
       ['sbomlens.count', 3],
+      ['ocmlens.sidebar', '360'],
       ['other.key', 'x'],
     ]);
-    const snapshot = prefsSnapshot([...store.keys()], (k) => {
+    const read = (k: string) => {
       const v = store.get(k);
       return typeof v === 'string' ? v : undefined;
+    };
+    expect(prefsSnapshot([...store.keys()], read, 'sbomlens.')).toEqual({
+      'sbomlens.sidebar': '400',
     });
-    expect(snapshot).toEqual({ 'sbomlens.sidebar': '400' });
+    expect(prefsSnapshot([...store.keys()], read, 'ocmlens.')).toEqual({
+      'ocmlens.sidebar': '360',
+    });
   });
 });

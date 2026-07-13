@@ -7,7 +7,8 @@ import { VitePWA } from 'vite-plugin-pwa';
 // Docker at root, any static file server — and a VS Code webview, where the
 // extension injects a <base href> pointing at the bundled assets.
 export default defineConfig(({ mode }) => {
-  const vscode = mode === 'vscode';
+  const vscode = mode === 'vscode' || mode === 'vscode-ocm';
+  const ocm = mode === 'ocm' || mode === 'vscode-ocm';
   return {
     base: './',
     plugins: [
@@ -20,26 +21,40 @@ export default defineConfig(({ mode }) => {
       VitePWA({
         disable: vscode,
         registerType: 'autoUpdate',
-        manifest: {
-          name: 'SBOM Lens',
-          short_name: 'SBOM Lens',
-          description:
-            'A fast, minimal viewer for SPDX SBOMs — including cascading document hierarchies.',
-          start_url: '.',
-          display: 'standalone',
-          theme_color: '#0284c7',
-          background_color: '#ffffff',
-          icons: [{ src: 'favicon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' }],
-        },
+        manifest: ocm
+          ? {
+              name: 'OCM Lens',
+              short_name: 'OCM Lens',
+              description:
+                'A fast, minimal viewer for Open Component Model component versions and deliveries.',
+              start_url: '.',
+              display: 'standalone',
+              theme_color: '#0284c7',
+              background_color: '#ffffff',
+              icons: [
+                { src: 'favicon-ocm.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' },
+              ],
+            }
+          : {
+              name: 'SBOM Lens',
+              short_name: 'SBOM Lens',
+              description:
+                'A fast, minimal viewer for SPDX SBOMs — including cascading document hierarchies.',
+              start_url: '.',
+              display: 'standalone',
+              theme_color: '#0284c7',
+              background_color: '#ffffff',
+              icons: [{ src: 'favicon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' }],
+            },
         workbox: {
-          globPatterns: ['**/*.{js,css,html,svg,json,spdx,yaml}'],
+          globPatterns: ['**/*.{js,css,html,svg,json,spdx,yaml,tar}'],
           maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
         },
       }),
     ],
     build: {
       target: 'es2022',
-      outDir: vscode ? 'dist-vscode' : 'dist',
+      outDir: vscode ? (ocm ? 'dist-vscode-ocm' : 'dist-vscode') : ocm ? 'dist-ocm' : 'dist',
     },
     worker: {
       format: 'es' as const,

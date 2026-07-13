@@ -8,6 +8,14 @@
       "args": ["--extensionDevelopmentPath=${workspaceFolder}/apps/vscode"],
       "outFiles": ["${workspaceFolder}/apps/vscode/out/**/*.js"],
       "preLaunchTask": "sbomlens: compile extension"
+    },
+    {
+      "name": "Run OCM Lens extension",
+      "type": "extensionHost",
+      "request": "launch",
+      "args": ["--extensionDevelopmentPath=${workspaceFolder}/apps/vscode-ocm"],
+      "outFiles": ["${workspaceFolder}/apps/vscode-ocm/out/**/*.js"],
+      "preLaunchTask": "ocmlens: compile extension"
     }
   ]
 }

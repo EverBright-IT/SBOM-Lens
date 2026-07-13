@@ -1,3 +1,4 @@
+import { pref } from '../app/brand';
 import { host } from '../host/adapter';
 
 /**
@@ -10,7 +11,7 @@ import { host } from '../host/adapter';
 
 export type ThemeMode = 'system' | 'light' | 'dark';
 
-const PREF_KEY = 'sbomlens.theme';
+const PREF_KEY = pref('theme');
 export const THEME_ORDER: readonly ThemeMode[] = ['system', 'light', 'dark'];
 
 let current: ThemeMode = 'system';

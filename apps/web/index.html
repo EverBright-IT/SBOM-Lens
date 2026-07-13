@@ -7,12 +7,9 @@
     <!-- The app is a tool, not a content page: search traffic belongs to the
          landing page. Applies to every deployment (Pages, self-hosts). -->
     <meta name="robots" content="noindex" />
-    <meta
-      name="description"
-      content="SBOM Lens — a fast, minimal viewer for SPDX SBOMs, including cascading document hierarchies. Runs entirely in your browser."
-    />
-    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
-    <title>SBOM Lens</title>
+    <meta name="description" content="%VITE_APP_DESCRIPTION%" />
+    <link rel="icon" type="image/svg+xml" href="%VITE_APP_FAVICON%" />
+    <title>%VITE_APP_TITLE%</title>
   </head>
   <body>
     <div id="root"></div>

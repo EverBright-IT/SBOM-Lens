@@ -26,6 +26,7 @@
   "scripts": {
     "dev": "npm run dev -w @sbomlens/web",
     "build": "npm run typecheck && npm run build -w @sbomlens/web",
+    "build:ocm": "npm run typecheck && npm run build:ocm -w @sbomlens/web",
     "preview": "npm run preview -w @sbomlens/web",
     "test": "vitest run",
     "test:watch": "vitest",

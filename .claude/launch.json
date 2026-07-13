@@ -4,8 +4,22 @@
     {
       "name": "sbomlens-dev",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev"],
+      "runtimeArgs": [
+        "run",
+        "dev"
+      ],
       "port": 5173
+    },
+    {
+      "name": "ocmlens-dev",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "dev:ocm",
+        "-w",
+        "@sbomlens/web"
+      ],
+      "port": 5174
     }
   ]
 }

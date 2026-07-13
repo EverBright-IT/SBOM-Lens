@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import type { DocumentId } from '@sbomlens/core';
 import { documentGraph, splitElementId } from '@sbomlens/core';
+import { pref } from '../../app/brand';
 import { useAppStore } from '../../app/store';
 import { host } from '../../host/adapter';
 import { docAccent } from '../docColors';
@@ -13,7 +14,7 @@ const GAP_X = 14;
 const GAP_Y = 18;
 const PAD = 10;
 
-const OPEN_KEY = 'sbomlens.docmap';
+const OPEN_KEY = pref('docmap');
 
 /** Above this the inline minimap degrades into a postage stamp — link out. */
 const INLINE_LIMIT = 12;

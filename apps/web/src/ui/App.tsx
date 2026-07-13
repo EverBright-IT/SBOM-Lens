@@ -8,7 +8,8 @@ import { useAppStore } from '../app/store';
 import { DiagnosticsDrawer } from './DiagnosticsDrawer';
 import { EmptyState } from './EmptyState';
 import { HelpDialog, UrlDialog } from './dialogs';
-import { GitHubIcon, GitLabIcon, LensLogo, MoonIcon, SunIcon, SystemThemeIcon } from './icons';
+import { BrandLogo, GitHubIcon, GitLabIcon, MoonIcon, SunIcon, SystemThemeIcon } from './icons';
+import { BRAND, pref } from '../app/brand';
 import { OpenMenu } from './OpenMenu';
 import { THEME_ORDER, setThemeMode, themeMode, type ThemeMode } from './theme';
 import { DropOverlay, Toasts } from './overlays';
@@ -24,7 +25,7 @@ import { DiffView } from './views/DiffView';
 import { InventoryView } from './views/InventoryView';
 import { MapView } from './views/MapView';
 
-const SIDEBAR_KEY = 'sbomlens.sidebarWidth';
+const SIDEBAR_KEY = pref('sidebarWidth');
 
 const ICON_BUTTON =
   'grid size-8 shrink-0 place-items-center rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-300';
@@ -91,9 +92,9 @@ export function App() {
     <div className="grid h-full grid-rows-[auto_minmax(0,1fr)_auto]">
       <header className="flex h-12 shrink-0 items-center gap-3 border-b border-slate-200 px-3 dark:border-slate-800">
         <div className="flex shrink-0 items-center gap-1.5 font-semibold">
-          <LensLogo className="text-sky-600 dark:text-sky-400" />
+          <BrandLogo className="text-sky-600 dark:text-sky-400" />
           <span>
-            SBOM <span className="text-sky-600 dark:text-sky-400">Lens</span>
+            {BRAND.namePrefix} <span className="text-sky-600 dark:text-sky-400">{BRAND.nameAccent}</span>
           </span>
         </div>
         <ViewSwitcher />

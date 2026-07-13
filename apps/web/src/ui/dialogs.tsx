@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { BRAND } from '../app/brand';
 import { ingestUrl } from '../app/ingest';
 import { useAppStore } from '../app/store';
 import { rememberToken, tokenForUrl, type TokenScheme } from '../app/tokens';
@@ -77,7 +78,7 @@ export function UrlDialog() {
       >
         <DialogHeader title="Open from URL" onClose={actions.closeUrlDialog} />
         <label className="mt-3 block text-xs text-slate-500 dark:text-slate-400">
-          URL of an SPDX document
+          {BRAND.urlDialogLabel}
           <input
             value={url}
             onChange={(e) => setUrl(e.target.value)}
@@ -181,8 +182,8 @@ export function HelpDialog() {
           </tbody>
         </table>
         <p className="mt-4 text-[11px] text-slate-400">
-          SBOM Lens · a fast, minimal viewer for SPDX SBOMs. Files are parsed locally in your
-          browser and never uploaded.
+          {BRAND.name} · {BRAND.tagline}. Files are parsed locally in your browser and never
+          uploaded.
         </p>
       </div>
     </dialog>

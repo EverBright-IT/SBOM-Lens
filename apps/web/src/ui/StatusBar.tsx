@@ -1,4 +1,5 @@
 import { version } from '../../package.json';
+import { BRAND } from '../app/brand';
 import { fetchAllReferences } from '../app/autofetch';
 import { useWorkspaceStats } from '../app/selectors';
 import { useAppStore } from '../app/store';
@@ -80,10 +81,10 @@ export function StatusBar() {
         files never leave your machine
       </span>
       <a
-        href="https://gitlab.com/everbrightit-group/sbom-lens/-/blob/main/CHANGELOG.md"
+        href={BRAND.changelogUrl}
         target="_blank"
         rel="noreferrer"
-        title="SBOM Lens changelog"
+        title={`${BRAND.name} changelog`}
         className="hover:text-slate-600 hover:underline dark:hover:text-slate-300"
       >
         v{version}

@@ -1,6 +1,8 @@
 node_modules
 dist
 dist-vscode
+dist-ocm
+dist-vscode-ocm
 coverage
 *.local
 .DS_Store
@@ -8,4 +10,8 @@ coverage
 apps/vscode/out
 apps/vscode/media
 apps/vscode/LICENSE
+apps/vscode-ocm/out
+apps/vscode-ocm/media
+apps/vscode-ocm/LICENSE
 sbomlens.vsix
+ocmlens.vsix

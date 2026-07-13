@@ -23,8 +23,8 @@ export default defineConfig({
       },
       {
         test: {
-          name: 'vscode',
-          root: 'apps/vscode',
+          name: 'vscode-shell',
+          root: 'packages/vscode-shell',
           environment: 'node',
           include: ['src/**/*.test.ts'],
         },

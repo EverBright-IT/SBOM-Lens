@@ -208,7 +208,7 @@ export function parseOcmComponentDescriptor(
     );
   }
   diagnostics.push(
-    diag('info', 'OCM_DIGESTS_NOT_VERIFIED', 'OCM digests are displayed but not verified by SBOM Lens.'),
+    diag('info', 'OCM_DIGESTS_NOT_VERIFIED', 'OCM digests are displayed, not verified.'),
   );
 
   const document: SbomDocument = {

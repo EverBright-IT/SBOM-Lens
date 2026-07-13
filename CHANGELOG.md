@@ -4,6 +4,22 @@ All notable changes to SBOM Lens. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [SemVer](https://semver.org) (0.x — the API surface is the app itself).
 
+## [Unreleased]
+
+### Added
+- **[OCM Lens]** The repository now ships a second branded product: OCM Lens,
+  a delivery-first viewer for Open Component Model component versions, built
+  from the same codebase as a web app (`vite --mode ocm` → `dist-ocm`, own
+  PWA manifest/favicon) and a VS Code extension (`apps/vscode-ocm`, editor
+  for `component-descriptor.yaml|yml|json` and `.ctf` archives — it takes
+  `*.ctf` by default; SBOM Lens keeps it under "Open With…"). Branding,
+  copy, pref/secret namespaces (`ocmlens.*`), catalog path
+  (`ocmlens.catalog.json`), and the bundled example are flavor-switched in
+  `apps/web/src/app/brand.ts`; a CI gate fails any build that leaks the
+  sibling product's name. The VS Code shell (bridge, panel lifecycle,
+  commands) moved to the shared workspace package
+  `@sbomlens/vscode-shell` — both extensions are thin configs around it.
+
 ## [0.10.6] — 2026-07-13
 
 ### Added

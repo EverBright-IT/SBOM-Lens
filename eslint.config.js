@@ -4,7 +4,20 @@ import reactHooks from 'eslint-plugin-react-hooks';
 import globals from 'globals';
 
 export default tseslint.config(
-  { ignores: ['**/dist', '**/dist-vscode', 'coverage', 'node_modules', 'apps/vscode/media', 'apps/vscode/out'] },
+  {
+    ignores: [
+      '**/dist',
+      '**/dist-vscode',
+      '**/dist-ocm',
+      '**/dist-vscode-ocm',
+      'coverage',
+      'node_modules',
+      'apps/vscode/media',
+      'apps/vscode/out',
+      'apps/vscode-ocm/media',
+      'apps/vscode-ocm/out',
+    ],
+  },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
@@ -63,12 +76,21 @@ export default tseslint.config(
     },
   },
   {
-    files: ['apps/*/scripts/**/*.mjs', 'packages/*/scripts/**/*.mjs', 'apps/vscode/esbuild.mjs'],
+    files: [
+      'apps/*/scripts/**/*.mjs',
+      'packages/*/scripts/**/*.mjs',
+      'apps/vscode/esbuild.mjs',
+      'apps/vscode-ocm/esbuild.mjs',
+    ],
     languageOptions: { globals: { ...globals.node } },
   },
   {
-    // The extension runs in the Node extension host, not a browser.
-    files: ['apps/vscode/src/**/*.ts'],
+    // Extensions and the shared shell run in the Node extension host, not a browser.
+    files: [
+      'apps/vscode/src/**/*.ts',
+      'apps/vscode-ocm/src/**/*.ts',
+      'packages/vscode-shell/src/**/*.ts',
+    ],
     languageOptions: { globals: { ...globals.node } },
   },
 );

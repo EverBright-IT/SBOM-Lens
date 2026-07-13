@@ -1,5 +1,6 @@
 import type { ComplianceProfile } from '@sbomlens/core';
 import { MAX_PROFILE_BYTES, NTIA_PROFILE, validateProfile } from '@sbomlens/core';
+import { pref } from './brand';
 import { host } from '../host/adapter';
 import { useAppStore } from './store';
 
@@ -16,8 +17,8 @@ export interface StoredProfile {
   origin: 'imported' | 'catalog';
 }
 
-const PROFILES_KEY = 'sbomlens.profiles';
-const ACTIVE_KEY = 'sbomlens.activeProfile';
+const PROFILES_KEY = pref('profiles');
+const ACTIVE_KEY = pref('activeProfile');
 const MAX_STORED_PROFILES = 16;
 /**
  * Persisted-size ceiling. Doubly important in VS Code, where every

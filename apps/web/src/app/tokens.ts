@@ -1,3 +1,4 @@
+import { pref } from './brand';
 import { host } from '../host/adapter';
 
 /**
@@ -14,7 +15,7 @@ export interface HostToken {
   value: string;
 }
 
-const keyFor = (hostName: string) => `sbomlens.token.${hostName}`;
+const keyFor = (hostName: string) => pref(`token.${hostName}`);
 
 export async function tokenForUrl(url: string): Promise<HostToken | undefined> {
   try {

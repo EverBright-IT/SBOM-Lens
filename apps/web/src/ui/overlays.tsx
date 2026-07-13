@@ -1,10 +1,11 @@
 import clsx from 'clsx';
 import { useEffect, useRef, useState } from 'react';
+import { BRAND } from '../app/brand';
 import { ingestDataTransfer } from '../app/ingest';
 import { useAppStore } from '../app/store';
 import { CloseIcon, UploadIcon } from './icons';
 
-/** Full-window drop target: drag SPDX files or folders anywhere. */
+/** Full-window drop target: drag documents or folders anywhere. */
 export function DropOverlay() {
   const [active, setActive] = useState(false);
   const depth = useRef(0);
@@ -48,7 +49,7 @@ export function DropOverlay() {
     <div className="pointer-events-none fixed inset-0 z-50 grid place-items-center bg-sky-500/10 p-6">
       <div className="grid h-full w-full place-items-center rounded-xl border-2 border-dashed border-sky-400 bg-white/70 dark:bg-slate-950/70">
       <div className="flex items-center gap-2 text-lg font-medium text-sky-700 dark:text-sky-300">
-        <UploadIcon width={22} height={22} /> Drop SPDX files or folders
+        <UploadIcon width={22} height={22} /> {BRAND.dropHint}
       </div>
       </div>
     </div>

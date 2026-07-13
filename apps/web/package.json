@@ -10,8 +10,11 @@
   },
   "scripts": {
     "dev": "vite",
+    "dev:ocm": "vite --mode ocm --port 5174",
     "build": "vite build",
     "build:vscode": "vite build --mode vscode",
+    "build:ocm": "vite build --mode ocm",
+    "build:vscode-ocm": "vite build --mode vscode-ocm",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "generate:examples": "node scripts/generate-examples.mjs",

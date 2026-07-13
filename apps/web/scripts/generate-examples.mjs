@@ -10,7 +10,7 @@
  *   node scripts/generate-examples.mjs
  */
 import { createHash } from 'node:crypto';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 
 const outDir = new URL('../public/examples/', import.meta.url);
 mkdirSync(new URL('extra/', outDir), { recursive: true });
@@ -323,3 +323,13 @@ const acmeProfile = {
   ],
 };
 write('acme-profile.sbomlens-profile.json', JSON.stringify(acmeProfile, null, 2) + '\n');
+
+// --- OCM-flavor demo: the deterministic CTF fixture doubles as the example --
+// Bytes are owned by packages/core (generate-ocm-fixtures.mjs) — this script
+// only copies them, so both stay in lockstep and byte-identical.
+const ctf = readFileSync(
+  new URL('../../../packages/core/fixtures/ocm/delivery.ctf.tar', import.meta.url),
+);
+mkdirSync(new URL('ocm/', outDir), { recursive: true });
+writeFileSync(new URL('ocm/acme-delivery.ctf.tar', outDir), ctf);
+console.log(`ocm/acme-delivery.ctf.tar  (${ctf.length} bytes, copied from core fixtures)`);

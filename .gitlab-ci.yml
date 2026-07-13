@@ -88,8 +88,25 @@ build:
     - when: on_success
   script:
     - npm run build
+    # Brand-leak gate: the SBOM flavor must not carry OCM-Lens branding.
+    - '! grep -riq "OCM Lens" apps/web/dist/index.html apps/web/dist/assets'
   artifacts:
     paths: [apps/web/dist]
+    expire_in: 1 week
+
+# OCM Lens: the second product flavor built from the same codebase.
+build-ocm:
+  stage: build
+  rules:
+    - if: $RENOVATE_RUN == "true"
+      when: never
+    - when: on_success
+  script:
+    - npm run build:ocm
+    # Brand-leak gate: the OCM flavor must not carry SBOM-Lens branding.
+    - '! grep -riq "SBOM Lens" apps/web/dist-ocm/index.html apps/web/dist-ocm/assets'
+  artifacts:
+    paths: [apps/web/dist-ocm]
     expire_in: 1 week
 
 # Pages serves the viewer itself — https://<namespace>.gitlab.io/<project>/
@@ -112,7 +129,7 @@ pages:
       when: never
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
 
-# VS Code extension package on tags (Marketplace publishing stays manual).
+# VS Code extension packages on tags (registry publishing stays manual).
 vsix:
   stage: deploy
   script:
@@ -121,6 +138,18 @@ vsix:
     - npm run package -w sbomlens
   artifacts:
     paths: [sbomlens.vsix]
+    expire_in: 4 weeks
+  rules:
+    - if: $CI_COMMIT_TAG
+
+vsix-ocm:
+  stage: deploy
+  script:
+    - npm run build:vscode-ocm -w @sbomlens/web
+    - npm run compile -w ocmlens
+    - npm run package -w ocmlens
+  artifacts:
+    paths: [ocmlens.vsix]
     expire_in: 4 weeks
   rules:
     - if: $CI_COMMIT_TAG

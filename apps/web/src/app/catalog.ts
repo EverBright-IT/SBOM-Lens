@@ -1,4 +1,5 @@
 import { MAX_PROFILE_BYTES } from '@sbomlens/core';
+import { BRAND } from './brand';
 import { host } from '../host/adapter';
 import { fetchAllReferences } from './autofetch';
 import { ingestUrl } from './ingest';
@@ -40,7 +41,7 @@ export interface Catalog {
   profiles?: CatalogProfileRef[];
 }
 
-const CATALOG_PATH = 'sbomlens.catalog.json';
+const CATALOG_PATH = BRAND.catalogPath;
 const MAX_SOURCES = 100;
 const MAX_URLS = 50;
 const MAX_PROFILE_REFS = 20;

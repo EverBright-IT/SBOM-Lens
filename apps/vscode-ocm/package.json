@@ -1,0 +1,113 @@
+{
+  "name": "ocmlens",
+  "displayName": "OCM Lens",
+  "icon": "icon.png",
+  "description": "View Open Component Model component versions and deliveries — CTF and component archives, with embedded SBOMs — right in your editor.",
+  "version": "0.10.6",
+  "publisher": "everbright-it",
+  "license": "Apache-2.0",
+  "private": true,
+  "repository": {
+    "type": "git",
+    "url": "https://gitlab.com/everbrightit-group/sbom-lens.git"
+  },
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Visualization",
+    "Other"
+  ],
+  "keywords": [
+    "ocm",
+    "open-component-model",
+    "sbom",
+    "delivery",
+    "supply-chain"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "customEditors": [
+      {
+        "viewType": "ocmlens.viewer",
+        "displayName": "OCM Lens",
+        "selector": [
+          {
+            "filenamePattern": "component-descriptor.yaml"
+          },
+          {
+            "filenamePattern": "component-descriptor.yml"
+          },
+          {
+            "filenamePattern": "component-descriptor.json"
+          },
+          {
+            "filenamePattern": "*.ctf"
+          }
+        ],
+        "priority": "default"
+      },
+      {
+        "viewType": "ocmlens.viewer",
+        "displayName": "OCM Lens",
+        "selector": [
+          {
+            "filenamePattern": "*.tar"
+          },
+          {
+            "filenamePattern": "*.tgz"
+          }
+        ],
+        "priority": "option"
+      }
+    ],
+    "commands": [
+      {
+        "command": "ocmlens.openWith",
+        "title": "Open with OCM Lens"
+      },
+      {
+        "command": "ocmlens.openFolder",
+        "title": "Open folder with OCM Lens"
+      },
+      {
+        "command": "ocmlens.scanWorkspace",
+        "title": "OCM Lens: Scan workspace for component descriptors"
+      }
+    ],
+    "menus": {
+      "explorer/context": [
+        {
+          "command": "ocmlens.openWith",
+          "when": "!explorerResourceIsFolder && resourceFilename =~ /(component-descriptor\\.(ya?ml|json)|\\.(ctf|tar|tgz))$/",
+          "group": "navigation@50"
+        },
+        {
+          "command": "ocmlens.openFolder",
+          "when": "explorerResourceIsFolder",
+          "group": "navigation@51"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "ocmlens.openWith",
+          "when": "false"
+        },
+        {
+          "command": "ocmlens.openFolder",
+          "when": "false"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "compile": "node esbuild.mjs && rm -rf media && cp -R ../web/dist-vscode-ocm media && cp ../../LICENSE .",
+    "package": "vsce package --no-dependencies -o ../../ocmlens.vsix"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.90.0",
+    "@vscode/vsce": "^3.3.0",
+    "esbuild": "^0.25.6"
+  }
+}

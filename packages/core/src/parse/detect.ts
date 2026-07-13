@@ -108,14 +108,14 @@ function classifyObject(parsed: unknown, serialization: 'json' | 'yaml'): Detect
   if (typeof parsed.schema === 'string' && parsed.schema.startsWith('sbomlens-profile/')) {
     return unsupported(
       'SBOMLENS_PROFILE',
-      'This is an SBOM Lens compliance profile, not an SBOM — drop it into the app to import it as a quality profile.',
+      'This is a compliance profile, not an SBOM — drop it into the app to import it as a quality profile.',
     );
   }
 
   if (parsed.bomFormat === 'CycloneDX') {
     return unsupported(
       'CYCLONEDX_NOT_SUPPORTED',
-      'This is a CycloneDX BOM. SBOM Lens reads SPDX — convert it (e.g. `cyclonedx convert`) or export SPDX from your tool.',
+      'This is a CycloneDX BOM. This viewer reads SPDX — convert it (e.g. `cyclonedx convert`) or export SPDX from your tool.',
     );
   }
 

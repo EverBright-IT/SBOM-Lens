@@ -1,8 +1,9 @@
 import { useRef } from 'react';
+import { BRAND } from '../app/brand';
 import { loadCatalogSource } from '../app/catalog';
 import { useAppStore } from '../app/store';
 import { loadExample } from './examples';
-import { DocumentIcon, LensLogo } from './icons';
+import { BrandLogo, DocumentIcon } from './icons';
 import { FilePickers } from './OpenMenu';
 
 export function EmptyState() {
@@ -17,12 +18,9 @@ export function EmptyState() {
   return (
     <div className="grid h-full place-items-center p-6">
       <div className="max-w-md text-center">
-        <LensLogo width={40} height={40} className="mx-auto text-sky-600 dark:text-sky-400" />
-        <h1 className="mt-4 text-xl font-semibold">SBOM Lens</h1>
-        <p className="mt-1.5 text-sm text-slate-500 dark:text-slate-400">
-          Drop SPDX files, folders, or OCM deliveries (CTF / component archives, experimental)
-          anywhere in this window — cascading documents and delivery contents link up automatically.
-        </p>
+        <BrandLogo width={40} height={40} className="mx-auto text-sky-600 dark:text-sky-400" />
+        <h1 className="mt-4 text-xl font-semibold">{BRAND.name}</h1>
+        <p className="mt-1.5 text-sm text-slate-500 dark:text-slate-400">{BRAND.emptyStateHint}</p>
 
         <div className="mt-5 flex flex-wrap justify-center gap-2">
           <button type="button" className={button} onClick={() => filesRef.current?.click()}>
@@ -46,7 +44,7 @@ export function EmptyState() {
         {catalog && (
           <div className="mt-7 text-left">
             <h2 className="mb-2 text-center text-[11px] font-medium tracking-wide text-slate-400 uppercase">
-              {catalog.title ?? 'Preconfigured SBOMs'}
+              {catalog.title ?? BRAND.catalogHeading}
             </h2>
             <div className="space-y-1.5">
               {catalog.sources.map((source) => (
@@ -73,7 +71,7 @@ export function EmptyState() {
         )}
 
         <p className="mt-6 text-xs text-slate-400 dark:text-slate-500">
-          Supports SPDX 2.x as tag-value (<span className="font-mono">.spdx</span>), JSON, and YAML.
+          {BRAND.formatsNote}
           <br />
           Everything is parsed locally in your browser — files never leave your machine.
         </p>

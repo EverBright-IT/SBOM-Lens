@@ -5,7 +5,8 @@ import type {
 
 /**
  * The extension-host side of the webview bridge, dependency-injected so the
- * handlers are testable without the vscode module.
+ * handlers are testable without the vscode module. Shared by every Lens
+ * extension flavor.
  */
 export interface BridgeContext {
   fetchBytes(
@@ -74,12 +75,12 @@ export async function nodeFetchBytes(
   }
 }
 
-const PREF_PREFIX = 'sbomlens.';
-
 /**
  * Injects <base href>, the CSP, a nonce on every script, and the pref
  * snapshot into the built index.html. The nonce pass runs first so the
- * injected snippet keeps its single nonce.
+ * injected snippet keeps its single nonce. The __SBOMLENS_PREFS__ global is
+ * a webview-internal name shared by both flavors' bundles — webviews are
+ * isolated JS contexts, so the products can never collide on it.
  */
 export function buildWebviewHtml(
   raw: string,
@@ -104,13 +105,15 @@ export function buildWebviewHtml(
     .replace('<head>', `<head>${inject}`);
 }
 
+/** Snapshot of all persisted prefs under the flavor's namespace. */
 export function prefsSnapshot(
   keys: readonly string[],
   read: (key: string) => string | undefined,
+  prefPrefix: string,
 ): Record<string, string> {
   const prefs: Record<string, string> = {};
   for (const key of keys) {
-    if (!key.startsWith(PREF_PREFIX)) continue;
+    if (!key.startsWith(prefPrefix)) continue;
     const value = read(key);
     if (typeof value === 'string') prefs[key] = value;
   }

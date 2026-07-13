@@ -1,17 +1,15 @@
+import { BRAND } from '../app/brand';
 import { ingestBuffers } from '../app/ingest';
 import { useAppStore } from '../app/store';
 import { rootNodes } from '@sbomlens/core';
 
 /**
- * The bundled demo cascade. acme-identity is deliberately NOT loaded so the
- * unresolved-reference placeholder and its fetch/drop flow are discoverable —
- * its file ships under examples/extra/ and the placeholder's URL points there.
+ * The bundled demo set per flavor (see brand.ts). In the SBOM flavor,
+ * acme-identity is deliberately NOT loaded so the unresolved-reference
+ * placeholder and its fetch/drop flow are discoverable — its file ships
+ * under examples/extra/ and the placeholder's URL points there.
  */
-const EXAMPLE_FILES = [
-  'examples/acme-platform-1.0.spdx',
-  'examples/acme-webstack-2.1.spdx.json',
-  'examples/acme-runtime-image-3.0.spdx',
-];
+const EXAMPLE_FILES = BRAND.exampleFiles;
 
 export async function loadExample(): Promise<void> {
   const { actions } = useAppStore.getState();

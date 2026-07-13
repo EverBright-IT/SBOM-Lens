@@ -1,0 +1,17 @@
+{
+  "name": "@sbomlens/vscode-shell",
+  "version": "0.10.6",
+  "description": "Shared VS Code extension shell for the Lens products — webview bridge, panel lifecycle, commands.",
+  "license": "Apache-2.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.90.0"
+  }
+}
