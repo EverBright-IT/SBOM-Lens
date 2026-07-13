@@ -3,9 +3,12 @@
 FROM node:22-alpine AS build
 WORKDIR /app
 # Manifests first so the npm ci layer survives source-only changes.
+# ALL workspace manifests must be here — a missing one makes npm ci skip that
+# workspace's deps, and the root typecheck (all workspaces) fails later.
 COPY package.json package-lock.json ./
 COPY packages/core/package.json packages/core/
 COPY apps/web/package.json apps/web/
+COPY apps/vscode/package.json apps/vscode/
 RUN npm ci
 COPY . .
 RUN npm run build

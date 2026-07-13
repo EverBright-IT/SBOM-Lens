@@ -10,6 +10,9 @@ include:
 
 variables:
   SAST_EXCLUDED_PATHS: '**/dist, **/dist-vscode, apps/vscode/media, packages/core/fixtures, apps/web/public/examples'
+  # Diagnostic (temporary): the template analyzers finish without writing
+  # their gl-*-report.json on this runner — debug logs show why.
+  SECURE_LOG_LEVEL: 'debug'
 
 default:
   image: node:22-alpine
@@ -177,16 +180,23 @@ image-scan:
     - if: $CI_COMMIT_TAG
 
 # Dogfooding: every release ships its own SPDX SBOM — open it in SBOM Lens.
+# Pinned syft binary on alpine instead of the anchore/syft image: that image
+# is distroless (no shell, no sleep), which container-keepalive runners
+# cannot start. The checksum pins the exact release.
 self-sbom:
   stage: deploy
   needs: []
-  image:
-    name: anchore/syft:latest
-    entrypoint: ['']
+  image: alpine:3.22
   cache: []
   before_script: []
+  variables:
+    SYFT_VERSION: '1.46.0'
+    SYFT_SHA256: 'd654f678b709eb53c393d38519d5ed7d2e57205529404018614cfefa0fb2b5ca'
   script:
-    - /syft dir:. --source-name sbomlens --source-version "$CI_COMMIT_TAG" -o "spdx-json=sbomlens-$CI_COMMIT_TAG.spdx.json"
+    - wget -q "https://github.com/anchore/syft/releases/download/v${SYFT_VERSION}/syft_${SYFT_VERSION}_linux_amd64.tar.gz" -O /tmp/syft.tgz
+    - echo "$SYFT_SHA256  /tmp/syft.tgz" | sha256sum -c -
+    - tar -xzf /tmp/syft.tgz -C /usr/local/bin syft
+    - syft dir:. --source-name sbomlens --source-version "$CI_COMMIT_TAG" -o "spdx-json=sbomlens-$CI_COMMIT_TAG.spdx.json"
   artifacts:
     paths: [sbomlens-*.spdx.json]
     expire_in: 1 year
