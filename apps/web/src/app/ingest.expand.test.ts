@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
-import { parseDocument, readOcmDelivery, sha1Hex, sniffContainer } from '@sbomlens/core';
+import { parseDocument, sha1Hex, sniffContainer } from '@sbomlens/core';
+import { readOcmDelivery } from '@sbomlens/core/ocm';
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { HostAdapter } from '../host/adapter';
 import { setHost } from '../host/adapter';

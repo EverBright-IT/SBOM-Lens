@@ -1,4 +1,5 @@
-import type { OcmDigest, OcmLabel, SbomDocument, SbomElement } from '@sbomlens/core';
+import type { SbomDocument, SbomElement } from '@sbomlens/core';
+import type { OcmDigest, OcmLabel } from '@sbomlens/core/ocm';
 import { Chip, CopyButton, FieldRow, Section } from './FieldRow';
 
 /**

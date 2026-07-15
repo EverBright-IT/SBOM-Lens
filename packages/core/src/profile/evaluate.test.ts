@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { documentQuality } from '../analysis/quality';
+import { parseOcmComponentDescriptor } from '../parse/ocm/cd';
+import { registerOcmParser } from '../parse/parser';
 import { loadFixtureDocument, loadedFromText } from '../test-fixtures';
 import type { LoadedDocument, WorkspaceState } from '../workspace/workspace';
 import { addDocument, emptyWorkspace } from '../workspace/workspace';
@@ -8,6 +10,9 @@ import type { ComplianceProfile, ProfileCheck } from './model';
 import { PROFILE_SCHEMA_V1 } from './model';
 import { profileReportToMarkdown } from './markdown';
 import { NTIA_PROFILE } from './ntia';
+
+// The OCM fixtures below parse only once descriptors are wired in.
+registerOcmParser(parseOcmComponentDescriptor);
 
 function profileOf(...checks: ProfileCheck[]): ComplianceProfile {
   return { schema: PROFILE_SCHEMA_V1, name: 'Test', checks };

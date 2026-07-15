@@ -1,5 +1,6 @@
 import type { LoadedDocument, SbomElement, WorkspaceState } from '@sbomlens/core';
 import { collectElementSubtree, makeElementId } from '@sbomlens/core';
+import { HAS_DELIVERIES } from '../../app/brand';
 import { useAppStore } from '../../app/store';
 import { revealElement, selectTarget } from '../navigate';
 import { RevealIcon } from '../icons';
@@ -97,7 +98,7 @@ export function ElementDetail({
         </Section>
       )}
 
-      <OcmElementSections element={element} />
+      {HAS_DELIVERIES && <OcmElementSections element={element} />}
 
       <RelationshipList ws={ws} loaded={loaded} spdxId={element.spdxId} />
 

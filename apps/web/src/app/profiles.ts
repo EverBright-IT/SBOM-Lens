@@ -1,6 +1,7 @@
 import type { ComplianceProfile, SpecInfo } from '@sbomlens/core';
-import { MAX_PROFILE_BYTES, NTIA_PROFILE, OCM_ESSENTIALS_PROFILE, validateProfile } from '@sbomlens/core';
-import { pref } from './brand';
+import { MAX_PROFILE_BYTES, NTIA_PROFILE, validateProfile } from '@sbomlens/core';
+import { OCM_ESSENTIALS_PROFILE } from '@sbomlens/core/ocm';
+import { HAS_DELIVERIES, pref } from './brand';
 import { host } from '../host/adapter';
 import { useAppStore } from './store';
 
@@ -164,7 +165,7 @@ function persistActive(id: string | null): void {
 
 /** The builtin default depends on the document model — NTIA framing makes no sense on a component descriptor. */
 function builtinProfile(model: SpecInfo['model']): ComplianceProfile {
-  return model === 'ocm' ? OCM_ESSENTIALS_PROFILE : NTIA_PROFILE;
+  return HAS_DELIVERIES && model === 'ocm' ? OCM_ESSENTIALS_PROFILE : NTIA_PROFILE;
 }
 
 export function builtinProfileName(model: SpecInfo['model']): string {

@@ -1,6 +1,9 @@
 /**
  * Public surface of the framework-free core. The app layer imports only from
  * here; deep imports are reserved for core-internal code and tests.
+ *
+ * SPDX only — OCM component descriptors and delivery archives live behind
+ * `@sbomlens/core/ocm` so a product that doesn't want them doesn't ship them.
  */
 export type { DocumentId, ElementId } from './model/ids';
 export { makeDocumentId, makeElementId, splitElementId } from './model/ids';
@@ -20,6 +23,8 @@ export type {
 
 export type { ParseResult, SourceInput } from './parse/parser';
 export { parseDocument } from './parse/parser';
+export { sniffContainer } from './util/binary';
+export type { ContainerKind } from './util/binary';
 export type { Detection } from './parse/detect';
 export { detect, registerYamlParser } from './parse/detect';
 export { parseElementRef, refToString } from './parse/spdx2/common';
@@ -102,32 +107,10 @@ export { sniffProfile, validateProfile } from './profile/validate';
 export type { CoverageStat, ProfileCheckResult, ProfileReport } from './profile/evaluate';
 export { evaluateProfile } from './profile/evaluate';
 export { NTIA_PROFILE } from './profile/ntia';
-export { OCM_ESSENTIALS_PROFILE } from './profile/ocm';
 export { profileReportToMarkdown } from './profile/markdown';
-
-export type { ContainerKind } from './util/binary';
-export { gunzip, sniffContainer } from './util/binary';
-export type { TarEntry, TarResult } from './util/tar';
-export { readTar } from './util/tar';
-export type { OcmBlobContext } from './parse/ocm/cd';
-export { ocmNamespace, parseOcmComponentDescriptor } from './parse/ocm/cd';
-export type { DeliveryResult, PreparsedDoc } from './parse/ocm/archive';
-export { readOcmDelivery } from './parse/ocm/archive';
 
 export type { SpecFieldDoc } from './spec/spdx23-field-docs';
 export { SPDX23_DOCS } from './spec/spdx23-field-docs';
-export type { OcmFieldDoc } from './spec/ocm-field-docs';
-export { OCM_DOCS } from './spec/ocm-field-docs';
-export type {
-  OcmAccessInfo,
-  OcmDigest,
-  OcmDocumentExt,
-  OcmElementExt,
-  OcmLabel,
-  OcmReferenceExt,
-  OcmRepositoryContext,
-  OcmSignatureInfo,
-} from './model/ocm';
 
 export type {
   DocGraphEdge,

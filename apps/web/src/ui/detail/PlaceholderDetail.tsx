@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import type { DocumentId, NodeTarget, WorkspaceState } from '@sbomlens/core';
 import { refKey, refToString } from '@sbomlens/core';
 import { makeElementId } from '@sbomlens/core';
+import { HAS_DELIVERIES } from '../../app/brand';
 import { ingestFiles, ingestUrl } from '../../app/ingest';
 import { useAppStore } from '../../app/store';
 import { revealElement, selectTarget } from '../navigate';
@@ -101,7 +102,7 @@ export function PlaceholderDetail({ ws, target }: { ws: WorkspaceState; target: 
       </Section>
 
       <Section title="Resolve it">
-        {ref?.uri.startsWith('ocm://') && (
+        {HAS_DELIVERIES && ref?.uri.startsWith('ocm://') && (
           <p className="mb-2 text-xs text-slate-500 dark:text-slate-400">
             This is an OCM component reference — load the delivery (CTF/component archive)
             or the referenced component descriptor to resolve it.

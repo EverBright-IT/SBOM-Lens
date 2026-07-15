@@ -2,6 +2,7 @@ import type { DocumentId, LoadedDocument } from '@sbomlens/core';
 import { buildIndexes, sniffProfile } from '@sbomlens/core';
 import { host } from '../host/adapter';
 import type { ParseJobRequest, ParseJobResponse } from '../worker/protocol';
+import { HAS_DELIVERIES } from './brand';
 import { useAppStore } from './store';
 import { importProfileText, withinProfileSizeCap } from './profiles';
 import { authHeaders, tokenForUrl } from './tokens';
@@ -162,7 +163,14 @@ export async function ingestBuffers(
   return added;
 }
 
-const ACCEPTED_FILE = /\.(spdx|json|yaml|yml|rdf|tar|tgz|gz|ctf)$/i;
+// Archive extensions only make sense where deliveries do — the SPDX-only
+// product would just hand a tarball to a parser that cannot read it.
+const ACCEPTED_FILE = HAS_DELIVERIES
+  ? /\.(spdx|json|yaml|yml|rdf|tar|tgz|gz|ctf)$/i
+  : /\.(spdx|json|yaml|yml|rdf)$/i;
+const SKIP_HINT = HAS_DELIVERIES
+  ? 'not .spdx/.json/.yaml or a .tar/.tgz delivery'
+  : 'not .spdx/.json/.yaml';
 
 export async function ingestFiles(files: ReadonlyArray<File>): Promise<DocumentId[]> {
   const accepted = files.filter((f) => ACCEPTED_FILE.test(f.name));
@@ -170,7 +178,7 @@ export async function ingestFiles(files: ReadonlyArray<File>): Promise<DocumentI
   if (skipped > 0) {
     useAppStore
       .getState()
-      .actions.toast(`Skipped ${skipped} file${skipped === 1 ? '' : 's'} (not .spdx/.json/.yaml or a .tar/.tgz delivery)`, 'info');
+      .actions.toast(`Skipped ${skipped} file${skipped === 1 ? '' : 's'} (${SKIP_HINT})`, 'info');
   }
   const entries = await Promise.all(
     accepted.map(async (f) => ({ fileName: f.name, buffer: await f.arrayBuffer() })),

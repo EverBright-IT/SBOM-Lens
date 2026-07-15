@@ -1,15 +1,17 @@
 import { parse as parseYaml } from 'yaml';
-import {
-  parseDocument,
-  readOcmDelivery,
-  registerYamlParser,
-  sha1Hex,
-  sniffContainer,
-} from '@sbomlens/core';
+import type { ContainerKind } from '@sbomlens/core';
+import { parseDocument, registerYamlParser, sha1Hex, sniffContainer } from '@sbomlens/core';
+import { parseOcmComponentDescriptor, readOcmDelivery, registerOcmParser } from '@sbomlens/core/ocm';
+import { HAS_DELIVERIES } from '../app/brand';
 import type { ParseJobRequest, ParseJobResponse } from './protocol';
 
 // YAML lives in the worker chunk only; the main bundle stays lean.
 registerYamlParser(parseYaml);
+
+// Deliveries are an OCM Lens capability. HAS_DELIVERIES is a build-time
+// constant, so the SPDX-only build drops this registration and every
+// readOcmDelivery call below — the OCM code never reaches its bundle.
+if (HAS_DELIVERIES) registerOcmParser(parseOcmComponentDescriptor);
 
 /**
  * Thin shell: hashing, parsing, and archive expansion happen here so the UI
@@ -22,13 +24,45 @@ const scope = self as unknown as {
   postMessage: (message: ParseJobResponse, transfer?: Transferable[]) => void;
 };
 
+/**
+ * Bytes that will never become a document, with wording the product can back
+ * up: a viewer without delivery support has no business explaining tar
+ * layouts. gzip/tar only reach this when deliveries are off — otherwise the
+ * expansion branch above already claimed them.
+ */
+function rejectBinary(container: ContainerKind): { code: string; message: string } | null {
+  if (container === 'zip') {
+    return {
+      code: 'ARCHIVE_ZIP_NOT_SUPPORTED',
+      message: HAS_DELIVERIES
+        ? 'ZIP archives are not supported — repack the delivery as .tar or .tar.gz.'
+        : 'ZIP archives are not supported — unpack it and drop the documents in.',
+    };
+  }
+  if (!HAS_DELIVERIES && (container === 'gzip' || container === 'tar')) {
+    return {
+      code: 'ARCHIVE_NOT_SUPPORTED',
+      message: 'Archives are not supported — unpack it and drop the documents in.',
+    };
+  }
+  if (container === 'binary') {
+    return {
+      code: 'UNRECOGNIZED_BINARY',
+      message: HAS_DELIVERIES
+        ? 'Unrecognized binary file — expected a component descriptor, a tar/tar.gz delivery, or SPDX text.'
+        : 'Unrecognized binary file — expected an SPDX document as text, JSON, or YAML.',
+    };
+  }
+  return null;
+}
+
 scope.onmessage = async (event: MessageEvent) => {
   const { id, fileName, buffer } = event.data as ParseJobRequest;
   try {
     const bytes = new Uint8Array(buffer);
     const container = sniffContainer(bytes);
 
-    if (container === 'gzip' || container === 'tar') {
+    if (HAS_DELIVERIES && (container === 'gzip' || container === 'tar')) {
       const delivery = await readOcmDelivery(fileName, bytes);
       const extracted = delivery.extracted.map((entry) => ({
         fileName: entry.fileName,
@@ -50,11 +84,8 @@ scope.onmessage = async (event: MessageEvent) => {
       return;
     }
 
-    if (container === 'zip' || container === 'binary') {
-      const reason =
-        container === 'zip'
-          ? 'ZIP archives are not supported — repack the delivery as .tar or .tar.gz.'
-          : 'Unrecognized binary file — expected SPDX text, an OCM component descriptor, or a tar/tar.gz delivery.';
+    const rejection = rejectBinary(container);
+    if (rejection) {
       scope.postMessage({
         id,
         ok: true,
@@ -64,13 +95,7 @@ scope.onmessage = async (event: MessageEvent) => {
         byteSize: buffer.byteLength,
         text: '',
         document: null,
-        diagnostics: [
-          {
-            severity: 'error',
-            code: container === 'zip' ? 'ARCHIVE_ZIP_NOT_SUPPORTED' : 'UNRECOGNIZED_BINARY',
-            message: reason,
-          },
-        ],
+        diagnostics: [{ severity: 'error', ...rejection }],
       });
       return;
     }

@@ -37,6 +37,17 @@ All notable changes to SBOM Lens. The format follows
   and access locations as informational meters) instead of NTIA framing.
 
 ### Changed
+- **Separation of concerns: OCM belongs to OCM Lens.** SBOM Lens is an SPDX
+  viewer again — no component descriptors, no delivery archives, no `.ctf` in
+  its extension. The split is structural rather than cosmetic: the descriptor
+  mapper, the tar reader, and the gzip path moved behind a
+  `@sbomlens/core/ocm` subpath and are *registered*, not imported (the seam
+  `registerYamlParser` already uses), so only OCM Lens wires them in. The SBOM
+  Lens bundle carries none of that code — ~20 KB smaller — and a CI gate greps
+  the built assets to prove it instead of asserting it. Dropping a descriptor
+  into SBOM Lens now yields one honest diagnostic ("this is an OCM component
+  descriptor, not an SPDX document"); the classifier stays model-aware, so it
+  can say that without any OCM code.
 - OCM support is no longer flagged experimental: the `OCM_EXPERIMENTAL`
   diagnostic and the "delivery · experimental" badge are gone (documents now
   carry a "component version" chip); docs and READMEs follow. Digest

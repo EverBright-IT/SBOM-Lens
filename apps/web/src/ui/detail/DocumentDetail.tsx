@@ -7,6 +7,7 @@ import {
   reachableDocs,
   refKey,
 } from '@sbomlens/core';
+import { HAS_DELIVERIES } from '../../app/brand';
 import { builtinProfileName, removeProfile, setActiveProfile, useActiveProfile } from '../../app/profiles';
 import { useAppStore } from '../../app/store';
 import { host } from '../../host/adapter';
@@ -69,7 +70,7 @@ export function DocumentDetail({ ws, loaded }: { ws: WorkspaceState; loaded: Loa
         )}
       </Section>
 
-      <OcmDocumentSections doc={doc} />
+      {HAS_DELIVERIES && <OcmDocumentSections doc={doc} />}
 
       {doc.externalDocumentRefs.length > 0 && (
         <Section

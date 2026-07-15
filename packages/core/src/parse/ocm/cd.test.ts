@@ -2,9 +2,13 @@ import { describe, expect, it } from 'vitest';
 import { loadFixture } from '../../test-fixtures';
 import { fakeSha1 } from '../../test-fixtures';
 import { detect } from '../detect';
-import { parseDocument } from '../parser';
+import { parseDocument, registerOcmParser } from '../parser';
 import type { SourceInput } from '../parser';
 import { parseOcmComponentDescriptor } from './cd';
+
+// parseDocument only knows about descriptors once a product wires them in —
+// see ocm-seam.test.ts for what an SPDX-only build does instead.
+registerOcmParser(parseOcmComponentDescriptor);
 
 function inputFor(name: string, text: string): SourceInput {
   return { fileName: name, text, sha1: fakeSha1(name), byteSize: text.length };

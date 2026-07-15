@@ -1,6 +1,7 @@
 import clsx from 'clsx';
 import { Fragment } from 'react';
 import { PATH_SEP } from '@sbomlens/core';
+import { HAS_DELIVERIES } from '../../app/brand';
 import { useAppStore } from '../../app/store';
 import { describeTarget, lookupDoc, lookupElement, targetFromKey } from '../nodeInfo';
 import { Chip } from './FieldRow';
@@ -46,7 +47,8 @@ export function DetailPane() {
             ) : null;
           })()}
           {target.kind === 'document' && <Chip tone="accent">document</Chip>}
-          {target.kind === 'document' &&
+          {HAS_DELIVERIES &&
+            target.kind === 'document' &&
             ws.documents.get(target.docId)?.document.spec.model === 'ocm' && (
               <Chip tone="accent">component version</Chip>
             )}

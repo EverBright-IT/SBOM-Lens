@@ -123,12 +123,6 @@ in a VS Code workspace — reports export as Markdown. See
 
 - **SPDX 2.x tag-value** (`.spdx`), **JSON**, and **YAML** — fully supported.
   Detection is content-based, never by file extension.
-- **OCM deliveries (Software Bill of Delivery)**: component descriptors and
-  local CTF/component archives (`.tar`/`.tgz`/`.ctf`) — the component
-  hierarchy renders as a cascade with labels, access specs, digests, and
-  signatures, and contained SBOMs are extracted and linked automatically.
-  Also available as its own product flavor, **OCM Lens**. See
-  [docs/ocm.md](docs/ocm.md).
 - **SPDX 3.x** — detected and reported; support is on the roadmap.
 - **CycloneDX** and **Trivy-native JSON** — recognized with a pointer to the
   right conversion (`trivy --format spdx-json`, `cyclonedx convert`).
@@ -244,6 +238,15 @@ apps/vscode/          the VS Code extension: custom editor + workspace scan
                       around the same webview bundle (see its README).
 ```
 
+The repository also builds a sibling product from this codebase: **OCM Lens**,
+a viewer for Open Component Model component versions and deliveries
+([docs/ocm.md](docs/ocm.md)). It is a separate concern, and the split is
+structural, not cosmetic: descriptor mapping, the tar reader, and gzip live
+behind `@sbomlens/core/ocm`, only OCM Lens wires them in, and a CI gate fails
+the build if a byte of that code reaches the SBOM Lens bundle. SBOM Lens is an
+SPDX viewer — it recognizes a component descriptor only well enough to tell
+you it isn't an SBOM.
+
 `packages/core/fixtures/` contains synthetic documents reproducing every
 real-world quirk the parser supports;
 `apps/web/scripts/generate-examples.mjs` regenerates the demo cascade. To
@@ -254,10 +257,6 @@ validate against a private SBOM collection without committing it:
 
 - **SPDX 3.x** ingestion — next up. The internal model is already
   element-shaped; 3.x maps into it as an additional parser.
-- **OCM maturation** — signature/digest verification and artifact-content
-  inspection come next (docs/ocm.md), then fetching component versions
-  straight from OCI registries via the VS Code extension host (no CORS
-  there).
 - **Chromium extension** ("Open in SBOM Lens" for raw SBOMs in the browser) —
   a thin shell around the same codebase, like the VS Code extension that now
   lives in [apps/vscode](apps/vscode/README.md) ("Open with SBOM Lens",

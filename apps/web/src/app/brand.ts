@@ -13,6 +13,16 @@ const MODE = import.meta.env.MODE;
 export const IS_VSCODE = MODE === 'vscode' || MODE === 'vscode-ocm';
 export const FLAVOR: Flavor = MODE === 'ocm' || MODE === 'vscode-ocm' ? 'ocm' : 'sbom';
 
+/**
+ * Build-time capability, not a runtime setting: OCM component descriptors and
+ * delivery archives belong to OCM Lens. SBOM Lens is an SPDX viewer — every
+ * `HAS_DELIVERIES` branch folds to `false` there, so the descriptor mapper,
+ * the tar reader, and gzip never enter its bundle (a CI gate proves it).
+ * Keep the constant, not `BRAND.something`: a plain boolean is what the
+ * bundler can fold.
+ */
+export const HAS_DELIVERIES = FLAVOR === 'ocm';
+
 interface Branding {
   /** Full product name, e.g. "SBOM Lens". */
   name: string;
@@ -50,8 +60,8 @@ const SBOM: Branding = {
   nameAccent: 'Lens',
   tagline: 'a fast, minimal viewer for SPDX SBOMs',
   emptyStateHint:
-    'Drop SPDX files, folders, or OCM deliveries (CTF / component archives) ' +
-    'anywhere in this window — cascading documents and delivery contents link up automatically.',
+    'Drop SPDX files or folders anywhere in this window — cascading documents ' +
+    'link up automatically.',
   formatsNote: 'Supports SPDX 2.x as tag-value (.spdx), JSON, and YAML.',
   catalogHeading: 'Preconfigured SBOMs',
   dropHint: 'Drop SPDX files or folders',

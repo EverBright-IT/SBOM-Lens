@@ -90,6 +90,11 @@ build:
     - npm run build
     # Brand-leak gate: the SBOM flavor must not carry OCM-Lens branding.
     - '! grep -riq "OCM Lens" apps/web/dist/index.html apps/web/dist/assets'
+    # Separation gate: SBOM Lens is an SPDX viewer. Not one line of the
+    # descriptor mapper, the tar reader, or the gzip path may reach its
+    # bundle — that is what @sbomlens/core/ocm and HAS_DELIVERIES are for.
+    # ("ustar" is NOT a marker: sniffContainer's magic-byte check belongs here.)
+    - '! grep -raEq "TAR_CORRUPT|ARCHIVE_LIMIT_EXCEEDED|artifact-index\.json|componentReferences|DecompressionStream" apps/web/dist/assets'
   artifacts:
     paths: [apps/web/dist]
     expire_in: 1 week
@@ -105,6 +110,9 @@ build-ocm:
     - npm run build:ocm
     # Brand-leak gate: the OCM flavor must not carry SBOM-Lens branding.
     - '! grep -riq "SBOM Lens" apps/web/dist-ocm/index.html apps/web/dist-ocm/assets'
+    # Counter-check to the SBOM separation gate: a passing gate must mean
+    # "correctly excluded", never "silently never built".
+    - 'grep -raq "artifact-index.json" apps/web/dist-ocm/assets'
   artifacts:
     paths: [apps/web/dist-ocm]
     expire_in: 1 week
