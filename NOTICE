@@ -1,4 +1,4 @@
-SBOM Lens
+SBOM Lens and OCM Lens
 Copyright 2026 EverBright IT GmbH
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,3 +17,9 @@ This product includes field documentation derived from the SPDX
 specification (https://spdx.dev, https://github.com/spdx/spdx-spec),
 Copyright The Linux Foundation and SPDX contributors, licensed under
 the Creative Commons Attribution License 3.0 (CC-BY-3.0).
+
+This product includes field documentation paraphrased from the Open
+Component Model specification
+(https://ocm.software, https://github.com/open-component-model/ocm-spec),
+Copyright the Open Component Model project / NeoNephos Foundation
+contributors, licensed under the Community Specification License 1.0.
