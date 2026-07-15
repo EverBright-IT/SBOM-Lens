@@ -78,9 +78,13 @@ chars (must compile), ids unique.
   ```
 
 - **VS Code** — put `.sbomlens/profile.json` into the workspace; the
-  extension pushes it into every SBOM Lens panel automatically.
+  extension pushes it into every SBOM Lens panel automatically. In **OCM
+  Lens** the same mechanism reads `.ocmlens/profile.json` — each product
+  keeps its own directory so both can live in one workspace with different
+  rules.
 
 Switch profiles in the Quality section's dropdown; `×` removes an imported
-profile (falls back to NTIA); **Export** writes the current report as
-Markdown for audits. Up to 16 imported profiles (256 KB total) persist;
+profile (falls back to the builtin — NTIA minimum elements in SBOM Lens,
+OCM component essentials in OCM Lens); **Export** writes the current report
+as Markdown for audits. Up to 16 imported profiles (256 KB total) persist;
 anything beyond that stays session-only with a notice.

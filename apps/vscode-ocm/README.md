@@ -23,7 +23,12 @@ and SBOMs stored in a delivery are extracted and linked automatically.
   `pkg:oci` package URLs. Embedded SPDX SBOMs connect underneath their
   resource automatically.
 - **Analysis views.** A sortable resource/package inventory (CSV/JSON
-  export), version conflicts, version-to-version diffs, and quality reports.
+  export), version conflicts, version-to-version diffs, and quality reports —
+  component versions are checked against "OCM component essentials" by
+  default.
+- **Your own rules.** Drop an `.ocmlens/profile.json` into the workspace and
+  every panel picks it up as a quality profile — field presence, patterns,
+  coverage thresholds. Reports export as Markdown.
 - **Private by design.** Everything is parsed locally inside the editor —
   nothing is uploaded anywhere.
 

@@ -1,6 +1,6 @@
 {
   "name": "@sbomlens/core",
-  "version": "0.11.0",
+  "version": "0.11.1",
   "description": "Framework-free SPDX model, parsers, cascade resolution, and analysis for SBOM Lens.",
   "license": "Apache-2.0",
   "private": true,

@@ -10,7 +10,9 @@ coverage
 apps/vscode/out
 apps/vscode/media
 apps/vscode/LICENSE
+apps/vscode/CHANGELOG.md
 apps/vscode-ocm/out
 apps/vscode-ocm/media
 apps/vscode-ocm/LICENSE
+apps/vscode-ocm/CHANGELOG.md
 *.vsix

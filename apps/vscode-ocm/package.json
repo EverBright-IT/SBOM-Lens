@@ -3,7 +3,7 @@
   "displayName": "OCM Lens",
   "icon": "icon.png",
   "description": "View Open Component Model component versions and deliveries — CTF and component archives, with embedded SBOMs — right in your editor.",
-  "version": "0.11.0",
+  "version": "0.11.1",
   "publisher": "everbright-it",
   "license": "Apache-2.0",
   "private": true,
@@ -102,7 +102,7 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "compile": "node esbuild.mjs && rm -rf media && cp -R ../web/dist-vscode-ocm media && cp ../../LICENSE .",
+    "compile": "node esbuild.mjs && rm -rf media && cp -R ../web/dist-vscode-ocm media && rm -f media/sbomlens.catalog.json && cp ../../LICENSE . && cp ../../CHANGELOG.md .",
     "package": "vsce package --no-dependencies -o ../../ocmlens.vsix"
   },
   "devDependencies": {

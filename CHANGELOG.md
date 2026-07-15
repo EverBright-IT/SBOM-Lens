@@ -4,6 +4,23 @@ All notable changes to SBOM Lens. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [SemVer](https://semver.org) (0.x — the API surface is the app itself).
 
+## [0.11.1] — 2026-07-15
+
+### Fixed
+- **Both extensions now ship this changelog**, so the store renders it as its
+  own tab. Without it, 0.11.0 would have removed OCM deliveries from SBOM
+  Lens through a silent auto-update — the reason was documented everywhere
+  except where users would look.
+- **[OCM Lens]** The vsix carried its own source (`src/extension.ts`), build
+  config (`tsconfig.json`, `esbuild.mjs`), a source map, and the SBOM flavor's
+  demo catalog: the extension had no `.vscodeignore`, so nothing was excluded.
+  It now ships the same allowlist as SBOM Lens (which in turn stops shipping
+  the OCM favicon).
+- **[OCM Lens]** Workspace profiles are documented: the extension reads
+  `.ocmlens/profile.json` (SBOM Lens keeps `.sbomlens/profile.json`), so both
+  products can live in one workspace with different rules. The feature
+  existed since 0.11.0 but was mentioned nowhere.
+
 ## [0.11.0] — 2026-07-14
 
 ### Added
