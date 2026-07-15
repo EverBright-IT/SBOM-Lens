@@ -95,7 +95,7 @@ export function Section({
  */
 export function SpecInfo({ doc }: { doc: SpecFieldDoc }) {
   const className =
-    'inline-flex shrink-0 text-slate-300 hover:text-sky-500 dark:text-slate-600 dark:hover:text-sky-400';
+    'inline-flex shrink-0 text-slate-300 hover:text-accent-500 dark:text-slate-600 dark:hover:text-accent-400';
   if (doc.specUrl) {
     return (
       <a
@@ -124,7 +124,7 @@ export function Chip({ children, tone = 'neutral' }: { children: ReactNode; tone
       className={clsx(
         'inline-flex items-center gap-1 rounded border px-1.5 py-px text-[11px]',
         tone === 'neutral' && 'border-slate-200 text-slate-500 dark:border-slate-700 dark:text-slate-400',
-        tone === 'accent' && 'border-sky-200 text-sky-700 dark:border-sky-800 dark:text-sky-300',
+        tone === 'accent' && 'border-accent-200 text-accent-700 dark:border-accent-800 dark:text-accent-300',
         tone === 'warn' && 'border-amber-300 text-amber-700 dark:border-amber-700 dark:text-amber-400',
       )}
     >

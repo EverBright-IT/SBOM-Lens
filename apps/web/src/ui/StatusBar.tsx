@@ -38,7 +38,7 @@ export function StatusBar() {
           type="button"
           title="Download every referenced document recursively until the cascade is complete"
           onClick={() => void fetchAllReferences()}
-          className="flex items-center gap-1 rounded border border-sky-300 px-1.5 py-px font-medium text-sky-700 hover:bg-sky-50 dark:border-sky-700 dark:text-sky-300 dark:hover:bg-sky-950"
+          className="flex items-center gap-1 rounded border border-accent-300 px-1.5 py-px font-medium text-accent-700 hover:bg-accent-50 dark:border-accent-700 dark:text-accent-300 dark:hover:bg-accent-950"
         >
           <LinkIcon width={11} height={11} /> Fetch all
         </button>
@@ -47,12 +47,12 @@ export function StatusBar() {
       <span className="flex-1" />
 
       {refFetch !== null ? (
-        <span className="text-sky-600 dark:text-sky-400">
+        <span className="text-accent-600 dark:text-accent-400">
           Resolving references {refFetch.done}/{refFetch.total}…
         </span>
       ) : (
         parsing.active > 0 && (
-          <span className="text-sky-600 dark:text-sky-400">
+          <span className="text-accent-600 dark:text-accent-400">
             Parsing {parsing.total - parsing.active + 1}/{parsing.total}…
           </span>
         )

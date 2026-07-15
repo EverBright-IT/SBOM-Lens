@@ -85,7 +85,7 @@ export function UrlDialog() {
             placeholder="https://gitlab.example.com/api/v4/projects/…/release.spdx"
             autoFocus
             spellCheck={false}
-            className="mt-1 w-full rounded border border-slate-300 bg-transparent px-2 py-1.5 font-mono text-xs outline-none focus:border-sky-400 dark:border-slate-600"
+            className="mt-1 w-full rounded border border-slate-300 bg-transparent px-2 py-1.5 font-mono text-xs outline-none focus:border-accent-400 dark:border-slate-600"
           />
         </label>
 
@@ -95,7 +95,7 @@ export function UrlDialog() {
             <select
               value={scheme}
               onChange={(e) => setScheme(e.target.value as TokenScheme | 'none')}
-              className="mt-1 w-full rounded border border-slate-300 bg-transparent px-1.5 py-1.5 text-xs outline-none focus:border-sky-400 dark:border-slate-600 dark:bg-slate-900"
+              className="mt-1 w-full rounded border border-slate-300 bg-transparent px-1.5 py-1.5 text-xs outline-none focus:border-accent-400 dark:border-slate-600 dark:bg-slate-900"
             >
               <option value="none">None (public)</option>
               <option value="private-token">GitLab PRIVATE-TOKEN</option>
@@ -110,7 +110,7 @@ export function UrlDialog() {
               disabled={scheme === 'none'}
               type="password"
               autoComplete="off"
-              className="mt-1 w-full rounded border border-slate-300 bg-transparent px-2 py-1.5 font-mono text-xs outline-none focus:border-sky-400 disabled:opacity-40 dark:border-slate-600"
+              className="mt-1 w-full rounded border border-slate-300 bg-transparent px-2 py-1.5 font-mono text-xs outline-none focus:border-accent-400 disabled:opacity-40 dark:border-slate-600"
             />
           </label>
         </div>
@@ -137,7 +137,7 @@ export function UrlDialog() {
           <button
             type="submit"
             disabled={busy || url.trim() === ''}
-            className="rounded bg-sky-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-sky-700 disabled:opacity-50"
+            className="rounded bg-accent-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-700 disabled:opacity-50"
           >
             {busy ? 'Fetching…' : 'Fetch'}
           </button>

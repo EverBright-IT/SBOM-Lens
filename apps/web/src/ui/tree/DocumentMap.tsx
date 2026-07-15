@@ -40,7 +40,7 @@ export function DocumentMap() {
         <button
           type="button"
           onClick={() => actions.setView('map')}
-          className="flex h-8 w-full items-center gap-1.5 px-2 text-[11px] font-medium tracking-wide text-slate-400 uppercase hover:text-sky-600 dark:hover:text-sky-400"
+          className="flex h-8 w-full items-center gap-1.5 px-2 text-[11px] font-medium tracking-wide text-slate-400 uppercase hover:text-accent-600 dark:hover:text-accent-400"
         >
           Document map
           <span className="ml-auto font-normal normal-case">
@@ -146,7 +146,7 @@ export function DocumentMap() {
                   strokeWidth={node.docId === selectedDocId ? 1.6 : 1}
                   className={
                     node.docId === selectedDocId
-                      ? 'fill-sky-100 stroke-sky-500 dark:fill-sky-900/50 dark:stroke-sky-400'
+                      ? 'fill-accent-100 stroke-accent-500 dark:fill-accent-900/50 dark:stroke-accent-400'
                       : 'fill-slate-50 stroke-slate-300 hover:fill-slate-100 dark:fill-slate-800/80 dark:stroke-slate-600 dark:hover:fill-slate-800'
                   }
                 />
@@ -164,7 +164,7 @@ export function DocumentMap() {
                   textAnchor="middle"
                   className={
                     node.docId === selectedDocId
-                      ? 'fill-sky-900 text-[10px] dark:fill-sky-100'
+                      ? 'fill-accent-900 text-[10px] dark:fill-accent-100'
                       : 'fill-slate-600 text-[10px] dark:fill-slate-300'
                   }
                 >

@@ -85,7 +85,7 @@ export function InventoryView() {
               (scope.capped ? ' (traversal capped — very large subtree)' : '') +
               ' — click to show everything again'
             }
-            className="flex items-center gap-1 rounded-full border border-sky-300 bg-sky-50 px-2 py-0.5 text-[11px] font-medium text-sky-800 hover:border-sky-400 dark:border-sky-700 dark:bg-sky-950 dark:text-sky-200"
+            className="flex items-center gap-1 rounded-full border border-accent-300 bg-accent-50 px-2 py-0.5 text-[11px] font-medium text-accent-800 hover:border-accent-400 dark:border-accent-700 dark:bg-accent-950 dark:text-accent-200"
           >
             ⊂ {scope.rootLabel}
             {scope.capped && <span className="text-amber-600 dark:text-amber-400">· capped</span>}
@@ -99,14 +99,14 @@ export function InventoryView() {
         </span>
         <button
           type="button"
-          className="rounded border border-slate-200 px-2 py-1 text-[11px] font-medium text-slate-600 hover:border-sky-300 hover:text-sky-700 dark:border-slate-700 dark:text-slate-300 dark:hover:border-sky-700 dark:hover:text-sky-400"
+          className="rounded border border-slate-200 px-2 py-1 text-[11px] font-medium text-slate-600 hover:border-accent-300 hover:text-accent-700 dark:border-slate-700 dark:text-slate-300 dark:hover:border-accent-700 dark:hover:text-accent-400"
           onClick={() => host().exportFile(`sbom-inventory-${stamp}.csv`, 'text/csv', inventoryToCsv(sorted))}
         >
           Export CSV
         </button>
         <button
           type="button"
-          className="rounded border border-slate-200 px-2 py-1 text-[11px] font-medium text-slate-600 hover:border-sky-300 hover:text-sky-700 dark:border-slate-700 dark:text-slate-300 dark:hover:border-sky-700 dark:hover:text-sky-400"
+          className="rounded border border-slate-200 px-2 py-1 text-[11px] font-medium text-slate-600 hover:border-accent-300 hover:text-accent-700 dark:border-slate-700 dark:text-slate-300 dark:hover:border-accent-700 dark:hover:text-accent-400"
           onClick={() => host().exportFile(`sbom-inventory-${stamp}.json`, 'application/json', inventoryToJson(sorted))}
         >
           Export JSON
@@ -127,7 +127,7 @@ export function InventoryView() {
             className="flex items-center gap-1 truncate text-left uppercase hover:text-slate-600 dark:hover:text-slate-300"
           >
             {col.label}
-            {sortKey === col.key && <span className="text-sky-500">{sortDir === 'asc' ? '▲' : '▼'}</span>}
+            {sortKey === col.key && <span className="text-accent-500">{sortDir === 'asc' ? '▲' : '▼'}</span>}
           </button>
         ))}
       </div>

@@ -56,7 +56,7 @@ export function ElementDetail({
 
       {element.purl && (
         <Section title="Package URL">
-          <div className="flex items-center gap-1 font-mono text-xs break-all text-sky-700 dark:text-sky-400">
+          <div className="flex items-center gap-1 font-mono text-xs break-all text-accent-700 dark:text-accent-400">
             {element.purl}
             <CopyButton text={element.purl} />
           </div>
@@ -104,7 +104,7 @@ export function ElementDetail({
                 key={file.spdxId}
                 type="button"
                 onClick={() => selectTarget({ kind: 'element', elementId: file.id })}
-                className="block w-full truncate text-left font-mono text-xs text-slate-500 hover:text-sky-700 dark:text-slate-400 dark:hover:text-sky-400"
+                className="block w-full truncate text-left font-mono text-xs text-slate-500 hover:text-accent-700 dark:text-slate-400 dark:hover:text-accent-400"
               >
                 {file.name}
               </button>
@@ -124,7 +124,7 @@ export function ElementDetail({
           <button
             type="button"
             onClick={() => revealElement(makeElementId(loaded.document.id, element.spdxId))}
-            className="inline-flex items-center gap-1.5 rounded border border-slate-200 px-2 py-1 text-xs text-slate-600 hover:border-sky-300 hover:text-sky-700 dark:border-slate-700 dark:text-slate-300 dark:hover:border-sky-700 dark:hover:text-sky-400"
+            className="inline-flex items-center gap-1.5 rounded border border-slate-200 px-2 py-1 text-xs text-slate-600 hover:border-accent-300 hover:text-accent-700 dark:border-slate-700 dark:text-slate-300 dark:hover:border-accent-700 dark:hover:text-accent-400"
           >
             <RevealIcon /> Reveal in tree
           </button>
@@ -160,7 +160,7 @@ function SubtreeInventoryButton({
           'info',
         );
       }}
-      className="rounded border border-slate-200 px-2 py-1 text-xs text-slate-600 hover:border-sky-300 hover:text-sky-700 dark:border-slate-700 dark:text-slate-300 dark:hover:border-sky-700 dark:hover:text-sky-400"
+      className="rounded border border-slate-200 px-2 py-1 text-xs text-slate-600 hover:border-accent-300 hover:text-accent-700 dark:border-slate-700 dark:text-slate-300 dark:hover:border-accent-700 dark:hover:text-accent-400"
     >
       Show sub-components in Inventory
     </button>

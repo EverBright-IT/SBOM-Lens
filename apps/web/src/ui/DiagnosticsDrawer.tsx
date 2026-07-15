@@ -91,7 +91,7 @@ function Row({ diagnostic, onJump }: { diagnostic: Diagnostic; onJump?: () => vo
         <button
           type="button"
           onClick={onJump}
-          className="shrink-0 font-mono text-[11px] text-sky-700 hover:underline dark:text-sky-400"
+          className="shrink-0 font-mono text-[11px] text-accent-700 hover:underline dark:text-accent-400"
         >
           line {diagnostic.line}
         </button>

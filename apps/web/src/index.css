@@ -10,6 +10,46 @@
     sans-serif;
   --font-mono:
     ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
+
+  /* The product accent. Every UI affordance (brand mark, primary buttons,
+     focus/hover, selection, drop overlay) uses `accent-*`, never a concrete
+     hue — the flavor swaps the whole ramp below. Default = sky (SBOM Lens).
+     Values are Tailwind's own palette, copied so the ramp survives even if a
+     source hue drops out of the build. Semantic colors stay fixed:
+     emerald = added/ok, red = removed/error, amber = warning/changed.
+     The per-document palette in ui/docColors.ts is separate on purpose. */
+  --color-accent-50: oklch(97.7% 0.013 236.62);
+  --color-accent-100: oklch(95.1% 0.026 236.824);
+  --color-accent-200: oklch(90.1% 0.058 230.902);
+  --color-accent-300: oklch(82.8% 0.111 230.318);
+  --color-accent-400: oklch(74.6% 0.16 232.661);
+  --color-accent-500: oklch(68.5% 0.169 237.323);
+  --color-accent-600: oklch(58.8% 0.158 241.966);
+  --color-accent-700: oklch(50% 0.134 242.749);
+  --color-accent-800: oklch(44.3% 0.11 240.79);
+  --color-accent-900: oklch(39.1% 0.09 240.876);
+  --color-accent-950: oklch(29.3% 0.066 243.157);
+}
+
+/* OCM Lens: indigo. Deep enough to never be mistaken for SBOM Lens' sky at a
+   glance, still in the blue family the OCM ecosystem uses (#4183c4), and the
+   one distinct hue that is NOT a slot in the per-document palette — so the
+   product accent can't be confused with a document badge. Unlayered, so it
+   wins over the `:root` vars Tailwind emits in @layer theme.
+   The class comes from index.html (%VITE_FLAVOR_CLASS%) — it is on <html>
+   before first paint and coexists with the .dark class theme.ts toggles. */
+html.flavor-ocm {
+  --color-accent-50: oklch(96.2% 0.018 272.314);
+  --color-accent-100: oklch(93% 0.034 272.788);
+  --color-accent-200: oklch(87% 0.065 274.039);
+  --color-accent-300: oklch(78.5% 0.115 274.713);
+  --color-accent-400: oklch(67.3% 0.182 276.935);
+  --color-accent-500: oklch(58.5% 0.233 277.117);
+  --color-accent-600: oklch(51.1% 0.262 276.966);
+  --color-accent-700: oklch(45.7% 0.24 277.023);
+  --color-accent-800: oklch(39.8% 0.195 277.366);
+  --color-accent-900: oklch(35.9% 0.144 278.697);
+  --color-accent-950: oklch(25.7% 0.09 281.288);
 }
 
 html,

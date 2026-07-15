@@ -95,7 +95,7 @@ export function DocumentDetail({ ws, loaded }: { ws: WorkspaceState; loaded: Loa
               'info',
             );
           }}
-          className="rounded border border-slate-200 px-2 py-1 text-xs text-slate-600 hover:border-sky-300 hover:text-sky-700 dark:border-slate-700 dark:text-slate-300 dark:hover:border-sky-700 dark:hover:text-sky-400"
+          className="rounded border border-slate-200 px-2 py-1 text-xs text-slate-600 hover:border-accent-300 hover:text-accent-700 dark:border-slate-700 dark:text-slate-300 dark:hover:border-accent-700 dark:hover:text-accent-400"
         >
           Show cascade in Inventory
         </button>
@@ -150,7 +150,7 @@ function QualitySection({ ws, loaded }: { ws: WorkspaceState; loaded: LoadedDocu
         <select
           value={activeProfileId ?? 'builtin:ntia'}
           onChange={(e) => setActiveProfile(e.target.value === 'builtin:ntia' ? null : e.target.value)}
-          className="max-w-44 rounded border border-slate-200 bg-transparent px-1 py-0.5 text-[11px] text-slate-600 outline-none focus:border-sky-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
+          className="max-w-44 rounded border border-slate-200 bg-transparent px-1 py-0.5 text-[11px] text-slate-600 outline-none focus:border-accent-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
         >
           <option value="builtin:ntia">NTIA minimum elements</option>
           {profiles.map((p) => (
@@ -178,7 +178,7 @@ function QualitySection({ ws, loaded }: { ws: WorkspaceState; loaded: LoadedDocu
         type="button"
         title="Export this report as Markdown"
         onClick={exportReport}
-        className="rounded border border-slate-200 px-1.5 py-0.5 text-[10px] text-slate-500 hover:border-sky-300 hover:text-sky-700 dark:border-slate-700 dark:text-slate-400 dark:hover:border-sky-700 dark:hover:text-sky-400"
+        className="rounded border border-slate-200 px-1.5 py-0.5 text-[10px] text-slate-500 hover:border-accent-300 hover:text-accent-700 dark:border-slate-700 dark:text-slate-400 dark:hover:border-accent-700 dark:hover:text-accent-400"
       >
         Export
       </button>
@@ -236,7 +236,7 @@ function Meter({ result }: { result: ProfileCheckResult }) {
       <span className="h-1.5 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
         <span
           className={`block h-full rounded-full ${
-            failing ? 'bg-amber-400/90' : percent === 100 ? 'bg-emerald-400/80' : 'bg-sky-400/80'
+            failing ? 'bg-amber-400/90' : percent === 100 ? 'bg-emerald-400/80' : 'bg-accent-400/80'
           }`}
           style={{ width: `${percent}%` }}
         />
@@ -270,7 +270,7 @@ function ExternalRefRow({
     <div className="flex min-w-0 items-center gap-2 text-xs">
       <button
         type="button"
-        className="max-w-64 shrink-0 truncate text-left font-mono text-sky-700 hover:underline dark:text-sky-400"
+        className="max-w-64 shrink-0 truncate text-left font-mono text-accent-700 hover:underline dark:text-accent-400"
         title={uri}
         onClick={() =>
           selectTarget(

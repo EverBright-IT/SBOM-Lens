@@ -55,7 +55,7 @@ export function SearchBar() {
 
   return (
     <div className="relative min-w-0 flex-1">
-      <div className="flex h-8 items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-2.5 focus-within:border-sky-400 focus-within:ring-2 focus-within:ring-sky-100 dark:border-slate-700 dark:bg-slate-900 dark:focus-within:border-sky-600 dark:focus-within:ring-sky-950">
+      <div className="flex h-8 items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-2.5 focus-within:border-accent-400 focus-within:ring-2 focus-within:ring-accent-100 dark:border-slate-700 dark:bg-slate-900 dark:focus-within:border-accent-600 dark:focus-within:ring-accent-950">
         <SearchIcon className="shrink-0 text-slate-400" />
         <input
           id={SEARCH_INPUT_ID}
@@ -108,7 +108,7 @@ export function SearchBar() {
             className={clsx(
               'shrink-0 rounded p-0.5',
               treeFilter
-                ? 'bg-sky-100 text-sky-700 dark:bg-sky-900/50 dark:text-sky-300'
+                ? 'bg-accent-100 text-accent-700 dark:bg-accent-900/50 dark:text-accent-300'
                 : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300',
             )}
           >
@@ -145,7 +145,7 @@ export function SearchBar() {
                   onMouseEnter={() => setActiveIndex(i)}
                   className={clsx(
                     'flex w-full items-center gap-2 px-3 py-1.5 text-left text-[13px]',
-                    i === activeIndex && 'bg-sky-50 dark:bg-sky-900/30',
+                    i === activeIndex && 'bg-accent-50 dark:bg-accent-900/30',
                   )}
                 >
                   <Icon className="shrink-0 text-slate-400" />

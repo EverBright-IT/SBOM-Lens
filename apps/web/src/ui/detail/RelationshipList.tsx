@@ -57,7 +57,7 @@ function RelationshipRow({
         <button
           type="button"
           onClick={onClick}
-          className="min-w-0 truncate text-left text-sky-700 hover:underline dark:text-sky-400"
+          className="min-w-0 truncate text-left text-accent-700 hover:underline dark:text-accent-400"
         >
           {label}
         </button>

@@ -150,7 +150,7 @@ export function WorkspaceTree() {
   return (
     <div className="flex h-full flex-col">
       {filter.active && (
-        <div className="flex shrink-0 items-center gap-2 border-b border-sky-100 bg-sky-50/60 px-3 py-1.5 text-[11px] text-sky-800 dark:border-sky-900/60 dark:bg-sky-950/30 dark:text-sky-300">
+        <div className="flex shrink-0 items-center gap-2 border-b border-accent-100 bg-accent-50/60 px-3 py-1.5 text-[11px] text-accent-800 dark:border-accent-900/60 dark:bg-accent-950/30 dark:text-accent-300">
           <span>
             {formatCount(shown)} match{shown === 1 ? '' : 'es'} in tree
             {total > shown && ` (of ${formatCount(total)})`}
@@ -160,7 +160,7 @@ export function WorkspaceTree() {
           <button
             type="button"
             onClick={() => actions.setTreeFilter(false)}
-            className="rounded border border-sky-200 px-1.5 py-0.5 hover:bg-white dark:border-sky-800 dark:hover:bg-slate-900"
+            className="rounded border border-accent-200 px-1.5 py-0.5 hover:bg-white dark:border-accent-800 dark:hover:bg-slate-900"
           >
             Show all
           </button>
@@ -172,7 +172,7 @@ export function WorkspaceTree() {
         aria-label="SBOM cascade"
         tabIndex={0}
         onKeyDown={onKeyDown}
-        className="min-h-0 flex-1 overflow-auto overscroll-contain px-1.5 py-1.5 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sky-400/60"
+        className="min-h-0 flex-1 overflow-auto overscroll-contain px-1.5 py-1.5 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent-400/60"
       >
         <div className="relative" style={{ height: virtualizer.getTotalSize() }}>
           {virtualizer.getVirtualItems().map((item) => {

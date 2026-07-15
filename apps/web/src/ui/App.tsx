@@ -92,9 +92,9 @@ export function App() {
     <div className="grid h-full grid-rows-[auto_minmax(0,1fr)_auto]">
       <header className="flex h-12 shrink-0 items-center gap-3 border-b border-slate-200 px-3 dark:border-slate-800">
         <div className="flex shrink-0 items-center gap-1.5 font-semibold">
-          <BrandLogo className="text-sky-600 dark:text-sky-400" />
+          <BrandLogo className="text-accent-600 dark:text-accent-400" />
           <span>
-            {BRAND.namePrefix} <span className="text-sky-600 dark:text-sky-400">{BRAND.nameAccent}</span>
+            {BRAND.namePrefix} <span className="text-accent-600 dark:text-accent-400">{BRAND.nameAccent}</span>
           </span>
         </div>
         <ViewSwitcher />
@@ -189,7 +189,7 @@ function ViewSwitcher() {
           className={clsx(
             'flex h-full items-center gap-1 rounded-[5px] px-2.5 text-[12px] font-medium',
             view === key
-              ? 'bg-sky-100 text-sky-900 dark:bg-sky-900/50 dark:text-sky-100'
+              ? 'bg-accent-100 text-accent-900 dark:bg-accent-900/50 dark:text-accent-100'
               : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200',
           )}
         >
@@ -271,7 +271,7 @@ function SplitHandle({
       aria-valuenow={current}
       tabIndex={0}
       title="Drag to resize — double-click to reset"
-      className="group -mx-1 flex w-2.5 shrink-0 cursor-col-resize touch-none items-center justify-center outline-none hover:bg-sky-200/30 active:bg-sky-300/30 focus-visible:bg-sky-200/40 dark:hover:bg-sky-800/20 dark:active:bg-sky-800/30 dark:focus-visible:bg-sky-800/30"
+      className="group -mx-1 flex w-2.5 shrink-0 cursor-col-resize touch-none items-center justify-center outline-none hover:bg-accent-200/30 active:bg-accent-300/30 focus-visible:bg-accent-200/40 dark:hover:bg-accent-800/20 dark:active:bg-accent-800/30 dark:focus-visible:bg-accent-800/30"
       onPointerDown={(event) => {
         event.preventDefault();
         event.currentTarget.setPointerCapture(event.pointerId);
@@ -299,7 +299,7 @@ function SplitHandle({
         event.preventDefault();
       }}
     >
-      <span className="h-8 w-1 rounded-full bg-slate-200 group-hover:bg-sky-400 group-active:bg-sky-500 group-focus-visible:bg-sky-400 dark:bg-slate-700 dark:group-hover:bg-sky-500" />
+      <span className="h-8 w-1 rounded-full bg-slate-200 group-hover:bg-accent-400 group-active:bg-accent-500 group-focus-visible:bg-accent-400 dark:bg-slate-700 dark:group-hover:bg-accent-500" />
     </div>
   );
 }

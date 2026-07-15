@@ -191,7 +191,7 @@ export function DiffView() {
   };
 
   const selectClass =
-    'max-w-64 rounded border border-slate-300 bg-transparent px-1.5 py-1 text-xs outline-none focus:border-sky-400 dark:border-slate-600 dark:bg-slate-900';
+    'max-w-64 rounded border border-slate-300 bg-transparent px-1.5 py-1 text-xs outline-none focus:border-accent-400 dark:border-slate-600 dark:bg-slate-900';
 
   const hasDiff = diff !== null && (wide ? columnRowCount > 0 : rows.length > 0);
 
@@ -230,7 +230,7 @@ export function DiffView() {
             <span className="flex-1" />
             <button
               type="button"
-              className="rounded border border-slate-200 px-2 py-1 text-[11px] font-medium text-slate-600 hover:border-sky-300 hover:text-sky-700 dark:border-slate-700 dark:text-slate-300 dark:hover:border-sky-700 dark:hover:text-sky-400"
+              className="rounded border border-slate-200 px-2 py-1 text-[11px] font-medium text-slate-600 hover:border-accent-300 hover:text-accent-700 dark:border-slate-700 dark:text-slate-300 dark:hover:border-accent-700 dark:hover:text-accent-400"
               onClick={() => {
                 void navigator.clipboard
                   .writeText(diffToMarkdown(diff, docName(a), docName(b)))

@@ -129,7 +129,7 @@ export function MapView() {
         fill="none"
         strokeDasharray={methodDash(edge.method)}
         strokeWidth={emphasized ? 1.8 : extra ? 1 : 1.2}
-        className={emphasized ? 'stroke-sky-500' : 'stroke-slate-300 dark:stroke-slate-600'}
+        className={emphasized ? 'stroke-accent-500' : 'stroke-slate-300 dark:stroke-slate-600'}
         opacity={emphasized ? 1 : extra ? 0.35 : dimEdges ? 0.5 : 0.9}
       >
         <title>{`resolved by ${edge.method}`}</title>
@@ -311,7 +311,7 @@ function MapNode({
         strokeWidth={selected ? 1.8 : highlighted ? 1.6 : 1}
         className={clsx(
           selected
-            ? 'fill-sky-100 stroke-sky-500 dark:fill-sky-900/50 dark:stroke-sky-400'
+            ? 'fill-accent-100 stroke-accent-500 dark:fill-accent-900/50 dark:stroke-accent-400'
             : highlighted
               ? 'fill-amber-50 stroke-amber-400 dark:fill-amber-950/40 dark:stroke-amber-500'
               : 'fill-white stroke-slate-300 hover:fill-slate-50 dark:fill-slate-900 dark:stroke-slate-600 dark:hover:fill-slate-800',
@@ -330,7 +330,7 @@ function MapNode({
         y={compact ? metrics.nodeH / 2 + 3.5 : 15}
         className={clsx(
           'text-[11px]',
-          selected ? 'fill-sky-900 font-medium dark:fill-sky-100' : 'fill-slate-700 dark:fill-slate-200',
+          selected ? 'fill-accent-900 font-medium dark:fill-accent-100' : 'fill-slate-700 dark:fill-slate-200',
         )}
       >
         {truncate(name)}
@@ -352,7 +352,7 @@ function MapNode({
         >
           <circle
             r={compact ? 8 : 9}
-            className="fill-white stroke-slate-300 hover:stroke-sky-500 dark:fill-slate-900 dark:stroke-slate-600"
+            className="fill-white stroke-slate-300 hover:stroke-accent-500 dark:fill-slate-900 dark:stroke-slate-600"
             strokeWidth={1}
           />
           {doc.expanded ? (

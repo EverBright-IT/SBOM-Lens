@@ -62,7 +62,7 @@ export function DetailPane() {
               className={clsx(
                 '-mb-px border-b-2 pb-1.5 capitalize disabled:opacity-40',
                 detailTab === tab
-                  ? 'border-sky-500 font-medium text-sky-700 dark:text-sky-300'
+                  ? 'border-accent-500 font-medium text-accent-700 dark:text-accent-300'
                   : 'border-transparent text-slate-400 hover:text-slate-600 dark:hover:text-slate-300',
               )}
             >
@@ -142,7 +142,7 @@ function Breadcrumb({ path }: { path: string }) {
             ) : (
               <button
                 type="button"
-                className="max-w-40 truncate hover:text-sky-700 hover:underline dark:hover:text-sky-400"
+                className="max-w-40 truncate hover:text-accent-700 hover:underline dark:hover:text-accent-400"
                 onClick={() => actions.select({ path: prefixPath, target })}
               >
                 {title}

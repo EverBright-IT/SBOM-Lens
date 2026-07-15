@@ -77,7 +77,7 @@ export function ManageDocumentsDialog() {
               onChange={() =>
                 setSelected(allSelected ? new Set() : new Set(rows.map((r) => r.document.id)))
               }
-              className="accent-sky-600"
+              className="accent-accent-600"
             />
             Select all
           </label>
@@ -98,7 +98,7 @@ export function ManageDocumentsDialog() {
                     type="checkbox"
                     checked={selected.has(id)}
                     onChange={() => toggle(id)}
-                    className="shrink-0 accent-sky-600"
+                    className="shrink-0 accent-accent-600"
                   />
                   <span className="min-w-0 flex-1 truncate" title={loaded.document.name}>
                     {loaded.document.name}

@@ -52,7 +52,7 @@ export function TreeRow({ ws, node, expanded, selected, crossesDocument, onSelec
       className={clsx(
         'flex h-7 w-full cursor-pointer items-center gap-1.5 rounded pr-2 text-[13px]',
         selected
-          ? 'bg-sky-100 text-sky-950 dark:bg-sky-900/40 dark:text-sky-100'
+          ? 'bg-accent-100 text-accent-950 dark:bg-accent-900/40 dark:text-accent-100'
           : 'hover:bg-slate-100 dark:hover:bg-slate-800/60',
         (isPlaceholder || isCycle) && 'text-slate-400 dark:text-slate-500',
       )}
@@ -79,7 +79,7 @@ export function TreeRow({ ws, node, expanded, selected, crossesDocument, onSelec
       <Icon
         className={clsx(
           'shrink-0',
-          info.icon === 'document' && 'text-sky-600 dark:text-sky-400',
+          info.icon === 'document' && 'text-accent-600 dark:text-accent-400',
           info.icon === 'package' && !isCycle && 'text-slate-500 dark:text-slate-400',
           (info.icon === 'file' || info.icon === 'group') && 'text-slate-400 dark:text-slate-500',
           (isPlaceholder || isCycle) && 'text-slate-400 dark:text-slate-600',

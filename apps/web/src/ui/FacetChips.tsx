@@ -39,7 +39,7 @@ export function FacetChips() {
     clsx(
       'rounded-full border px-2 py-0.5 text-[11px] whitespace-nowrap',
       active
-        ? 'border-sky-400 bg-sky-50 text-sky-800 dark:border-sky-600 dark:bg-sky-950 dark:text-sky-200'
+        ? 'border-accent-400 bg-accent-50 text-accent-800 dark:border-accent-600 dark:bg-accent-950 dark:text-accent-200'
         : 'border-slate-200 text-slate-500 hover:border-slate-300 dark:border-slate-700 dark:text-slate-400',
     );
 

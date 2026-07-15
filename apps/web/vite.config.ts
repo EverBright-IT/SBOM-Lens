@@ -29,7 +29,8 @@ export default defineConfig(({ mode }) => {
                 'A fast, minimal viewer for Open Component Model component versions and deliveries.',
               start_url: '.',
               display: 'standalone',
-              theme_color: '#0284c7',
+              // indigo-600 — the OCM flavor's accent (see src/index.css).
+              theme_color: '#4f46e5',
               background_color: '#ffffff',
               icons: [
                 { src: 'favicon-ocm.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' },

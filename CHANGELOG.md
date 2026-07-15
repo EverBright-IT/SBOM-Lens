@@ -19,6 +19,11 @@ All notable changes to SBOM Lens. The format follows
   sibling product's name. The VS Code shell (bridge, panel lifecycle,
   commands) moved to the shared workspace package
   `@sbomlens/vscode-shell` — both extensions are thin configs around it.
+  OCM Lens carries its own accent color (indigo, against SBOM Lens' sky):
+  the UI now styles every affordance with a flavor-swappable `accent-*` ramp
+  (`src/index.css`) instead of a fixed hue, so the products are told apart at
+  a glance. Semantic colors (added/warning/error) and the per-document
+  palette are untouched; SBOM Lens renders exactly as before.
 
 ## [0.10.6] — 2026-07-13
 

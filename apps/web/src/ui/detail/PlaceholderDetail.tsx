@@ -113,7 +113,7 @@ export function PlaceholderDetail({ ws, target }: { ws: WorkspaceState; target: 
               type="button"
               disabled={fetchState === 'busy'}
               onClick={() => void fetchNow()}
-              className="inline-flex items-center gap-1.5 rounded border border-sky-300 bg-sky-50 px-2.5 py-1.5 text-xs font-medium text-sky-800 hover:bg-sky-100 disabled:opacity-50 dark:border-sky-800 dark:bg-sky-950/60 dark:text-sky-200 dark:hover:bg-sky-900/50"
+              className="inline-flex items-center gap-1.5 rounded border border-accent-300 bg-accent-50 px-2.5 py-1.5 text-xs font-medium text-accent-800 hover:bg-accent-100 disabled:opacity-50 dark:border-accent-800 dark:bg-accent-950/60 dark:text-accent-200 dark:hover:bg-accent-900/50"
             >
               <LinkIcon /> {fetchState === 'busy' ? 'Fetching…' : 'Fetch from URL'}
             </button>
@@ -163,7 +163,7 @@ export function PlaceholderDetail({ ws, target }: { ws: WorkspaceState; target: 
             <button
               type="button"
               onClick={() => bindTo(suggestion!.docId)}
-              className="ml-2 rounded border border-slate-300 px-1.5 py-0.5 text-[11px] hover:border-sky-400 hover:text-sky-700 dark:border-slate-600 dark:hover:border-sky-600 dark:hover:text-sky-400"
+              className="ml-2 rounded border border-slate-300 px-1.5 py-0.5 text-[11px] hover:border-accent-400 hover:text-accent-700 dark:border-slate-600 dark:hover:border-accent-600 dark:hover:text-accent-400"
             >
               Use this document
             </button>
@@ -209,7 +209,7 @@ function IncomingRefRelationships({
           <div key={i} className="flex items-baseline gap-2 truncate text-xs">
             <button
               type="button"
-              className="shrink-0 font-medium text-sky-700 hover:underline dark:text-sky-400"
+              className="shrink-0 font-medium text-accent-700 hover:underline dark:text-accent-400"
               onClick={() => selectTarget({ kind: 'document', docId: owningDocId })}
             >
               {refToString(edge.from)}

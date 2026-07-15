@@ -46,9 +46,9 @@ export function DropOverlay() {
 
   if (!active) return null;
   return (
-    <div className="pointer-events-none fixed inset-0 z-50 grid place-items-center bg-sky-500/10 p-6">
-      <div className="grid h-full w-full place-items-center rounded-xl border-2 border-dashed border-sky-400 bg-white/70 dark:bg-slate-950/70">
-      <div className="flex items-center gap-2 text-lg font-medium text-sky-700 dark:text-sky-300">
+    <div className="pointer-events-none fixed inset-0 z-50 grid place-items-center bg-accent-500/10 p-6">
+      <div className="grid h-full w-full place-items-center rounded-xl border-2 border-dashed border-accent-400 bg-white/70 dark:bg-slate-950/70">
+      <div className="flex items-center gap-2 text-lg font-medium text-accent-700 dark:text-accent-300">
         <UploadIcon width={22} height={22} /> {BRAND.dropHint}
       </div>
       </div>
