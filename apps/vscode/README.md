@@ -34,13 +34,16 @@ release diff, and quality reports.
 - **Your own compliance rules.** Drop a `.sbomlens/profile.json` into the
   workspace and every panel picks it up as a quality profile — thresholds,
   field patterns, coverage gates. Reports export as Markdown.
-- **OCM deliveries**. Open CTF / component archives
-  (`.ctf`, `.tar`, `.tgz`): the component hierarchy renders as a cascade and
-  SBOMs stored in the delivery are extracted and linked automatically.
 - **Private by design.** Documents are parsed locally inside the editor —
   nothing is uploaded anywhere.
 - Field ⓘ tooltips carry the SPDX 2.3 spec docs and link into the exact
   section of the specification; the theme follows your editor.
+
+> Working with **Open Component Model** deliveries (component descriptors,
+> CTF / component archives)? That is
+> [OCM Lens](https://open-vsx.org/extension/everbright-it/ocmlens), the
+> sibling extension built from the same codebase. SBOM Lens stays a focused
+> SPDX viewer.
 
 ## Install
 

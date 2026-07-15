@@ -53,6 +53,15 @@ All notable changes to SBOM Lens. The format follows
   carry a "component version" chip); docs and READMEs follow. Digest
   verification stays on the roadmap (`OCM_DIGESTS_NOT_VERIFIED`).
 
+### Removed
+- **[SBOM Lens]** OCM deliveries, shipped as an experimental feature since
+  0.10.0, are no longer part of SBOM Lens — they moved to OCM Lens (see
+  above). Concretely: `.ctf` / `.tar` / `.tgz` and component descriptors no
+  longer open, and the extension's custom editor drops its `*.ctf` selector.
+  Opening one still explains where it belongs instead of failing silently.
+  If you use SBOM Lens for deliveries, install **OCM Lens** — same engine,
+  same views, plus the OCM-native detail that SBOM Lens never had.
+
 ## [0.10.6] — 2026-07-13
 
 ### Added

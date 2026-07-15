@@ -1,13 +1,17 @@
 # OCM deliveries (Software Bill of Delivery)
 
+> **This is OCM Lens.** Component descriptors and delivery archives belong to
+> the OCM flavor of this codebase — SBOM Lens is an SPDX viewer and ships
+> none of this code (`@sbomlens/core/ocm` + `HAS_DELIVERIES`, proven by a CI
+> gate). Build it with `npm run build:ocm`, or install the *OCM Lens*
+> extension.
+>
 > **Read-only.** Deliveries are displayed, never modified. Signatures and
 > digests are shown as recorded; cryptographic verification is on the
-> roadmap (`OCM_DIGESTS_NOT_VERIFIED` keeps that honest until then). OCM
-> support is also the engine of **OCM Lens**, the delivery-first product
-> flavor built from this repository.
+> roadmap (`OCM_DIGESTS_NOT_VERIFIED` keeps that honest until then).
 
-SBOM Lens opens [OCM](https://ocm.software) component descriptors and local
-delivery archives and shows the whole delivery as its usual cascade — the
+OCM Lens opens [OCM](https://ocm.software) component descriptors and local
+delivery archives and shows the whole delivery as one navigable tree — the
 component hierarchy becomes the tree/map, and SBOMs contained in the delivery
 are loaded as normal SPDX documents, linked automatically.
 
