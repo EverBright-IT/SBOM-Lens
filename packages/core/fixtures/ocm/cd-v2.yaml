@@ -5,6 +5,14 @@ component:
   version: 2.1.0
   provider: ACME Corp
   creationTime: "2026-06-01T10:00:00Z"
+  labels:
+    - name: acme.org/release-train
+      value: spring-2026
+      signing: true
+    - name: acme.org/build
+      value:
+        pipeline: web-ci
+        run: 4711
   repositoryContexts:
     - type: OCIRegistry
       baseUrl: registry.example.org/acme
@@ -12,6 +20,10 @@ component:
     - name: identity
       componentName: acme.org/identity
       version: 1.4.2
+      digest:
+        hashAlgorithm: SHA-256
+        normalisationAlgorithm: jsonNormalisation/v3
+        value: fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210
     - name: runtime
       componentName: acme.org/runtime
       version: 3.0.0
@@ -28,6 +40,11 @@ component:
       version: 2.1.0
       type: ociImage
       relation: local
+      extraIdentity:
+        architecture: amd64
+      labels:
+        - name: acme.org/scan-status
+          value: passed
       access:
         type: ociArtifact
         imageReference: registry.example.org/acme/gateway:2.1.0@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
@@ -59,3 +76,14 @@ component:
         type: s3
         bucket: acme-artifacts
         key: telemetry/2.1.0.tgz
+signatures:
+  - name: acme-release-signature
+    digest:
+      hashAlgorithm: SHA-256
+      normalisationAlgorithm: jsonNormalisation/v3
+      value: aaaabbbbccccddddeeeeffff0000111122223333444455556666777788889999
+    signature:
+      algorithm: RSASSA-PKCS1-V1_5
+      mediaType: application/vnd.ocm.signature.rsa
+      value: 3082010a0282010100c0ffee
+      issuer: CN=acme-release

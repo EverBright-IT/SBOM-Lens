@@ -37,3 +37,32 @@ describe('SPDX 2.3 field docs (generated)', () => {
     }
   });
 });
+
+describe('OCM field docs (hand-curated)', () => {
+  it('links every entry into the ocm-spec repo and carries the OCM spec name', async () => {
+    const { OCM_DOCS } = await import('./ocm-field-docs');
+    const all = [
+      ...Object.values(OCM_DOCS.document),
+      ...Object.values(OCM_DOCS.package),
+      OCM_DOCS.relationshipType,
+    ];
+    expect(all.length).toBeGreaterThanOrEqual(10);
+    for (const doc of all) {
+      expect(doc.specName).toBe('OCM');
+      expect(doc.description.length).toBeGreaterThan(20);
+      expect(doc.specUrl).toMatch(
+        /^https:\/\/github\.com\/open-component-model\/ocm-spec\/blob\/main\/doc\/01-model\//,
+      );
+    }
+  });
+
+  it('covers the field keys the detail views look up', async () => {
+    const { OCM_DOCS } = await import('./ocm-field-docs');
+    for (const key of ['documentNamespace', 'spdxVersion', 'created', 'creators', 'externalDocumentRefs']) {
+      expect(OCM_DOCS.document[key], `document.${key}`).toBeDefined();
+    }
+    for (const key of ['versionInfo', 'primaryPackagePurpose', 'downloadLocation', 'checksums', 'SPDXID']) {
+      expect(OCM_DOCS.package[key], `package.${key}`).toBeDefined();
+    }
+  });
+});

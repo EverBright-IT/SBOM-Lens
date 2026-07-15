@@ -24,6 +24,23 @@ All notable changes to SBOM Lens. The format follows
   (`src/index.css`) instead of a fixed hue, so the products are told apart at
   a glance. Semantic colors (added/warning/error) and the per-document
   palette are untouched; SBOM Lens renders exactly as before.
+- **OCM-native details** — the mapper no longer drops component-descriptor
+  data: labels (with `signing` badges), structured repository contexts,
+  **signatures** (name, algorithm, digest triple, truncated value),
+  access specs, artifact digests (hash · normalisation · value), reference
+  digests, and `extraIdentity` all surface in dedicated detail sections;
+  the component root's source view now shows the full component node. The
+  ⓘ field tooltips are model-aware: OCM documents link into the OCM spec
+  (hand-curated `OCM_DOCS`), SPDX documents keep their SPDX 2.3 links.
+  Quality defaults per model — component descriptors get a new builtin
+  **"OCM component essentials"** profile (version coverage gated, digests
+  and access locations as informational meters) instead of NTIA framing.
+
+### Changed
+- OCM support is no longer flagged experimental: the `OCM_EXPERIMENTAL`
+  diagnostic and the "delivery · experimental" badge are gone (documents now
+  carry a "component version" chip); docs and READMEs follow. Digest
+  verification stays on the roadmap (`OCM_DIGESTS_NOT_VERIFIED`).
 
 ## [0.10.6] — 2026-07-13
 

@@ -1,24 +1,26 @@
 import { useMemo } from 'react';
 import type { DocumentId, LoadedDocument, ProfileCheckResult, WorkspaceState } from '@sbomlens/core';
 import {
-  SPDX23_DOCS,
   documentIssues,
   evaluateProfile,
   profileReportToMarkdown,
   reachableDocs,
   refKey,
 } from '@sbomlens/core';
-import { removeProfile, setActiveProfile, useActiveProfile } from '../../app/profiles';
+import { builtinProfileName, removeProfile, setActiveProfile, useActiveProfile } from '../../app/profiles';
 import { useAppStore } from '../../app/store';
 import { host } from '../../host/adapter';
 import { CheckIcon, CloseIcon } from '../icons';
 import { selectTarget } from '../navigate';
 import { formatBytes, formatCount } from '../nodeInfo';
 import { Chip, FieldRow, Section } from './FieldRow';
+import { OcmDocumentSections } from './OcmSections';
+import { docsFor } from './specDocs';
 
 export function DocumentDetail({ ws, loaded }: { ws: WorkspaceState; loaded: LoadedDocument }) {
   const actions = useAppStore((s) => s.actions);
   const doc = loaded.document;
+  const D = docsFor(doc).document;
   const diagnosticCount = doc.diagnostics.length;
 
   return (
@@ -29,21 +31,21 @@ export function DocumentDetail({ ws, loaded }: { ws: WorkspaceState; loaded: Loa
           value={doc.namespace ?? undefined}
           mono
           copyable
-          info={SPDX23_DOCS.document.documentNamespace}
+          info={D.documentNamespace}
         />
         <FieldRow
           label="Spec"
           value={`${doc.spec.version} (${doc.spec.serialization})`}
-          info={SPDX23_DOCS.document.spdxVersion}
+          info={D.spdxVersion}
         />
-        <FieldRow label="Created" value={doc.created} info={SPDX23_DOCS.document.created} />
+        <FieldRow label="Created" value={doc.created} info={D.created} />
         <FieldRow
           label="Creators"
           value={doc.creators.join(' · ') || undefined}
-          info={SPDX23_DOCS.document.creators}
+          info={D.creators}
         />
-        <FieldRow label="Data license" value={doc.dataLicense} info={SPDX23_DOCS.document.dataLicense} />
-        <FieldRow label="Comment" value={doc.comment} info={SPDX23_DOCS.document.comment} />
+        <FieldRow label="Data license" value={doc.dataLicense} info={D.dataLicense} />
+        <FieldRow label="Comment" value={doc.comment} info={D.comment} />
         <FieldRow
           label="Contents"
           value={`${formatCount(loaded.indexes.packageCount)} packages · ${formatCount(loaded.indexes.fileCount)} files · ${formatCount(doc.relationships.length)} relationships`}
@@ -67,10 +69,12 @@ export function DocumentDetail({ ws, loaded }: { ws: WorkspaceState; loaded: Loa
         )}
       </Section>
 
+      <OcmDocumentSections doc={doc} />
+
       {doc.externalDocumentRefs.length > 0 && (
         <Section
           title={`External documents (${doc.externalDocumentRefs.length})`}
-          info={SPDX23_DOCS.document.externalDocumentRefs}
+          info={D.externalDocumentRefs}
         >
           <div className="space-y-1.5">
             {doc.externalDocumentRefs.map((ref) => (
@@ -116,7 +120,7 @@ function QualitySection({ ws, loaded }: { ws: WorkspaceState; loaded: LoadedDocu
   const actions = useAppStore((s) => s.actions);
   const profiles = useAppStore((s) => s.profiles);
   const activeProfileId = useAppStore((s) => s.activeProfileId);
-  const profile = useActiveProfile();
+  const profile = useActiveProfile(loaded.document.spec.model);
   const report = useMemo(() => evaluateProfile(ws, loaded, profile), [ws, loaded, profile]);
   const issues = useMemo(() => documentIssues(ws, loaded), [ws, loaded]);
   if (report.packagesTotal === 0) return null;
@@ -148,11 +152,11 @@ function QualitySection({ ws, loaded }: { ws: WorkspaceState; loaded: LoadedDocu
     <>
       {profiles.length > 0 && (
         <select
-          value={activeProfileId ?? 'builtin:ntia'}
-          onChange={(e) => setActiveProfile(e.target.value === 'builtin:ntia' ? null : e.target.value)}
+          value={activeProfileId ?? 'builtin'}
+          onChange={(e) => setActiveProfile(e.target.value === 'builtin' ? null : e.target.value)}
           className="max-w-44 rounded border border-slate-200 bg-transparent px-1 py-0.5 text-[11px] text-slate-600 outline-none focus:border-accent-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
         >
-          <option value="builtin:ntia">NTIA minimum elements</option>
+          <option value="builtin">{builtinProfileName(loaded.document.spec.model)}</option>
           {profiles.map((p) => (
             <option key={p.id} value={p.id}>
               {p.profile.name}
@@ -167,7 +171,7 @@ function QualitySection({ ws, loaded }: { ws: WorkspaceState; loaded: LoadedDocu
           title="Remove this imported profile"
           onClick={() => {
             removeProfile(activeProfileId);
-            actions.toast('Profile removed — back to NTIA minimum elements', 'info');
+            actions.toast('Profile removed — back to the builtin profile', 'info');
           }}
           className="rounded px-1 text-slate-400 hover:text-red-600 dark:hover:text-red-400"
         >

@@ -90,10 +90,12 @@ export function Section({
 }
 
 /**
- * ⓘ hover tooltip carrying the SPDX spec's own field documentation.
- * With a specUrl it becomes a link straight into the rendered spec chapter.
+ * ⓘ hover tooltip carrying the spec's own field documentation (SPDX 2.3 or
+ * OCM, depending on the document model — see specDocs.ts). With a specUrl
+ * it becomes a link straight into the rendered spec chapter.
  */
-export function SpecInfo({ doc }: { doc: SpecFieldDoc }) {
+export function SpecInfo({ doc }: { doc: SpecFieldDoc & { specName?: string } }) {
+  const specName = doc.specName ?? 'SPDX 2.3';
   const className =
     'inline-flex shrink-0 text-slate-300 hover:text-accent-500 dark:text-slate-600 dark:hover:text-accent-400';
   if (doc.specUrl) {
@@ -102,8 +104,8 @@ export function SpecInfo({ doc }: { doc: SpecFieldDoc }) {
         href={doc.specUrl}
         target="_blank"
         rel="noreferrer"
-        title={`${doc.description}\n\nOpen this field in the SPDX 2.3 specification ↗`}
-        aria-label={`${doc.description} (opens SPDX specification)`}
+        title={`${doc.description}\n\nOpen this field in the ${specName} specification ↗`}
+        aria-label={`${doc.description} (opens ${specName} specification)`}
         onClick={(e) => e.stopPropagation()}
         className={className}
       >

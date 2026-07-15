@@ -79,10 +79,12 @@ describe('OCM CD mapping (v2)', () => {
   it('maps componentReferences to ocm:// refs without checksums', () => {
     expect(doc.externalDocumentRefs).toEqual(
       expect.arrayContaining([
-        { docRef: 'DocumentRef-ref-identity', uri: 'ocm://acme.org/identity/1.4.2' },
-        { docRef: 'DocumentRef-ref-runtime', uri: 'ocm://acme.org/runtime/3.0.0' },
+        expect.objectContaining({ docRef: 'DocumentRef-ref-identity', uri: 'ocm://acme.org/identity/1.4.2' }),
+        expect.objectContaining({ docRef: 'DocumentRef-ref-runtime', uri: 'ocm://acme.org/runtime/3.0.0' }),
       ]),
     );
+    // The OCM reference extras ride along for the detail view.
+    expect(doc.externalDocumentRefs[0]!.ocm?.componentName).toBeDefined();
     const external = doc.relationships.filter((r) => r.to.kind === 'external');
     expect(external).toHaveLength(2);
     expect(external.every((r) => r.to.kind === 'external' && r.to.spdxId === null)).toBe(true);
@@ -107,7 +109,7 @@ describe('OCM CD mapping (v2)', () => {
           : undefined,
     });
     const sbomRef = result.document!.externalDocumentRefs.find((r) => r.docRef.startsWith('DocumentRef-sbom-'));
-    expect(sbomRef).toEqual({
+    expect(sbomRef).toMatchObject({
       docRef: 'DocumentRef-sbom-webstack-sbom',
       uri: 'ocm-blob://acme.org/webstack/2.1.0/webstack-sbom',
       checksum: { algorithm: 'SHA1', value: 'aaaa000000000000000000000000000000000000' },
@@ -161,9 +163,79 @@ describe('OCM CD mapping (v3alpha1)', () => {
     expect(doc.namespace).toBe('ocm://acme.org/webstack/2.1.0');
     expect(doc.creators).toEqual(['Organization: ACME Corp']);
     expect(doc.externalDocumentRefs).toEqual([
-      { docRef: 'DocumentRef-ref-identity', uri: 'ocm://acme.org/identity/1.4.2' },
+      expect.objectContaining({ docRef: 'DocumentRef-ref-identity', uri: 'ocm://acme.org/identity/1.4.2' }),
     ]);
     expect(doc.diagnostics.some((d) => d.code === 'OCM_V3ALPHA1')).toBe(true);
     expect(doc.elements.some((e) => e.name === 'gateway-image')).toBe(true);
+  });
+});
+
+describe('OCM-native extension data (ocm attachments)', () => {
+  const doc = parseFixture('ocm/cd-v2.yaml');
+
+  it('preserves component labels, provider, contexts, and signatures on the document', () => {
+    expect(doc.ocm?.schemaVersion).toBe('v2');
+    expect(doc.ocm?.provider?.name).toBe('ACME Corp');
+    expect(doc.ocm?.labels).toEqual([
+      { name: 'acme.org/release-train', value: 'spring-2026', signing: true, version: undefined },
+      {
+        name: 'acme.org/build',
+        value: { pipeline: 'web-ci', run: 4711 },
+        signing: undefined,
+        version: undefined,
+      },
+    ]);
+    expect(doc.ocm?.repositoryContexts).toEqual([
+      {
+        type: 'OCIRegistry',
+        baseUrl: 'registry.example.org/acme',
+        subPath: undefined,
+        componentNameMapping: undefined,
+      },
+    ]);
+    expect(doc.ocm?.signatures).toHaveLength(1);
+    expect(doc.ocm?.signatures?.[0]).toMatchObject({
+      name: 'acme-release-signature',
+      algorithm: 'RSASSA-PKCS1-V1_5',
+      mediaType: 'application/vnd.ocm.signature.rsa',
+      issuer: 'CN=acme-release',
+      digest: { hashAlgorithm: 'SHA-256', normalisationAlgorithm: 'jsonNormalisation/v3' },
+    });
+    // The context flattening is gone — the comment only names the schema.
+    expect(doc.comment).toBe('OCM component descriptor (schema v2)');
+    expect(doc.diagnostics.some((d) => d.code === 'OCM_EXPERIMENTAL')).toBe(false);
+  });
+
+  it('preserves artifact type/relation/extraIdentity/labels/digest on elements', () => {
+    const gateway = doc.elements.find((e) => e.name === 'gateway-image')!;
+    expect(gateway.ocm).toMatchObject({
+      role: 'resource',
+      type: 'ociImage',
+      relation: 'local',
+      extraIdentity: { architecture: 'amd64' },
+      access: { type: 'ociArtifact' },
+      digest: {
+        hashAlgorithm: 'SHA-256',
+        normalisationAlgorithm: 'ociArtifactDigest/v1',
+      },
+    });
+    expect(gateway.ocm?.labels?.[0]).toMatchObject({ name: 'acme.org/scan-status', value: 'passed' });
+    const source = doc.elements.find((e) => e.name === 'webstack-src')!;
+    expect(source.ocm?.role).toBe('source');
+    expect(source.ocm?.access?.raw.repoUrl).toBe('https://example.org/acme/webstack');
+  });
+
+  it('keeps the reference digest on the external ref and the full component node in root raw', () => {
+    const identity = doc.externalDocumentRefs.find((r) => r.docRef === 'DocumentRef-ref-identity')!;
+    expect(identity.ocm?.componentName).toBe('acme.org/identity');
+    expect(identity.ocm?.digest?.normalisationAlgorithm).toBe('jsonNormalisation/v3');
+    expect(identity.checksum).toBeUndefined();
+
+    const root = doc.elements.find((e) => e.spdxId === 'SPDXRef-component')!;
+    expect(root.ocm?.role).toBe('component');
+    expect(root.raw.kind).toBe('json');
+    const rawValue = root.raw.kind === 'json' ? root.raw.value : {};
+    expect(rawValue.resources).toBeDefined();
+    expect(rawValue.labels).toBeDefined();
   });
 });

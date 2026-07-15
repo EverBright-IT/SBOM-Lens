@@ -63,7 +63,7 @@ describe('readOcmDelivery — CTF', () => {
 
     const platform = result.documents.find((d) => d.document.name === 'acme.org/platform')!;
     expect(platform.document.externalDocumentRefs).toEqual([
-      { docRef: 'DocumentRef-ref-webstack', uri: 'ocm://acme.org/webstack/2.1.0' },
+      expect.objectContaining({ docRef: 'DocumentRef-ref-webstack', uri: 'ocm://acme.org/webstack/2.1.0' }),
     ]);
   });
 

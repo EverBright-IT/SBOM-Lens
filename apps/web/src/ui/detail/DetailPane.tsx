@@ -48,7 +48,7 @@ export function DetailPane() {
           {target.kind === 'document' && <Chip tone="accent">document</Chip>}
           {target.kind === 'document' &&
             ws.documents.get(target.docId)?.document.spec.model === 'ocm' && (
-              <Chip tone="warn">delivery · experimental</Chip>
+              <Chip tone="accent">component version</Chip>
             )}
         </div>
 

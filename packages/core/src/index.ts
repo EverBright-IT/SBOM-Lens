@@ -102,6 +102,7 @@ export { sniffProfile, validateProfile } from './profile/validate';
 export type { CoverageStat, ProfileCheckResult, ProfileReport } from './profile/evaluate';
 export { evaluateProfile } from './profile/evaluate';
 export { NTIA_PROFILE } from './profile/ntia';
+export { OCM_ESSENTIALS_PROFILE } from './profile/ocm';
 export { profileReportToMarkdown } from './profile/markdown';
 
 export type { ContainerKind } from './util/binary';
@@ -115,6 +116,18 @@ export { readOcmDelivery } from './parse/ocm/archive';
 
 export type { SpecFieldDoc } from './spec/spdx23-field-docs';
 export { SPDX23_DOCS } from './spec/spdx23-field-docs';
+export type { OcmFieldDoc } from './spec/ocm-field-docs';
+export { OCM_DOCS } from './spec/ocm-field-docs';
+export type {
+  OcmAccessInfo,
+  OcmDigest,
+  OcmDocumentExt,
+  OcmElementExt,
+  OcmLabel,
+  OcmReferenceExt,
+  OcmRepositoryContext,
+  OcmSignatureInfo,
+} from './model/ocm';
 
 export type {
   DocGraphEdge,

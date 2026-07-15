@@ -1,9 +1,10 @@
 # OCM deliveries (Software Bill of Delivery)
 
-> **Experimental.** OCM support is new and read-only; the mapping and the
-> archive handling may still change between releases. Documents from
-> deliveries carry an `OCM_EXPERIMENTAL` note in their diagnostics and a
-> "delivery · experimental" badge in the detail header. Feedback welcome.
+> **Read-only.** Deliveries are displayed, never modified. Signatures and
+> digests are shown as recorded; cryptographic verification is on the
+> roadmap (`OCM_DIGESTS_NOT_VERIFIED` keeps that honest until then). OCM
+> support is also the engine of **OCM Lens**, the delivery-first product
+> flavor built from this repository.
 
 SBOM Lens opens [OCM](https://ocm.software) component descriptors and local
 delivery archives and shows the whole delivery as its usual cascade — the

@@ -1,5 +1,6 @@
 import type { DocumentId, ElementId } from './ids';
 import type { Diagnostic } from './diagnostics';
+import type { OcmDocumentExt, OcmElementExt, OcmReferenceExt } from './ocm';
 
 export type Serialization = 'json' | 'yaml' | 'tag-value';
 
@@ -23,6 +24,8 @@ export interface ExternalDocumentRef {
   docRef: string;
   uri: string;
   checksum?: Checksum;
+  /** OCM componentReference extras (digest, extraIdentity, labels). */
+  ocm?: OcmReferenceExt;
 }
 
 /**
@@ -79,6 +82,8 @@ export interface SbomElement {
   comment?: string;
   checksums?: Checksum[];
   externalRefs?: ExternalRef[];
+  /** OCM artifact extras (type, relation, access, digest, labels). */
+  ocm?: OcmElementExt;
   raw: RawFields;
 }
 
@@ -110,4 +115,6 @@ export interface SbomDocument {
   elements: SbomElement[];
   relationships: Relationship[];
   diagnostics: Diagnostic[];
+  /** OCM component-descriptor extras (provider, labels, contexts, signatures). */
+  ocm?: OcmDocumentExt;
 }

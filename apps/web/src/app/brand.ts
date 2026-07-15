@@ -50,7 +50,7 @@ const SBOM: Branding = {
   nameAccent: 'Lens',
   tagline: 'a fast, minimal viewer for SPDX SBOMs',
   emptyStateHint:
-    'Drop SPDX files, folders, or OCM deliveries (CTF / component archives, experimental) ' +
+    'Drop SPDX files, folders, or OCM deliveries (CTF / component archives) ' +
     'anywhere in this window — cascading documents and delivery contents link up automatically.',
   formatsNote: 'Supports SPDX 2.x as tag-value (.spdx), JSON, and YAML.',
   catalogHeading: 'Preconfigured SBOMs',

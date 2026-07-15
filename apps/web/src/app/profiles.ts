@@ -1,5 +1,5 @@
-import type { ComplianceProfile } from '@sbomlens/core';
-import { MAX_PROFILE_BYTES, NTIA_PROFILE, validateProfile } from '@sbomlens/core';
+import type { ComplianceProfile, SpecInfo } from '@sbomlens/core';
+import { MAX_PROFILE_BYTES, NTIA_PROFILE, OCM_ESSENTIALS_PROFILE, validateProfile } from '@sbomlens/core';
 import { pref } from './brand';
 import { host } from '../host/adapter';
 import { useAppStore } from './store';
@@ -162,12 +162,21 @@ function persistActive(id: string | null): void {
   host().persistPref(ACTIVE_KEY, id ?? 'builtin:ntia');
 }
 
-/** Resolves the active profile, falling back to the builtin. */
-export function useActiveProfile(): ComplianceProfile {
+/** The builtin default depends on the document model — NTIA framing makes no sense on a component descriptor. */
+function builtinProfile(model: SpecInfo['model']): ComplianceProfile {
+  return model === 'ocm' ? OCM_ESSENTIALS_PROFILE : NTIA_PROFILE;
+}
+
+export function builtinProfileName(model: SpecInfo['model']): string {
+  return builtinProfile(model).name;
+}
+
+/** Resolves the active profile, falling back to the model's builtin. */
+export function useActiveProfile(model: SpecInfo['model']): ComplianceProfile {
   const activeId = useAppStore((s) => s.activeProfileId);
   const profiles = useAppStore((s) => s.profiles);
-  if (activeId === null) return NTIA_PROFILE;
-  return profiles.find((p) => p.id === activeId)?.profile ?? NTIA_PROFILE;
+  if (activeId === null) return builtinProfile(model);
+  return profiles.find((p) => p.id === activeId)?.profile ?? builtinProfile(model);
 }
 
 /** Import candidate size gate shared by every path. */

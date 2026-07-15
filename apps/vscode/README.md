@@ -34,7 +34,7 @@ release diff, and quality reports.
 - **Your own compliance rules.** Drop a `.sbomlens/profile.json` into the
   workspace and every panel picks it up as a quality profile — thresholds,
   field patterns, coverage gates. Reports export as Markdown.
-- **OCM deliveries** *(experimental)*. Open CTF / component archives
+- **OCM deliveries**. Open CTF / component archives
   (`.ctf`, `.tar`, `.tgz`): the component hierarchy renders as a cascade and
   SBOMs stored in the delivery are extracted and linked automatically.
 - **Private by design.** Documents are parsed locally inside the editor —

@@ -1,10 +1,12 @@
 import type { LoadedDocument, SbomElement, WorkspaceState } from '@sbomlens/core';
-import { SPDX23_DOCS, collectElementSubtree, makeElementId } from '@sbomlens/core';
+import { collectElementSubtree, makeElementId } from '@sbomlens/core';
 import { useAppStore } from '../../app/store';
 import { revealElement, selectTarget } from '../navigate';
 import { RevealIcon } from '../icons';
 import { CopyButton, FieldRow, Section } from './FieldRow';
+import { OcmElementSections } from './OcmSections';
 import { RelationshipList } from './RelationshipList';
+import { docsFor } from './specDocs';
 
 const FILE_LIST_CAP = 200;
 
@@ -20,8 +22,9 @@ export function ElementDetail({
   hasTreePath: boolean;
 }) {
   const containedFiles = filesContained(loaded, element);
-  const P = SPDX23_DOCS.package;
-  const F = SPDX23_DOCS.file;
+  const D = docsFor(loaded.document);
+  const P = D.package;
+  const F = D.file;
   const isFile = element.kind === 'file';
 
   return (
@@ -82,7 +85,7 @@ export function ElementDetail({
         </Section>
       )}
 
-      {element.checksums && element.checksums.length > 0 && (
+      {element.checksums && element.checksums.length > 0 && !element.ocm && (
         <Section title="Checksums" info={(isFile ? F : P).checksums}>
           {element.checksums.map((c, i) => (
             <div key={i} className="flex items-baseline gap-2 font-mono text-xs">
@@ -93,6 +96,8 @@ export function ElementDetail({
           ))}
         </Section>
       )}
+
+      <OcmElementSections element={element} />
 
       <RelationshipList ws={ws} loaded={loaded} spdxId={element.spdxId} />
 

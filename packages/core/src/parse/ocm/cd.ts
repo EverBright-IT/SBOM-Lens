@@ -8,6 +8,7 @@ import type {
   SbomElement,
   SpecInfo,
 } from '../../model/document';
+import type { OcmDigest, OcmLabel, OcmRepositoryContext, OcmSignatureInfo } from '../../model/ocm';
 import { makeDocumentId, makeElementId } from '../../model/ids';
 import { asRecordArray, asString, isRecord } from '../../util/narrow';
 import type { ParseResult, SourceInput } from '../parser';
@@ -37,11 +38,16 @@ interface NormalizedCd {
   name: string;
   version: string;
   provider?: string;
+  providerLabels?: OcmLabel[];
   creationTime?: string;
+  labels?: OcmLabel[];
   repositoryContexts: Record<string, unknown>[];
   resources: Record<string, unknown>[];
   sources: Record<string, unknown>[];
   references: Record<string, unknown>[];
+  signatures: Record<string, unknown>[];
+  /** The verbatim component node — the root element's raw/source view. */
+  componentNode: Record<string, unknown>;
   v3: boolean;
 }
 
@@ -59,13 +65,6 @@ export function parseOcmComponentDescriptor(
       diagnostics: [diag('error', 'OCM_CD_MALFORMED', 'Component descriptor has no component name/version.')],
     };
   }
-  diagnostics.push(
-    diag(
-      'info',
-      'OCM_EXPERIMENTAL',
-      'OCM delivery support is experimental — the mapping may change; please report rough edges.',
-    ),
-  );
   if (cd.v3) {
     diagnostics.push(
       diag('info', 'OCM_V3ALPHA1', 'OCM v3alpha1 descriptor — mapped best-effort (v2 is the primary format).'),
@@ -96,7 +95,8 @@ export function parseOcmComponentDescriptor(
     version: cd.version,
     supplier,
     purpose: 'APPLICATION',
-    raw: { kind: 'json', value: { name: cd.name, version: cd.version, provider: cd.provider } },
+    ocm: { role: 'component', labels: cd.labels },
+    raw: { kind: 'json', value: cd.componentNode },
   });
   relationships.push({
     from: { kind: 'local', spdxId: 'SPDXRef-DOCUMENT' },
@@ -128,6 +128,15 @@ export function parseOcmComponentDescriptor(
       downloadLocation: artifactLocation(access),
       checksums: digestChecksum(raw.digest),
       purl: ociPurl(access, version),
+      ocm: {
+        role,
+        type: asString(raw.type),
+        relation: asString(raw.relation),
+        extraIdentity: stringRecord(raw.extraIdentity),
+        access: Object.keys(access).length > 0 ? { type: asString(access.type), raw: access } : undefined,
+        digest: ocmDigest(raw.digest),
+        labels: ocmLabels(raw.labels),
+      },
       raw: { kind: 'json', value: raw },
     };
     elements.push(element);
@@ -194,7 +203,17 @@ export function parseOcmComponentDescriptor(
     const docRef = uniqueDocRef(`DocumentRef-ref-${sanitizeRefName(refName)}`, usedRefNames);
     // Deliberately NO checksum: the OCM digest hashes the normalized CD,
     // never a droppable file's bytes — the namespace matcher does the work.
-    externalDocumentRefs.push({ docRef, uri: ocmNamespace(componentName, refVersion) });
+    // The OCM digest itself rides in `ocm.digest` for display/verification.
+    externalDocumentRefs.push({
+      docRef,
+      uri: ocmNamespace(componentName, refVersion),
+      ocm: {
+        componentName,
+        digest: ocmDigest(reference.digest),
+        extraIdentity: stringRecord(reference.extraIdentity),
+        labels: ocmLabels(reference.labels),
+      },
+    });
     relationships.push({
       from: { kind: 'local', spdxId: rootSpdxId },
       type: 'CONTAINS',
@@ -219,12 +238,19 @@ export function parseOcmComponentDescriptor(
     namespace,
     created: cd.creationTime,
     creators: supplier ? [supplier] : [],
-    comment: describeContexts(cd),
+    comment: `OCM component descriptor (schema ${cd.schemaLabel})`,
     describes: [rootSpdxId],
     externalDocumentRefs,
     elements: dedupeBySpdxId(elements, diagnostics),
     relationships,
     diagnostics,
+    ocm: {
+      schemaVersion: cd.schemaLabel,
+      provider: cd.provider || cd.providerLabels ? { name: cd.provider, labels: cd.providerLabels } : undefined,
+      labels: cd.labels,
+      repositoryContexts: repositoryContexts(cd.repositoryContexts),
+      signatures: signatures(cd.signatures),
+    },
   };
   return { document, diagnostics };
 }
@@ -240,11 +266,15 @@ function normalize(root: Record<string, unknown>): NormalizedCd | null {
       name,
       version,
       provider: providerName(component.provider),
+      providerLabels: isRecord(component.provider) ? ocmLabels(component.provider.labels) : undefined,
       creationTime: asString(component.creationTime) ?? labelValue(component.labels, 'ocm.software/creationTime'),
+      labels: ocmLabels(component.labels),
       repositoryContexts: asRecordArray(component.repositoryContexts),
       resources: asRecordArray(component.resources),
       sources: asRecordArray(component.sources),
       references: asRecordArray(component.componentReferences),
+      signatures: asRecordArray(root.signatures),
+      componentNode: component,
       v3: false,
     };
   }
@@ -259,11 +289,15 @@ function normalize(root: Record<string, unknown>): NormalizedCd | null {
     name,
     version,
     provider: providerName(metadata?.provider),
+    providerLabels: isRecord(metadata?.provider) ? ocmLabels(metadata.provider.labels) : undefined,
     creationTime: asString(metadata?.creationTime) ?? labelValue(metadata?.labels, 'ocm.software/creationTime'),
+    labels: ocmLabels(metadata?.labels),
     repositoryContexts: asRecordArray(root.repositoryContexts),
     resources: asRecordArray(specNode.resources),
     sources: asRecordArray(specNode.sources),
     references: asRecordArray(specNode.references),
+    signatures: asRecordArray(root.signatures),
+    componentNode: { metadata: root.metadata, spec: root.spec },
     v3: true,
   };
 }
@@ -358,11 +392,61 @@ function uniqueDocRef(candidate: string, used: Set<string>): string {
   return ref;
 }
 
-function describeContexts(cd: NormalizedCd): string | undefined {
-  const contexts = cd.repositoryContexts
-    .map((ctx) => asString(ctx.baseUrl) ?? asString(ctx.type))
-    .filter(Boolean);
-  const parts = [`OCM component descriptor (schema ${cd.schemaLabel})`];
-  if (contexts.length > 0) parts.push(`repository contexts: ${contexts.join(', ')}`);
-  return parts.join(' — ');
+// -- ocm-extension mapping helpers --------------------------------------------
+
+function ocmLabels(labels: unknown): OcmLabel[] | undefined {
+  const list = asRecordArray(labels)
+    .map((label): OcmLabel | null => {
+      const name = asString(label.name);
+      if (!name) return null;
+      return {
+        name,
+        value: label.value,
+        signing: label.signing === true ? true : undefined,
+        version: asString(label.version),
+      };
+    })
+    .filter((l): l is OcmLabel => l !== null);
+  return list.length > 0 ? list : undefined;
+}
+
+function ocmDigest(digest: unknown): OcmDigest | undefined {
+  if (!isRecord(digest)) return undefined;
+  const result: OcmDigest = {
+    hashAlgorithm: asString(digest.hashAlgorithm),
+    normalisationAlgorithm: asString(digest.normalisationAlgorithm),
+    value: asString(digest.value),
+  };
+  return result.hashAlgorithm || result.value ? result : undefined;
+}
+
+function stringRecord(value: unknown): Record<string, string> | undefined {
+  if (!isRecord(value)) return undefined;
+  const entries = Object.entries(value).filter((e): e is [string, string] => typeof e[1] === 'string');
+  return entries.length > 0 ? Object.fromEntries(entries) : undefined;
+}
+
+function repositoryContexts(contexts: Record<string, unknown>[]): OcmRepositoryContext[] | undefined {
+  const list = contexts.map((ctx) => ({
+    type: asString(ctx.type),
+    baseUrl: asString(ctx.baseUrl),
+    subPath: asString(ctx.subPath),
+    componentNameMapping: asString(ctx.componentNameMapping),
+  }));
+  return list.length > 0 ? list : undefined;
+}
+
+function signatures(nodes: Record<string, unknown>[]): OcmSignatureInfo[] | undefined {
+  const list = nodes.map((node) => {
+    const signature = isRecord(node.signature) ? node.signature : {};
+    return {
+      name: asString(node.name),
+      digest: ocmDigest(node.digest),
+      algorithm: asString(signature.algorithm),
+      value: asString(signature.value),
+      mediaType: asString(signature.mediaType),
+      issuer: asString(signature.issuer),
+    } satisfies OcmSignatureInfo;
+  });
+  return list.length > 0 ? list : undefined;
 }

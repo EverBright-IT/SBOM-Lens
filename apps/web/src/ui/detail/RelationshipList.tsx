@@ -1,7 +1,8 @@
 import type { EdgeRec, ElementRef, LoadedDocument, WorkspaceState } from '@sbomlens/core';
-import { SPDX23_DOCS, makeElementId, refKey, refToString } from '@sbomlens/core';
+import { makeElementId, refKey, refToString } from '@sbomlens/core';
 import { revealElement, selectTarget } from '../navigate';
 import { Section } from './FieldRow';
+import { docsFor } from './specDocs';
 
 interface RelationshipListProps {
   ws: WorkspaceState;
@@ -17,7 +18,7 @@ export function RelationshipList({ ws, loaded, spdxId }: RelationshipListProps) 
   return (
     <Section
       title={`Relationships (${outgoing.length + incoming.length})`}
-      info={SPDX23_DOCS.relationshipType}
+      info={docsFor(loaded.document).relationshipType}
     >
       <div className="space-y-0.5">
         {outgoing.map((edge, i) => (

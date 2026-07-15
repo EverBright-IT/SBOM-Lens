@@ -123,10 +123,12 @@ in a VS Code workspace — reports export as Markdown. See
 
 - **SPDX 2.x tag-value** (`.spdx`), **JSON**, and **YAML** — fully supported.
   Detection is content-based, never by file extension.
-- **OCM deliveries (Software Bill of Delivery)** — *experimental*: component
-  descriptors and local CTF/component archives (`.tar`/`.tgz`/`.ctf`): the
-  component hierarchy renders as a cascade and contained SBOMs are extracted
-  and linked automatically. See [docs/ocm.md](docs/ocm.md).
+- **OCM deliveries (Software Bill of Delivery)**: component descriptors and
+  local CTF/component archives (`.tar`/`.tgz`/`.ctf`) — the component
+  hierarchy renders as a cascade with labels, access specs, digests, and
+  signatures, and contained SBOMs are extracted and linked automatically.
+  Also available as its own product flavor, **OCM Lens**. See
+  [docs/ocm.md](docs/ocm.md).
 - **SPDX 3.x** — detected and reported; support is on the roadmap.
 - **CycloneDX** and **Trivy-native JSON** — recognized with a pointer to the
   right conversion (`trivy --format spdx-json`, `cyclonedx convert`).
@@ -252,10 +254,10 @@ validate against a private SBOM collection without committing it:
 
 - **SPDX 3.x** ingestion — next up. The internal model is already
   element-shaped; 3.x maps into it as an additional parser.
-- **OCM maturation** — local deliveries work today as an experimental
-  feature (docs/ocm.md); hardening against real-world CTF variance comes
-  next, then fetching component versions straight from OCI registries via
-  the VS Code extension host (no CORS there).
+- **OCM maturation** — signature/digest verification and artifact-content
+  inspection come next (docs/ocm.md), then fetching component versions
+  straight from OCI registries via the VS Code extension host (no CORS
+  there).
 - **Chromium extension** ("Open in SBOM Lens" for raw SBOMs in the browser) —
   a thin shell around the same codebase, like the VS Code extension that now
   lives in [apps/vscode](apps/vscode/README.md) ("Open with SBOM Lens",

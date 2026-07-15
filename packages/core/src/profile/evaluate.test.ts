@@ -230,3 +230,28 @@ describe('profileReportToMarkdown', () => {
     expect(md).toContain('1 dangling relationship target(s)');
   });
 });
+
+describe('OCM essentials profile on a component descriptor', () => {
+  it('gates version coverage and meters digests/access informationally', async () => {
+    const { OCM_ESSENTIALS_PROFILE } = await import('./ocm');
+    const { loadFixtureDocument } = await import('../test-fixtures');
+    const { addDocument, emptyWorkspace } = await import('../workspace/workspace');
+    const loaded = loadFixtureDocument('ocm/cd-v2.yaml');
+    const { workspace } = addDocument(emptyWorkspace, loaded);
+
+    const report = evaluateProfile(workspace, loaded, OCM_ESSENTIALS_PROFILE);
+    expect(report.profileName).toBe('OCM component essentials');
+    expect(report.packagesTotal).toBeGreaterThan(0);
+
+    const version = report.results.find((r) => r.id === 'res-version')!;
+    expect(version.coverage?.threshold).toBe(100);
+    expect(version.pass).toBe(true); // every fixture artifact carries a version
+
+    const digest = report.results.find((r) => r.id === 'res-digest')!;
+    expect(digest.coverage?.threshold).toBeUndefined(); // informational meter
+    expect(digest.coverage!.total).toBe(report.packagesTotal);
+
+    const provider = report.results.find((r) => r.id === 'provider')!;
+    expect(provider.pass).toBe(true);
+  });
+});
