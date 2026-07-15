@@ -4,7 +4,7 @@ All notable changes to SBOM Lens. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [SemVer](https://semver.org) (0.x — the API surface is the app itself).
 
-## [Unreleased]
+## [0.11.0] — 2026-07-14
 
 ### Added
 - **[OCM Lens]** The repository now ships a second branded product: OCM Lens,
