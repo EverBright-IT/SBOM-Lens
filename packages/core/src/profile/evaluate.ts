@@ -84,7 +84,10 @@ export function evaluateProfile(
       case 'package-coverage': {
         let satisfied = 0;
         for (const element of packages) {
-          const value = extractPackageField(element, check.field);
+          const value =
+            check.field === 'checksum' && check.algorithms
+              ? hasChecksumAlgorithm(element, check.algorithms)
+              : extractPackageField(element, check.field);
           const present = typeof value === 'boolean' ? value : Boolean(value);
           if (present && matchesModifiers(value, check.pattern, check.values)) satisfied++;
         }
@@ -145,6 +148,16 @@ function extractDocumentField(
 }
 
 const EMPTYISH = new Set(['NOASSERTION', 'NONE']);
+
+/** v2 `algorithms` modifier: only a checksum in the allow-list satisfies. */
+function hasChecksumAlgorithm(element: SbomElement, algorithms: string[]): boolean {
+  const allowed = new Set(algorithms.map(normalizeAlgorithm));
+  return (element.checksums ?? []).some((checksum) => allowed.has(normalizeAlgorithm(checksum.algorithm)));
+}
+
+function normalizeAlgorithm(algorithm: string): string {
+  return algorithm.toUpperCase().replace(/-/g, '');
+}
 
 /**
  * Mirrors documentQuality's package predicates. Boolean returns are

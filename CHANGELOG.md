@@ -4,6 +4,46 @@ All notable changes to SBOM Lens. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [SemVer](https://semver.org) (0.x: the API surface is the app itself).
 
+## [0.12.1] - 2026-07-16
+
+Hardening release after an internal review of 0.12.0.
+
+### Fixed
+- **[OCM Lens] Digest verdicts are now strictly per resource.** Two
+  artifacts pointing at the same blob but declaring different digests got
+  the first artifact's verdict, so a tampered declaration next to a correct
+  one could show *digest match*. Content inspection still caches per blob;
+  the verdict is computed per artifact, proven by a test with one shared
+  blob and two contradicting declarations.
+- **[OCM Lens] localBlob sources are inspected too**, not only resources.
+- **The BSI preset's contact check can no longer be satisfied by a tool
+  version.** `Creator: Tool: npm@10.1` matched the email heuristic via its
+  "@"; the pattern now requires the contact on a Person or Organization
+  creator.
+- The profile dropdown no longer renders blank when the active selection
+  does not apply to the current document (a BSI selection on a component
+  descriptor, a catalog profile not yet loaded): it shows the builtin the
+  report actually falls back to.
+
+### Changed
+- **[OCM Lens] Compressed blobs accept stored OR uncompressed bytes for
+  `genericBlobDigest/v1`** until the exact spelling is pinned against the
+  ocm CLI. A sha256 match on either cannot be forged, while a wrong
+  *mismatch* verdict would break trust for nothing.
+- **[OCM Lens] Large-blob memory behavior in the parse worker**: text
+  previews decode only the preview window instead of the whole blob, digest
+  hashing no longer copies the bytes, and SBOM blobs are not gunzipped
+  twice.
+
+### Added
+- **Profile schema `sbomlens-profile/v2`: the `algorithms` modifier.**
+  Checksum coverage can now require specific hash algorithms
+  (`"algorithms": ["SHA512"]`). A separate schema id on purpose: older
+  engines ignore unknown keys and would silently evaluate such a profile as
+  a weaker presence check; the v2 id makes them reject it outright. The BSI
+  preset now enforces SHA-512 as the TR demands, and the store listing
+  finally mentions the digest verification.
+
 ## [0.12.0] - 2026-07-16
 
 ### Added

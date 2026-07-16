@@ -8,7 +8,7 @@ Markdown export; nothing else in the app changes.
 Profiles are pure data. There is no code execution, and license checks stay
 field-level (presence, patterns): SBOM Lens does not do legal interpretation.
 
-## Format (`sbomlens-profile/v1`)
+## Format (`sbomlens-profile/v1`, `v2`)
 
 ```json
 {
@@ -58,12 +58,31 @@ field-level (presence, patterns): SBOM Lens does not do legal interpretation.
 - Documents without packages pass coverage checks vacuously (and the Quality
   section stays hidden, as before).
 
+### Schema v2: checksum algorithms
+
+`sbomlens-profile/v2` adds one modifier: **`algorithms`** on
+`package-coverage` with `field: "checksum"`. Only a checksum whose algorithm
+is in the list (case and dash insensitive: `"SHA512"` equals `"SHA-512"`)
+satisfies the check:
+
+```json
+{ "schema": "sbomlens-profile/v2", "name": "hash policy", "checks": [
+  { "type": "package-coverage", "field": "checksum", "threshold": 100, "algorithms": ["SHA512"] }
+] }
+```
+
+A profile using `algorithms` MUST declare `v2`. This is deliberate: engines
+released before v2 ignore keys they do not know, so under `v1` they would
+evaluate the check as a plain presence check and report a false pass. The
+`v2` schema id makes them reject the profile outright instead. Everything
+else is unchanged between v1 and v2; v1 profiles keep working as-is.
+
 ### Validation is fail-closed
 
 An unknown check type or field rejects the **whole** profile with a list of
 errors: an older SBOM Lens will never half-evaluate a newer profile and
 report a false "pass". Limits: 200 checks, 64 KB per file, patterns ≤ 500
-chars (must compile), ids unique.
+chars (must compile), ids unique, `algorithms` ≤ 8 entries.
 
 ## Importing a profile
 
@@ -96,15 +115,17 @@ essentials for component descriptors), the dropdown offers:
 
 - **BSI TR-03183-2 field coverage (approximation)**: the machine-checkable
   field requirements of BSI TR-03183 part 2 v2.1.0, gated at 100%: SBOM
-  creator with contact (email or URL), timestamp, per-component version,
-  creator, licence, and hash, plus dependency enumeration; unique IDs
-  (purl/CPE) are reported informationally. It is deliberately labelled an
-  *approximation*: the TR accepts only SPDX 3.0.1+ or CycloneDX 1.6+, so
-  passing these checks measures data completeness on an SPDX 2.x document,
-  not TR conformance. What the engine cannot check (component filenames,
-  the executable/archive/structured properties, SHA-512 as the algorithm,
-  source URIs, the completeness indication) is listed in the profile's own
-  description, so exported reports carry the caveat with them.
+  creator with contact (email or URL, on a Person/Organization creator),
+  timestamp, per-component version, creator (via supplier), licence, and a
+  **SHA-512** hash (the algorithm is enforced via the v2 `algorithms`
+  modifier), plus dependency enumeration; unique IDs (purl/CPE) are reported
+  informationally. It is deliberately labelled an *approximation*: the TR
+  accepts only SPDX 3.0.1+ or CycloneDX 1.6+, so passing these checks
+  measures data completeness on an SPDX 2.x document, not TR conformance.
+  What the engine cannot check (component filenames, the
+  executable/archive/structured properties, source URIs, the completeness
+  indication) is listed in the profile's own description, so exported
+  reports carry the caveat with them.
 
 Builtin presets are code, not stored data: they cannot be removed, and the
 selection persists per product.

@@ -26,6 +26,13 @@ and SBOMs stored in a delivery are extracted and linked automatically.
   everything you load; resources and sources appear with types, digests, and
   `pkg:oci` package URLs. Embedded SPDX SBOMs connect underneath their
   resource automatically.
+- **See what the delivery physically ships, and whether it is intact.**
+  Every artifact stored in a CTF or component archive shows its actual
+  content: helm charts with their file list and Chart.yaml/values.yaml,
+  OCI artifact sets with their layer table, configs and texts with an
+  exportable preview. Declared blob digests are recomputed from the real
+  bytes: a tampered or corrupted artifact shows a red *digest mismatch*
+  right on the resource.
 - **Analysis views.** A sortable resource/package inventory (CSV/JSON
   export), version conflicts, version-to-version diffs, and quality reports.
   Component versions are checked against "OCM component essentials" by

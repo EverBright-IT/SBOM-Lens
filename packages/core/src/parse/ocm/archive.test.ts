@@ -154,7 +154,85 @@ describe('readOcmDelivery — artifact blob inspection', () => {
     expect(element!.ocm!.blob!.kind).toBe('helm-chart');
     expect(element!.ocm!.blob!.digestCheck).toBe('match');
   });
+
+  it('two resources sharing one blob get their OWN digest verdicts', async () => {
+    const payload = 'shared blob content\n';
+    const sha = await sha256HexOf(payload);
+    const cd = [
+      'meta:',
+      '  schemaVersion: v2',
+      'component:',
+      '  name: acme.org/shared',
+      '  version: 1.0.0',
+      '  provider: ACME',
+      '  componentReferences: []',
+      '  sources: []',
+      '  resources:',
+      ...resourceYaml('good-copy', sha, sha),
+      ...resourceYaml('tampered-copy', sha, '9'.repeat(64)),
+    ].join('\n');
+    const tar: Uint8Array = writeTar([
+      { name: 'component-descriptor.yaml', bytes: cd },
+      { name: `blobs/sha256.${sha}`, bytes: payload },
+    ]);
+    const result = await readOcmDelivery('shared.tar', tar);
+    const doc = result.documents[0]!.document;
+    expect(doc.elements.find((e) => e.name === 'good-copy')!.ocm!.blob!.digestCheck).toBe('match');
+    expect(doc.elements.find((e) => e.name === 'tampered-copy')!.ocm!.blob!.digestCheck).toBe('mismatch');
+    const mismatch = result.documents[0]!.diagnostics.find((d) => d.code === 'OCM_DIGEST_MISMATCH');
+    expect(mismatch?.message).toContain('tampered-copy');
+  });
+
+  it('inspects localBlob SOURCES, not only resources', async () => {
+    const payload = 'source archive stand-in\n';
+    const sha = await sha256HexOf(payload);
+    const cd = [
+      'meta:',
+      '  schemaVersion: v2',
+      'component:',
+      '  name: acme.org/withsrc',
+      '  version: 1.0.0',
+      '  provider: ACME',
+      '  componentReferences: []',
+      '  resources: []',
+      '  sources:',
+      ...resourceYaml('main-source', sha, sha),
+    ].join('\n');
+    const tar: Uint8Array = writeTar([
+      { name: 'component-descriptor.yaml', bytes: cd },
+      { name: `blobs/sha256.${sha}`, bytes: payload },
+    ]);
+    const result = await readOcmDelivery('src.tar', tar);
+    const source = result.documents[0]!.document.elements.find((e) => e.name === 'main-source')!;
+    expect(source.ocm!.role).toBe('source');
+    expect(source.ocm!.blob!.kind).toBe('text');
+    expect(source.ocm!.blob!.digestCheck).toBe('match');
+  });
 });
+
+function resourceYaml(name: string, localRefSha: string, declaredSha: string): string[] {
+  return [
+    `    - name: ${name}`,
+    '      version: 1.0.0',
+    '      type: plainText',
+    '      relation: local',
+    '      access:',
+    '        type: localBlob',
+    `        localReference: sha256.${localRefSha}`,
+    '        mediaType: text/plain',
+    '      digest:',
+    '        hashAlgorithm: SHA-256',
+    '        normalisationAlgorithm: genericBlobDigest/v1',
+    `        value: "${declaredSha}"`,
+  ];
+}
+
+async function sha256HexOf(text: string): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+  let hex = '';
+  for (const byte of new Uint8Array(digest)) hex += byte.toString(16).padStart(2, '0');
+  return hex;
+}
 
 describe('readOcmDelivery — component archive & sweep', () => {
   it('reads a component archive with its local blobs', async () => {

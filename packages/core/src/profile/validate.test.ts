@@ -41,9 +41,11 @@ describe('validateProfile', () => {
   });
 
   it('rejects wrong or newer schemas with a precise message', () => {
-    expect(errorsOf({ ...minimal, schema: 'sbomlens-profile/v2' })[0]).toContain('unsupported profile schema');
+    expect(errorsOf({ ...minimal, schema: 'sbomlens-profile/v3' })[0]).toContain('unsupported profile schema');
     expect(errorsOf({ ...minimal, schema: undefined })[0]).toContain('missing or invalid "schema"');
     expect(errorsOf('nope')[0]).toContain('must be a JSON object');
+    // v2 is understood since the algorithms modifier landed.
+    expect(validateProfile({ ...minimal, schema: 'sbomlens-profile/v2' }).ok).toBe(true);
   });
 
   it('fails closed on unknown check types and fields', () => {
@@ -111,6 +113,49 @@ describe('validateProfile', () => {
       })[0],
     ).toContain('duplicate id "a"');
     expect(errorsOf({ ...minimal, checks: [] })[0]).toContain('non-empty array');
+  });
+});
+
+describe('validateProfile — v2 algorithms', () => {
+  const v2check = (extra: Record<string, unknown>) => ({
+    schema: 'sbomlens-profile/v2',
+    name: 'algo test',
+    checks: [{ type: 'package-coverage', field: 'checksum', threshold: 100, ...extra }],
+  });
+
+  it('accepts algorithms on a v2 checksum check', () => {
+    const result = validateProfile(v2check({ algorithms: ['SHA512', 'SHA-384'] }));
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.profile.schema).toBe('sbomlens-profile/v2');
+      expect(result.profile.checks[0]).toMatchObject({ algorithms: ['SHA512', 'SHA-384'] });
+    }
+  });
+
+  it('rejects algorithms under schema v1 — old engines must not silently weaken the gate', () => {
+    const result = validateProfile({ ...v2check({ algorithms: ['SHA512'] }), schema: 'sbomlens-profile/v1' });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.errors.join(' ')).toContain('requires schema "sbomlens-profile/v2"');
+  });
+
+  it('rejects algorithms on non-checksum fields and malformed lists', () => {
+    const onVersion = validateProfile({
+      schema: 'sbomlens-profile/v2',
+      name: 'x',
+      checks: [{ type: 'package-coverage', field: 'version', algorithms: ['SHA512'] }],
+    });
+    expect(onVersion.ok).toBe(false);
+    expect(validateProfile(v2check({ algorithms: [] })).ok).toBe(false);
+    expect(validateProfile(v2check({ algorithms: [42] })).ok).toBe(false);
+  });
+
+  it('still accepts plain v1 profiles unchanged', () => {
+    const result = validateProfile({
+      schema: 'sbomlens-profile/v1',
+      name: 'plain',
+      checks: [{ type: 'package-coverage', field: 'checksum', threshold: 100 }],
+    });
+    expect(result.ok).toBe(true);
   });
 });
 

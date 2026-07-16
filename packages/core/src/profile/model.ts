@@ -6,6 +6,14 @@
  */
 
 export const PROFILE_SCHEMA_V1 = 'sbomlens-profile/v1';
+/**
+ * v2 = v1 plus the `algorithms` modifier on checksum coverage. A separate
+ * schema id on purpose: this validator silently ignores unknown keys, so an
+ * older engine would evaluate an `algorithms` profile as a weaker
+ * presence-check and report pass — the schema gate turns that into a clean
+ * rejection instead.
+ */
+export const PROFILE_SCHEMA_V2 = 'sbomlens-profile/v2';
 
 /** Profiles larger than this are never sniffed or imported. */
 export const MAX_PROFILE_BYTES = 65536;
@@ -67,10 +75,16 @@ export type ProfileCheck =
       threshold?: number;
       pattern?: string;
       values?: string[];
+      /**
+       * v2, `field: 'checksum'` only: a package satisfies the check only
+       * with a checksum whose algorithm is in this list (case/dash
+       * insensitive, e.g. "SHA512" or "SHA-512").
+       */
+      algorithms?: string[];
     });
 
 export interface ComplianceProfile {
-  schema: typeof PROFILE_SCHEMA_V1;
+  schema: typeof PROFILE_SCHEMA_V1 | typeof PROFILE_SCHEMA_V2;
   name: string;
   description?: string;
   checks: ProfileCheck[];

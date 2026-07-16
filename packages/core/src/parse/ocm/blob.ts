@@ -7,38 +7,57 @@ import { readTar } from '../../util/tar';
 
 /**
  * Inspects one localBlob of a delivery inside the worker: what kind of
- * artifact is it (helm chart, OCI artifact set, text, plain tar, binary),
- * a capped preview of its contents, and whether the declared OCM digest
- * matches the actual bytes. Only the resulting summary crosses the thread
- * boundary — the raw bytes are dropped after inspection. Deliberately
- * conservative on digests: anything but an explicit, computable
- * normalisation stays 'unchecked' instead of risking a wrong verdict.
+ * artifact is it (helm chart, OCI artifact set, text, plain tar, binary)
+ * and a capped preview of its contents. Only the resulting summary crosses
+ * the thread boundary; the raw bytes are dropped after inspection.
+ *
+ * Inspection is per BLOB and cacheable; the digest check is per RESOURCE
+ * (two resources may point at the same blob with different declared
+ * digests), so it runs separately against the retained digest subjects.
+ * Deliberately conservative: anything but an explicit, computable
+ * normalisation stays 'unchecked' instead of risking a wrong verdict, and
+ * for compressed blobs BOTH the stored and the uncompressed bytes are
+ * accepted (the spec reading is "stored", but a sha256 match on either can
+ * never be forged, while a wrong 'mismatch' would break trust for nothing).
  */
 
 export const BLOB_PREVIEW_MAX = 64 * 1024;
 export const BLOB_FILES_MAX = 500;
+/** Full-decode ceiling for text kind detection; larger blobs go by media type. */
+const TEXT_INSPECT_MAX = 1024 * 1024;
 const HEX_HEAD_BYTES = 256;
 
-export async function inspectBlob(
-  stored: Uint8Array,
-  mediaType: string | undefined,
-  declared: Record<string, unknown> | undefined,
-): Promise<OcmBlobInfo> {
+/** Byte views the per-resource digest check hashes lazily. */
+export interface BlobDigestSubjects {
+  stored: Uint8Array;
+  /** Present when the blob was gzip-compressed and unpacked successfully. */
+  uncompressed?: Uint8Array;
+  /** The OCI artifact set's manifest bytes, when one was identified. */
+  manifest?: Uint8Array;
+}
+
+export interface BlobInspection {
+  /** Content summary without a digest verdict (that is per resource). */
+  info: OcmBlobInfo;
+  subjects: BlobDigestSubjects;
+}
+
+export async function inspectBlob(stored: Uint8Array, mediaType: string | undefined): Promise<BlobInspection> {
   const info: OcmBlobInfo = { size: stored.byteLength, mediaType, kind: 'binary' };
+  const subjects: BlobDigestSubjects = { stored };
 
   let bytes = stored;
   if (sniffContainer(stored) === 'gzip') {
     info.compressed = true;
     try {
       bytes = await gunzip(stored);
+      subjects.uncompressed = bytes;
     } catch {
       info.previews = [hexPreview(stored)];
-      info.digestCheck = await checkDigest(declared, stored, undefined);
-      return info;
+      return { info, subjects };
     }
   }
 
-  let manifestEntry: TarEntry | undefined;
   if (sniffContainer(bytes) === 'tar') {
     const { entries } = readTar(bytes);
     const named = entries.map((e) => ({ ...e, name: e.name.replace(/^\.\//, '') }));
@@ -55,8 +74,9 @@ export async function inspectBlob(
       info.previews = [textPreview(chartYaml), ...(valuesYaml ? [textPreview(valuesYaml)] : [])];
     } else if (indexEntry) {
       info.kind = 'oci-artifact';
-      manifestEntry = resolveManifest(indexEntry, named);
+      const manifestEntry = resolveManifest(indexEntry, named);
       if (manifestEntry) {
+        subjects.manifest = manifestEntry.bytes;
         info.previews = [textPreview({ ...manifestEntry, name: manifestEntry.name || 'manifest.json' })];
         info.oci = { layers: manifestLayers(manifestEntry) };
       }
@@ -67,22 +87,32 @@ export async function inspectBlob(
     info.kind = 'binary';
     info.previews = [hexPreview(bytes)];
   } else {
-    const text = new TextDecoder().decode(bytes);
-    info.kind = textKind(text, mediaType);
-    info.previews = [cap('content', text)];
+    // Decode only what the preview can show — a multi-hundred-MB text blob
+    // must never materialize as one JS string in the worker.
+    const window = bytes.subarray(0, Math.min(bytes.byteLength, BLOB_PREVIEW_MAX));
+    const text = new TextDecoder().decode(window);
+    info.kind = textKind(bytes, text, mediaType);
+    info.previews = [
+      bytes.byteLength > window.byteLength ? { name: 'content', text, truncated: true } : cap('content', text),
+    ];
   }
 
-  info.digestCheck = await checkDigest(declared, stored, manifestEntry);
-  return info;
+  return { info, subjects };
 }
 
-function textKind(text: string, mediaType: string | undefined): 'json' | 'yaml' | 'text' {
-  try {
-    JSON.parse(text);
+function textKind(bytes: Uint8Array, windowText: string, mediaType: string | undefined): 'json' | 'yaml' | 'text' {
+  const media = (mediaType ?? '').toLowerCase();
+  if (bytes.byteLength <= TEXT_INSPECT_MAX) {
+    try {
+      JSON.parse(bytes.byteLength <= BLOB_PREVIEW_MAX ? windowText : new TextDecoder().decode(bytes));
+      return 'json';
+    } catch {
+      // fall through to media-type hints
+    }
+  } else if (media.includes('json')) {
     return 'json';
-  } catch {
-    return (mediaType ?? '').toLowerCase().includes('yaml') ? 'yaml' : 'text';
   }
+  return media.includes('yaml') ? 'yaml' : 'text';
 }
 
 /** OCI index or manifest JSON → the entry holding the layer list. */
@@ -115,14 +145,15 @@ function manifestLayers(manifestEntry: TarEntry): OcmOciLayerInfo[] {
 }
 
 /**
- * genericBlobDigest/v1 hashes the stored blob bytes; ociArtifactDigest/v1
- * hashes the artifact set's manifest. Unknown normalisations and hash
- * algorithms stay 'unchecked'.
+ * Per-resource digest verdict. genericBlobDigest/v1 hashes the blob bytes
+ * (stored, with the uncompressed bytes accepted as an alternative until the
+ * spelling is pinned against the ocm CLI); ociArtifactDigest/v1 hashes the
+ * artifact set's manifest. Unknown normalisations and hash algorithms stay
+ * 'unchecked'; no declared digest means no verdict at all.
  */
-async function checkDigest(
+export async function checkDeclaredDigest(
+  subjects: BlobDigestSubjects,
   declared: Record<string, unknown> | undefined,
-  stored: Uint8Array,
-  manifestEntry: TarEntry | undefined,
 ): Promise<OcmBlobInfo['digestCheck']> {
   const value = asString(declared?.value);
   if (!value) return undefined;
@@ -130,15 +161,21 @@ async function checkDigest(
   const normalisation = asString(declared?.normalisationAlgorithm) ?? '';
   if (!algorithm) return 'unchecked';
 
-  let subject: Uint8Array | undefined;
-  if (normalisation === 'genericBlobDigest/v1') subject = stored;
-  else if (normalisation === 'ociArtifactDigest/v1') subject = manifestEntry?.bytes;
-  if (!subject) return 'unchecked';
+  let candidates: Uint8Array[];
+  if (normalisation === 'genericBlobDigest/v1') {
+    candidates = subjects.uncompressed ? [subjects.stored, subjects.uncompressed] : [subjects.stored];
+  } else if (normalisation === 'ociArtifactDigest/v1') {
+    candidates = subjects.manifest ? [subjects.manifest] : [];
+  } else {
+    return 'unchecked';
+  }
+  if (candidates.length === 0) return 'unchecked';
 
-  const copy = new Uint8Array(subject); // detach from the archive buffer
-  const actual = await hashHex(algorithm, copy.buffer as ArrayBuffer);
   const expected = value.toLowerCase().replace(/^sha\d+:/, '');
-  return actual === expected ? 'match' : 'mismatch';
+  for (const candidate of candidates) {
+    if ((await hashHex(algorithm, candidate)) === expected) return 'match';
+  }
+  return 'mismatch';
 }
 
 function webCryptoName(hashAlgorithm: string | undefined): 'SHA-256' | 'SHA-512' | undefined {
@@ -149,7 +186,7 @@ function webCryptoName(hashAlgorithm: string | undefined): 'SHA-256' | 'SHA-512'
 }
 
 function textPreview(entry: TarEntry): OcmBlobPreview {
-  return cap(entry.name, new TextDecoder().decode(entry.bytes));
+  return cap(entry.name, new TextDecoder().decode(entry.bytes.subarray(0, Math.min(entry.bytes.byteLength, BLOB_PREVIEW_MAX * 2))));
 }
 
 function cap(name: string, text: string): OcmBlobPreview {

@@ -156,11 +156,17 @@ function QualitySection({ ws, loaded }: { ws: WorkspaceState; loaded: LoadedDocu
   };
 
   const extraBuiltins = extraBuiltinProfiles(loaded.document.spec.model);
+  // The active id may not resolve for THIS document's model (a BSI builtin
+  // on an OCM descriptor, a catalog profile not yet loaded) — the report
+  // falls back to the model builtin, so the select must show that too
+  // instead of rendering blank.
+  const selectableIds = new Set([...extraBuiltins.map((b) => b.id), ...profiles.map((p) => p.id)]);
+  const selectValue = activeProfileId && selectableIds.has(activeProfileId) ? activeProfileId : 'builtin';
   const sectionActions = (
     <>
       {(profiles.length > 0 || extraBuiltins.length > 0) && (
         <select
-          value={activeProfileId ?? 'builtin'}
+          value={selectValue}
           onChange={(e) => setActiveProfile(e.target.value === 'builtin' ? null : e.target.value)}
           className="max-w-44 rounded border border-slate-200 bg-transparent px-1 py-0.5 text-[11px] text-slate-600 outline-none focus:border-accent-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
         >

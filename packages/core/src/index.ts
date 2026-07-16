@@ -101,7 +101,7 @@ export type {
   PackageField,
   ProfileCheck,
 } from './profile/model';
-export { MAX_PROFILE_BYTES, PROFILE_SCHEMA_V1 } from './profile/model';
+export { MAX_PROFILE_BYTES, PROFILE_SCHEMA_V1, PROFILE_SCHEMA_V2 } from './profile/model';
 export type { ProfileValidation } from './profile/validate';
 export { sniffProfile, validateProfile } from './profile/validate';
 export type { CoverageStat, ProfileCheckResult, ProfileReport } from './profile/evaluate';

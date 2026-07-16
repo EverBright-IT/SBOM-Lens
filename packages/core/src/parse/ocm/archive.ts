@@ -9,7 +9,8 @@ import { readTar } from '../../util/tar';
 import type { OcmBlobInfo } from '../../model/ocm';
 import { detect } from '../detect';
 import type { SourceInput } from '../parser';
-import { inspectBlob } from './blob';
+import type { BlobInspection } from './blob';
+import { checkDeclaredDigest, inspectBlob } from './blob';
 import { isSbomResource, parseOcmComponentDescriptor } from './cd';
 
 /**
@@ -230,16 +231,53 @@ async function emitCd(
     return;
   }
 
-  // Pass 1: find SBOM resources and extract their blobs (checksums first —
-  // the mapper needs them while building the refs).
+  // Pass 1: inspect EVERY localBlob the delivery physically carries (kind,
+  // capped previews). Content inspection caches per blob; the digest verdict
+  // is computed PER ARTIFACT, because two artifacts may point at the same
+  // blob with different declared digests. Bytes stay in this worker; only
+  // the summaries ride on the elements, keyed by the artifact's own node.
   const component = componentNode(detection.parsed);
+  const specNode = isRecord(detection.parsed.spec) ? detection.parsed.spec : {};
+  const resources = asRecordArray(component?.resources ?? specNode.resources);
+  const sources = asRecordArray(component?.sources ?? specNode.sources);
+
+  const inspections = new Map<string, BlobInspection>();
+  const blobInfos = new Map<Record<string, unknown>, OcmBlobInfo>();
+  for (const artifact of [...resources, ...sources]) {
+    const access = isRecord(artifact.access) ? artifact.access : {};
+    const localReference = asString(access.localReference) ?? asString(access.filename);
+    if (!localReference) continue;
+    const blob = blobStore.get(localReference);
+    if (!blob) continue;
+    try {
+      let inspection = inspections.get(localReference);
+      if (!inspection) {
+        inspection = await inspectBlob(blob, asString(access.mediaType));
+        inspections.set(localReference, inspection);
+      }
+      const digestCheck = await checkDeclaredDigest(
+        inspection.subjects,
+        isRecord(artifact.digest) ? artifact.digest : undefined,
+      );
+      blobInfos.set(artifact, {
+        ...inspection.info,
+        mediaType: asString(access.mediaType) ?? inspection.info.mediaType,
+        digestCheck,
+      });
+    } catch {
+      // Inspection is best-effort; the element simply carries no blob info.
+    }
+  }
+
+  // Pass 2: extract SPDX blobs of SBOM resources (checksums first — the
+  // mapper needs them while building the refs). Reuses pass 1's gunzip.
   const sbomChecksums = new Map<string, string>();
-  for (const resource of asRecordArray(component?.resources ?? (isRecord(detection.parsed.spec) ? detection.parsed.spec.resources : []))) {
+  for (const resource of resources) {
     const access = isRecord(resource.access) ? resource.access : {};
     if (!isSbomResource(resource, access)) continue;
     const localReference = asString(access.localReference) ?? asString(access.filename);
     if (!localReference) continue;
-    let blob = blobStore.get(localReference);
+    let blob = inspections.get(localReference)?.subjects.uncompressed ?? blobStore.get(localReference);
     if (!blob) continue;
     try {
       if (sniffContainer(blob) === 'gzip') blob = await gunzip(blob);
@@ -270,29 +308,6 @@ async function emitCd(
     });
   }
 
-  // Pass 2: inspect EVERY localBlob the delivery physically carries — kind,
-  // capped preview, and the declared-digest check. Bytes stay in this worker;
-  // only the summaries ride on the elements.
-  const blobInfos = new Map<string, OcmBlobInfo>();
-  const resources = asRecordArray(
-    component?.resources ?? (isRecord(detection.parsed.spec) ? detection.parsed.spec.resources : []),
-  );
-  for (const resource of resources) {
-    const access = isRecord(resource.access) ? resource.access : {};
-    const localReference = asString(access.localReference) ?? asString(access.filename);
-    if (!localReference || blobInfos.has(localReference)) continue;
-    const blob = blobStore.get(localReference);
-    if (!blob) continue;
-    try {
-      blobInfos.set(
-        localReference,
-        await inspectBlob(blob, asString(access.mediaType), isRecord(resource.digest) ? resource.digest : undefined),
-      );
-    } catch {
-      // Inspection is best-effort; the element simply carries no blob info.
-    }
-  }
-
   // Pass 3: map the CD with checksums and blob summaries at hand.
   const cdBytes = new TextEncoder().encode(cdText);
   const sha1 = await sha1Hex(cdBytes.buffer as ArrayBuffer);
@@ -304,7 +319,7 @@ async function emitCd(
   };
   const parsed = parseOcmComponentDescriptor(input, detection.parsed, detection.serialization, {
     sbomChecksumFor: (ref) => sbomChecksums.get(ref),
-    blobInfoFor: (ref) => blobInfos.get(ref),
+    blobInfoFor: (artifact) => blobInfos.get(artifact),
   });
   if (parsed.document) {
     const componentLabel = parsed.document.name;

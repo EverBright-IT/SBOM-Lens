@@ -47,6 +47,54 @@ describe('BSI_TR_03183_PROFILE', () => {
     expect(report.results.find((r) => r.id === 'creators')?.pass).toBe(true);
   });
 
+  it('a tool version "@" never satisfies the contact check', () => {
+    const loaded = loadedFromText(
+      'toolonly.spdx',
+      [
+        'SPDXVersion: SPDX-2.3',
+        'DataLicense: CC0-1.0',
+        'SPDXID: SPDXRef-DOCUMENT',
+        'DocumentName: toolonly',
+        'DocumentNamespace: https://example.org/spdxdocs/toolonly',
+        'Creator: Tool: npm@10.1.0',
+        'Created: 2026-06-01T10:00:00Z',
+        '',
+        'PackageName: thing',
+        'SPDXID: SPDXRef-Package-thing',
+        'PackageDownloadLocation: NOASSERTION',
+        '',
+        'Relationship: SPDXRef-DOCUMENT DESCRIBES SPDXRef-Package-thing',
+      ].join('\n') + '\n',
+    );
+    const report = evaluateProfile(emptyWorkspace, loaded, BSI_TR_03183_PROFILE);
+    expect(report.results.find((r) => r.id === 'creators')?.pass).toBe(false);
+  });
+
+  it('a SHA-256-only checksum does not satisfy the SHA-512 gate', () => {
+    const loaded = loadedFromText(
+      'sha256only.spdx',
+      [
+        'SPDXVersion: SPDX-2.3',
+        'DataLicense: CC0-1.0',
+        'SPDXID: SPDXRef-DOCUMENT',
+        'DocumentName: sha256only',
+        'DocumentNamespace: https://example.org/spdxdocs/sha256only',
+        'Creator: Organization: ACME Corp (security@acme.example)',
+        'Created: 2026-06-01T10:00:00Z',
+        '',
+        'PackageName: thing',
+        'SPDXID: SPDXRef-Package-thing',
+        'PackageDownloadLocation: NOASSERTION',
+        'PackageChecksum: SHA256: ' + 'ab'.repeat(32),
+        '',
+        'Relationship: SPDXRef-DOCUMENT DESCRIBES SPDXRef-Package-thing',
+      ].join('\n') + '\n',
+    );
+    const report = evaluateProfile(emptyWorkspace, loaded, BSI_TR_03183_PROFILE);
+    expect(report.results.find((r) => r.id === 'pkg-checksum')?.pass).toBe(false);
+    expect(report.results.find((r) => r.id === 'creators')?.pass).toBe(true);
+  });
+
   it('gates on a creator without contact and on missing hashes', () => {
     const loaded = loadedFromText(
       'bare.spdx',

@@ -29,8 +29,12 @@ import { dedupeBySpdxId } from '../spdx2/common';
 export interface OcmBlobContext {
   /** Resolve a localBlob access to its bytes' SHA-1, when extracted. */
   sbomChecksumFor(localReference: string): string | undefined;
-  /** Inspection summary of a localBlob's actual contents, when available. */
-  blobInfoFor?(localReference: string): OcmBlobInfo | undefined;
+  /**
+   * Inspection summary for one artifact's localBlob, when available. Keyed
+   * by the artifact's own raw node (NOT the localReference): two artifacts
+   * may share a blob but declare different digests, so the verdict is theirs.
+   */
+  blobInfoFor?(artifact: Record<string, unknown>): OcmBlobInfo | undefined;
 }
 
 export function ocmNamespace(name: string, version: string): string {
@@ -121,8 +125,7 @@ export function parseOcmComponentDescriptor(
     const access = isRecord(raw.access) ? raw.access : {};
     const accessType = asString(access.type)?.toLowerCase() ?? '';
     const version = asString(raw.version);
-    const localReference = asString(access.localReference) ?? asString(access.filename);
-    const blob = localReference ? blobContext?.blobInfoFor?.(localReference) : undefined;
+    const blob = blobContext?.blobInfoFor?.(raw);
     if (blob?.digestCheck === 'mismatch') {
       diagnostics.push(
         diag(

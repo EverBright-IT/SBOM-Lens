@@ -1,6 +1,6 @@
 import { asArray, asString, isRecord } from '../util/narrow';
 import type { ComplianceProfile, DocumentField, PackageField, ProfileCheck } from './model';
-import { MAX_PROFILE_BYTES, PROFILE_SCHEMA_V1, STRING_PACKAGE_FIELDS } from './model';
+import { MAX_PROFILE_BYTES, PROFILE_SCHEMA_V1, PROFILE_SCHEMA_V2, STRING_PACKAGE_FIELDS } from './model';
 
 /**
  * Fail-closed validation — deliberately NOT the catalog's silent tolerance.
@@ -46,13 +46,14 @@ export function validateProfile(raw: unknown): ProfileValidation {
   const errors: string[] = [];
   if (!isRecord(raw)) return { ok: false, errors: ['profile must be a JSON object'] };
 
-  if (raw.schema !== PROFILE_SCHEMA_V1) {
+  const schema = raw.schema;
+  if (schema !== PROFILE_SCHEMA_V1 && schema !== PROFILE_SCHEMA_V2) {
     return {
       ok: false,
       errors: [
-        typeof raw.schema === 'string' && raw.schema.startsWith('sbomlens-profile/')
-          ? `unsupported profile schema "${raw.schema}" — this build understands ${PROFILE_SCHEMA_V1}`
-          : `missing or invalid "schema" — expected "${PROFILE_SCHEMA_V1}"`,
+        typeof schema === 'string' && schema.startsWith('sbomlens-profile/')
+          ? `unsupported profile schema "${schema}" — this build understands ${PROFILE_SCHEMA_V1} and ${PROFILE_SCHEMA_V2}`
+          : `missing or invalid "schema" — expected "${PROFILE_SCHEMA_V1}" or "${PROFILE_SCHEMA_V2}"`,
       ],
     };
   }
@@ -68,7 +69,7 @@ export function validateProfile(raw: unknown): ProfileValidation {
   const checks: ProfileCheck[] = [];
   const seenIds = new Set<string>();
   checksRaw.slice(0, MAX_CHECKS).forEach((entry, index) => {
-    const check = validateCheck(entry, index, errors, seenIds);
+    const check = validateCheck(entry, index, errors, seenIds, schema === PROFILE_SCHEMA_V2);
     if (check) checks.push(check);
   });
 
@@ -76,7 +77,7 @@ export function validateProfile(raw: unknown): ProfileValidation {
   return {
     ok: true,
     profile: {
-      schema: PROFILE_SCHEMA_V1,
+      schema,
       name: name!,
       description: asString(raw.description),
       checks,
@@ -89,6 +90,7 @@ function validateCheck(
   index: number,
   errors: string[],
   seenIds: Set<string>,
+  v2: boolean,
 ): ProfileCheck | null {
   const at = `checks[${index}]`;
   if (!isRecord(entry)) {
@@ -156,6 +158,7 @@ function validateCheck(
         }
         threshold = entry.threshold;
       }
+      const algorithms = validateAlgorithms(entry.algorithms, field, at, errors, v2);
       return {
         ...base,
         type: 'package-coverage',
@@ -163,6 +166,7 @@ function validateCheck(
         ...(threshold !== undefined && { threshold }),
         ...(pattern && { pattern }),
         ...(values && { values }),
+        ...(algorithms && { algorithms }),
       };
     }
     default:
@@ -190,6 +194,40 @@ function validatePattern(raw: unknown, at: string, errors: string[]): string | u
     return undefined;
   }
   return pattern;
+}
+
+const MAX_ALGORITHMS = 8;
+const MAX_ALGORITHM_LENGTH = 32;
+
+/** v2-only, checksum-only. Fail closed on anything else — see module header. */
+function validateAlgorithms(
+  raw: unknown,
+  field: PackageField,
+  at: string,
+  errors: string[],
+  v2: boolean,
+): string[] | undefined {
+  if (raw === undefined) return undefined;
+  if (!v2) {
+    errors.push(`${at}: "algorithms" requires schema "sbomlens-profile/v2"`);
+    return undefined;
+  }
+  if (field !== 'checksum') {
+    errors.push(`${at}: "algorithms" only applies to the "checksum" field`);
+    return undefined;
+  }
+  if (!Array.isArray(raw) || raw.length === 0 || raw.length > MAX_ALGORITHMS) {
+    errors.push(`${at}: "algorithms" must be a non-empty array of at most ${MAX_ALGORITHMS} strings`);
+    return undefined;
+  }
+  const algorithms = raw.filter(
+    (v): v is string => typeof v === 'string' && v.length > 0 && v.length <= MAX_ALGORITHM_LENGTH,
+  );
+  if (algorithms.length !== raw.length) {
+    errors.push(`${at}: "algorithms" entries must be strings of at most ${MAX_ALGORITHM_LENGTH} characters`);
+    return undefined;
+  }
+  return algorithms;
 }
 
 function validateValues(raw: unknown, at: string, errors: string[]): string[] | undefined {
