@@ -54,6 +54,44 @@ export interface OcmDocumentExt {
   signatures?: OcmSignatureInfo[];
 }
 
+/** One previewable text pulled out of a delivery blob (hard-capped). */
+export interface OcmBlobPreview {
+  name: string;
+  text: string;
+  truncated?: boolean;
+}
+
+export interface OcmOciLayerInfo {
+  digest?: string;
+  size?: number;
+  mediaType?: string;
+}
+
+/**
+ * What a localBlob resource physically contains, inspected inside the
+ * worker. Only these capped summaries cross the thread boundary; the raw
+ * blob bytes never leave the parse worker.
+ */
+export interface OcmBlobInfo {
+  /** Stored size in the delivery (before any gunzip). */
+  size: number;
+  mediaType?: string;
+  kind: 'text' | 'json' | 'yaml' | 'binary' | 'tar' | 'helm-chart' | 'oci-artifact';
+  /** True when the blob was stored gzip-compressed. */
+  compressed?: boolean;
+  /**
+   * Result of checking the declared OCM digest against the actual bytes.
+   * Only explicit genericBlobDigest/v1 and ociArtifactDigest/v1 are
+   * computed — anything else stays 'unchecked' rather than risking a wrong
+   * verdict. Absent when the resource declares no digest.
+   */
+  digestCheck?: 'match' | 'mismatch' | 'unchecked';
+  previews?: OcmBlobPreview[];
+  files?: { name: string; size: number }[];
+  filesTruncated?: boolean;
+  oci?: { layers: OcmOciLayerInfo[] };
+}
+
 /** Extra data on a component/resource/source element. */
 export interface OcmElementExt {
   role: 'component' | 'resource' | 'source';
@@ -64,6 +102,8 @@ export interface OcmElementExt {
   access?: OcmAccessInfo;
   digest?: OcmDigest;
   labels?: OcmLabel[];
+  /** Present only when the artifact's bytes travel inside a loaded delivery. */
+  blob?: OcmBlobInfo;
 }
 
 /** Extra data on a componentReference-backed external document ref. */

@@ -26,10 +26,13 @@ export { OCM_ESSENTIALS_PROFILE } from './profile/ocm';
 
 export type {
   OcmAccessInfo,
+  OcmBlobInfo,
+  OcmBlobPreview,
   OcmDigest,
   OcmDocumentExt,
   OcmElementExt,
   OcmLabel,
+  OcmOciLayerInfo,
   OcmReferenceExt,
   OcmRepositoryContext,
   OcmSignatureInfo,

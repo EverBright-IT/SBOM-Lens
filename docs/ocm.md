@@ -6,9 +6,11 @@
 > gate). Build it with `npm run build:ocm`, or install the *OCM Lens*
 > extension.
 >
-> **Read-only.** Deliveries are displayed, never modified. Signatures and
-> digests are shown as recorded; cryptographic verification is on the
-> roadmap (`OCM_DIGESTS_NOT_VERIFIED` keeps that honest until then).
+> **Read-only.** Deliveries are displayed, never modified. Blob digests of
+> artifacts inside a loaded delivery ARE checked against the actual bytes;
+> component and reference digests and signatures are shown as recorded, and
+> their cryptographic verification is on the roadmap
+> (`OCM_DIGESTS_NOT_VERIFIED` keeps that honest until then).
 
 OCM Lens opens [OCM](https://ocm.software) component descriptors and local
 delivery archives and shows the whole delivery as one navigable tree: the
@@ -43,10 +45,30 @@ extension host, which fetches without CORS limits).
   byte SHA-1, so the checksum resolver connects them immediately. The SBOM's
   packages appear underneath the resource in the tree (`DESCRIBED_BY`).
 
+## Artifact content: what the delivery physically ships
+
+Every local blob a delivery carries is inspected inside the parse worker,
+and its resource shows an **Artifact content** section:
+
+- **Kind and preview**: helm charts show their file list plus `Chart.yaml`
+  and `values.yaml`; OCI artifact sets show the manifest and a layer table;
+  JSON/YAML/text blobs show their content (exportable); anything binary
+  shows a hex head. Previews are capped (64 KB text, 500 files); the raw
+  bytes never leave the worker.
+- **Digest check**: when the resource declares a digest with
+  `genericBlobDigest/v1` (hash of the stored blob bytes) or
+  `ociArtifactDigest/v1` (hash of the artifact set's manifest), OCM Lens
+  recomputes it and shows *digest match* or *digest mismatch*; a mismatch
+  additionally raises an `OCM_DIGEST_MISMATCH` warning. Any other
+  normalisation stays *unchecked*: the check never guesses, so it can never
+  produce a wrong verdict. Resources that are only referenced
+  (`ociArtifact` and friends) carry no blob and no check.
+
 ## Limits (deliberate)
 
-- **Read-only**: no signing, no verification: OCM digests are displayed,
-  never checked (`OCM_DIGESTS_NOT_VERIFIED` reminds you).
+- **Read-only**: no signing. Component and reference digests and signatures
+  are displayed, not verified (`OCM_DIGESTS_NOT_VERIFIED` reminds you);
+  blob digests inside a loaded delivery are the exception and ARE checked.
 - Unknown access types (`s3`, `npm`, ...) are listed without download location
   and reported as diagnostics.
 - ZIP is rejected with a repack hint; archives are capped at 10k entries /

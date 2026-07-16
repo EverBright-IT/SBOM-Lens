@@ -6,8 +6,10 @@ import { asRecordArray, asString, isRecord } from '../../util/narrow';
 import { sha1Hex } from '../../util/sha1';
 import type { TarEntry } from '../../util/tar';
 import { readTar } from '../../util/tar';
+import type { OcmBlobInfo } from '../../model/ocm';
 import { detect } from '../detect';
 import type { SourceInput } from '../parser';
+import { inspectBlob } from './blob';
 import { isSbomResource, parseOcmComponentDescriptor } from './cd';
 
 /**
@@ -268,7 +270,30 @@ async function emitCd(
     });
   }
 
-  // Pass 2: map the CD with the checksums at hand.
+  // Pass 2: inspect EVERY localBlob the delivery physically carries — kind,
+  // capped preview, and the declared-digest check. Bytes stay in this worker;
+  // only the summaries ride on the elements.
+  const blobInfos = new Map<string, OcmBlobInfo>();
+  const resources = asRecordArray(
+    component?.resources ?? (isRecord(detection.parsed.spec) ? detection.parsed.spec.resources : []),
+  );
+  for (const resource of resources) {
+    const access = isRecord(resource.access) ? resource.access : {};
+    const localReference = asString(access.localReference) ?? asString(access.filename);
+    if (!localReference || blobInfos.has(localReference)) continue;
+    const blob = blobStore.get(localReference);
+    if (!blob) continue;
+    try {
+      blobInfos.set(
+        localReference,
+        await inspectBlob(blob, asString(access.mediaType), isRecord(resource.digest) ? resource.digest : undefined),
+      );
+    } catch {
+      // Inspection is best-effort; the element simply carries no blob info.
+    }
+  }
+
+  // Pass 3: map the CD with checksums and blob summaries at hand.
   const cdBytes = new TextEncoder().encode(cdText);
   const sha1 = await sha1Hex(cdBytes.buffer as ArrayBuffer);
   const input: SourceInput = {
@@ -279,6 +304,7 @@ async function emitCd(
   };
   const parsed = parseOcmComponentDescriptor(input, detection.parsed, detection.serialization, {
     sbomChecksumFor: (ref) => sbomChecksums.get(ref),
+    blobInfoFor: (ref) => blobInfos.get(ref),
   });
   if (parsed.document) {
     const componentLabel = parsed.document.name;

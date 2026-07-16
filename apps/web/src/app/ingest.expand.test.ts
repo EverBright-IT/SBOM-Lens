@@ -99,6 +99,15 @@ describe('delivery archives through ingest', () => {
       if (resolution.status === 'resolved') resolved++;
     }
     expect(resolved).toBe(2); // componentReference (namespace) + sbom blob (checksum)
+
+    // Blob inspection summaries survive the worker roundtrip structurally —
+    // capped previews and the digest verdicts, never the raw bytes.
+    const webstack = [...state.ws.documents.values()].find((d) => d.document.name === 'acme.org/webstack')!;
+    const blobOf = (name: string) => webstack.document.elements.find((e) => e.name === name)?.ocm?.blob;
+    expect(blobOf('webstack-chart')).toMatchObject({ kind: 'helm-chart', digestCheck: 'match' });
+    expect(blobOf('runtime-config')).toMatchObject({ kind: 'yaml', digestCheck: 'mismatch' });
+    expect(blobOf('dashboards-image')?.oci?.layers).toHaveLength(2);
+    expect(blobOf('gateway-image')).toBeUndefined();
   });
 
   it('re-dropping the same delivery dedupes by content', async () => {

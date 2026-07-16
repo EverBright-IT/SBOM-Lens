@@ -8,7 +8,7 @@ import type {
   SbomElement,
   SpecInfo,
 } from '../../model/document';
-import type { OcmDigest, OcmLabel, OcmRepositoryContext, OcmSignatureInfo } from '../../model/ocm';
+import type { OcmBlobInfo, OcmDigest, OcmLabel, OcmRepositoryContext, OcmSignatureInfo } from '../../model/ocm';
 import { makeDocumentId, makeElementId } from '../../model/ids';
 import { asRecordArray, asString, isRecord } from '../../util/narrow';
 import type { ParseResult, SourceInput } from '../parser';
@@ -21,12 +21,16 @@ import { dedupeBySpdxId } from '../spdx2/common';
  * elements, componentReferences → external document refs with a synthetic
  * `ocm://name/version` namespace (two loaded CDs auto-link via the existing
  * namespace matcher), SBOM resources → refs the archive walker wires up by
- * byte checksum. Read-only: digests are displayed, never verified.
+ * byte checksum. Read-only: blob digests inside a loaded delivery are checked
+ * against the actual bytes; component and reference digests are displayed,
+ * not verified (signature verification is roadmap).
  */
 
 export interface OcmBlobContext {
   /** Resolve a localBlob access to its bytes' SHA-1, when extracted. */
   sbomChecksumFor(localReference: string): string | undefined;
+  /** Inspection summary of a localBlob's actual contents, when available. */
+  blobInfoFor?(localReference: string): OcmBlobInfo | undefined;
 }
 
 export function ocmNamespace(name: string, version: string): string {
@@ -105,6 +109,7 @@ export function parseOcmComponentDescriptor(
   });
 
   const unsupportedAccess = new Map<string, number>();
+  let checkedBlobs = 0;
 
   const addArtifact = (raw: Record<string, unknown>, role: 'resource' | 'source'): void => {
     const name = asString(raw.name);
@@ -116,6 +121,18 @@ export function parseOcmComponentDescriptor(
     const access = isRecord(raw.access) ? raw.access : {};
     const accessType = asString(access.type)?.toLowerCase() ?? '';
     const version = asString(raw.version);
+    const localReference = asString(access.localReference) ?? asString(access.filename);
+    const blob = localReference ? blobContext?.blobInfoFor?.(localReference) : undefined;
+    if (blob?.digestCheck === 'mismatch') {
+      diagnostics.push(
+        diag(
+          'warning',
+          'OCM_DIGEST_MISMATCH',
+          `${role === 'source' ? 'Source' : 'Resource'} "${name}": the blob in this delivery does not match its declared digest.`,
+        ),
+      );
+    }
+    if (blob?.digestCheck === 'match' || blob?.digestCheck === 'mismatch') checkedBlobs++;
     const element: SbomElement = {
       id: makeElementId(documentId, spdxId),
       documentId,
@@ -136,6 +153,7 @@ export function parseOcmComponentDescriptor(
         access: Object.keys(access).length > 0 ? { type: asString(access.type), raw: access } : undefined,
         digest: ocmDigest(raw.digest),
         labels: ocmLabels(raw.labels),
+        blob,
       },
       raw: { kind: 'json', value: raw },
     };
@@ -227,7 +245,13 @@ export function parseOcmComponentDescriptor(
     );
   }
   diagnostics.push(
-    diag('info', 'OCM_DIGESTS_NOT_VERIFIED', 'OCM digests are displayed, not verified.'),
+    diag(
+      'info',
+      'OCM_DIGESTS_NOT_VERIFIED',
+      checkedBlobs > 0
+        ? `Blob digests of ${checkedBlobs} artifact(s) were checked against the delivery contents; component and reference digests are displayed, not verified.`
+        : 'OCM digests are displayed, not verified.',
+    ),
   );
 
   const document: SbomDocument = {

@@ -120,7 +120,13 @@ export function SpecInfo({ doc }: { doc: SpecFieldDoc & { specName?: string } })
   );
 }
 
-export function Chip({ children, tone = 'neutral' }: { children: ReactNode; tone?: 'neutral' | 'accent' | 'warn' }) {
+export function Chip({
+  children,
+  tone = 'neutral',
+}: {
+  children: ReactNode;
+  tone?: 'neutral' | 'accent' | 'warn' | 'ok' | 'danger';
+}) {
   return (
     <span
       className={clsx(
@@ -128,6 +134,8 @@ export function Chip({ children, tone = 'neutral' }: { children: ReactNode; tone
         tone === 'neutral' && 'border-slate-200 text-slate-500 dark:border-slate-700 dark:text-slate-400',
         tone === 'accent' && 'border-accent-200 text-accent-700 dark:border-accent-800 dark:text-accent-300',
         tone === 'warn' && 'border-amber-300 text-amber-700 dark:border-amber-700 dark:text-amber-400',
+        tone === 'ok' && 'border-emerald-300 text-emerald-700 dark:border-emerald-800 dark:text-emerald-400',
+        tone === 'danger' && 'border-red-300 text-red-700 dark:border-red-800 dark:text-red-400',
       )}
     >
       {children}

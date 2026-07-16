@@ -10,6 +10,7 @@
  * digests but never verifies them; only index/manifest/blob-name consistency
  * matters here.
  */
+import { createHash } from 'node:crypto';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { writeTar } from './tar-writer.mjs';
 
@@ -21,6 +22,67 @@ const WEBSTACK_CD_DIGEST = HEX('3');
 const WEBSTACK_SET_DIGEST = HEX('4');
 const PLATFORM_CD_DIGEST = HEX('5');
 const PLATFORM_MANIFEST_DIGEST = HEX('6');
+/** Deliberately wrong declared digest — the demo's visible mismatch case. */
+const CONFIG_DECLARED_DIGEST = HEX('9');
+
+const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
+
+// --- Real artifact blobs the delivery physically transports (B2). --------
+// Content is fixed, so every hash below is deterministic. The helm chart and
+// the OCI artifact set carry CORRECT digests (match case); runtime-config
+// declares a wrong one (mismatch case, visible in the demo).
+
+const chartYaml = `apiVersion: v2
+name: webstack
+description: ACME webstack deployment chart
+version: 2.1.0
+appVersion: "2.1.0"
+`;
+const chartValues = `replicaCount: 2
+image:
+  repository: registry.example.org/acme/webstack
+  tag: 2.1.0
+service:
+  port: 8080
+`;
+const chartDeployment = `apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: webstack
+`;
+const chartTar = writeTar([
+  { name: 'webstack/Chart.yaml', bytes: chartYaml },
+  { name: 'webstack/values.yaml', bytes: chartValues },
+  { name: 'webstack/templates/deployment.yaml', bytes: chartDeployment },
+]);
+const CHART_DIGEST = sha256(chartTar);
+
+const configYaml = `logLevel: info
+features:
+  dashboards: true
+  tracing: false
+`;
+const CONFIG_STORED_DIGEST = sha256(configYaml);
+
+// Mini OCI artifact set: a manifest plus two tiny layers. Its declared
+// digest uses ociArtifactDigest/v1, i.e. the sha256 of the manifest bytes.
+const dashLayerOne = 'dashboards layer one\n';
+const dashLayerTwo = 'dashboards layer two\n';
+const dashManifest = JSON.stringify({
+  schemaVersion: 2,
+  mediaType: 'application/vnd.oci.image.manifest.v1+json',
+  layers: [
+    { mediaType: 'application/vnd.oci.image.layer.v1.tar', digest: `sha256:${sha256(dashLayerOne)}`, size: dashLayerOne.length },
+    { mediaType: 'application/vnd.oci.image.layer.v1.tar', digest: `sha256:${sha256(dashLayerTwo)}`, size: dashLayerTwo.length },
+  ],
+});
+const DASH_MANIFEST_DIGEST = sha256(dashManifest);
+const dashArtifactSet = writeTar([
+  { name: 'artifact-set-descriptor.json', bytes: dashManifest },
+  { name: `blobs/sha256.${sha256(dashLayerOne)}`, bytes: dashLayerOne },
+  { name: `blobs/sha256.${sha256(dashLayerTwo)}`, bytes: dashLayerTwo },
+]);
+const DASH_SET_STORED_DIGEST = sha256(dashArtifactSet);
 
 const sbomJson =
   JSON.stringify(
@@ -87,6 +149,42 @@ component:
       access:
         type: ociArtifact
         imageReference: registry.example.org/acme/gateway:2.1.0
+    - name: webstack-chart
+      version: 2.1.0
+      type: helmChart
+      relation: local
+      access:
+        type: localBlob
+        localReference: sha256.${CHART_DIGEST}
+        mediaType: application/vnd.cncf.helm.chart.content.v1.tar
+      digest:
+        hashAlgorithm: SHA-256
+        normalisationAlgorithm: genericBlobDigest/v1
+        value: "${CHART_DIGEST}"
+    - name: runtime-config
+      version: 2.1.0
+      type: plainText
+      relation: local
+      access:
+        type: localBlob
+        localReference: sha256.${CONFIG_STORED_DIGEST}
+        mediaType: application/yaml
+      digest:
+        hashAlgorithm: SHA-256
+        normalisationAlgorithm: genericBlobDigest/v1
+        value: "${CONFIG_DECLARED_DIGEST}"
+    - name: dashboards-image
+      version: 2.1.0
+      type: ociImage
+      relation: local
+      access:
+        type: localBlob
+        localReference: sha256.${DASH_SET_STORED_DIGEST}
+        mediaType: application/vnd.oci.image.manifest.v1+tar
+      digest:
+        hashAlgorithm: SHA-256
+        normalisationAlgorithm: ociArtifactDigest/v1
+        value: "${DASH_MANIFEST_DIGEST}"
 `;
 
 const platformCd = `meta:
@@ -120,12 +218,30 @@ export function buildWebstackArtifactSet() {
         digest: `sha256:${SBOM_DIGEST}`,
         size: sbomJson.length,
       },
+      {
+        mediaType: 'application/vnd.cncf.helm.chart.content.v1.tar',
+        digest: `sha256:${CHART_DIGEST}`,
+        size: chartTar.length,
+      },
+      {
+        mediaType: 'application/yaml',
+        digest: `sha256:${CONFIG_STORED_DIGEST}`,
+        size: configYaml.length,
+      },
+      {
+        mediaType: 'application/vnd.oci.image.manifest.v1+tar',
+        digest: `sha256:${DASH_SET_STORED_DIGEST}`,
+        size: dashArtifactSet.length,
+      },
     ],
   });
   return writeTar([
     { name: 'artifact-set-descriptor.json', bytes: manifest },
     { name: `blobs/sha256.${WEBSTACK_CD_DIGEST}`, bytes: webstackCd },
     { name: `blobs/sha256.${SBOM_DIGEST}`, bytes: sbomJson },
+    { name: `blobs/sha256.${CHART_DIGEST}`, bytes: chartTar },
+    { name: `blobs/sha256.${CONFIG_STORED_DIGEST}`, bytes: configYaml },
+    { name: `blobs/sha256.${DASH_SET_STORED_DIGEST}`, bytes: dashArtifactSet },
   ]);
 }
 
@@ -162,6 +278,9 @@ export function buildComponentArchive() {
   return writeTar([
     { name: 'component-descriptor.yaml', bytes: webstackCd },
     { name: `blobs/sha256.${SBOM_DIGEST}`, bytes: sbomJson },
+    { name: `blobs/sha256.${CHART_DIGEST}`, bytes: chartTar },
+    { name: `blobs/sha256.${CONFIG_STORED_DIGEST}`, bytes: configYaml },
+    { name: `blobs/sha256.${DASH_SET_STORED_DIGEST}`, bytes: dashArtifactSet },
   ]);
 }
 

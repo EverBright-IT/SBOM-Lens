@@ -122,6 +122,29 @@ describe('OCM CD mapping (v2)', () => {
     expect(describedBy?.from).toEqual({ kind: 'local', spdxId: 'SPDXRef-resource-webstack-sbom' });
     expect(describedBy?.to).toEqual({ kind: 'external', docRef: 'DocumentRef-sbom-webstack-sbom', spdxId: null });
   });
+
+  it('attaches no blob info to a standalone CD (contents live in the delivery)', () => {
+    expect(doc.elements.every((e) => e.ocm?.blob === undefined)).toBe(true);
+  });
+
+  it('attaches blob info and a mismatch diagnostic through the blob context', () => {
+    const text = loadFixture('ocm/cd-v2.yaml');
+    const detection = detect(text);
+    if (detection.format !== 'ocm-cd') return;
+    const result = parseOcmComponentDescriptor(inputFor('cd-v2.yaml', text), detection.parsed, 'yaml', {
+      sbomChecksumFor: () => undefined,
+      blobInfoFor: (ref) =>
+        ref === 'sha256.2222222222222222222222222222222222222222222222222222222222222222'
+          ? { size: 7, kind: 'json', digestCheck: 'mismatch' }
+          : undefined,
+    });
+    const sbom = result.document!.elements.find((e) => e.name === 'webstack-sbom')!;
+    expect(sbom.ocm!.blob).toEqual({ size: 7, kind: 'json', digestCheck: 'mismatch' });
+    const mismatch = result.diagnostics.find((d) => d.code === 'OCM_DIGEST_MISMATCH');
+    expect(mismatch?.message).toContain('webstack-sbom');
+    const tally = result.diagnostics.find((d) => d.code === 'OCM_DIGESTS_NOT_VERIFIED');
+    expect(tally?.message).toContain('1 artifact(s)');
+  });
 });
 
 describe('ociPurl edge cases', () => {

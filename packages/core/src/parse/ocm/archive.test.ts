@@ -99,6 +99,63 @@ describe('readOcmDelivery — CTF', () => {
   });
 });
 
+describe('readOcmDelivery — artifact blob inspection', () => {
+  const elementByName = async (fixture: string, name: string) => {
+    const result = await readOcmDelivery(fixture, fixtureBytes(`ocm/${fixture}`));
+    const webstack = result.documents.find((d) => d.document.name === 'acme.org/webstack')!;
+    return {
+      element: webstack.document.elements.find((e) => e.name === name),
+      diagnostics: webstack.diagnostics,
+    };
+  };
+
+  it('inspects the transported helm chart: kind, files, previews, digest match', async () => {
+    const { element } = await elementByName('delivery.ctf.tar', 'webstack-chart');
+    const blob = element!.ocm!.blob!;
+    expect(blob.kind).toBe('helm-chart');
+    expect(blob.digestCheck).toBe('match');
+    expect(blob.files!.map((f) => f.name)).toContain('webstack/templates/deployment.yaml');
+    expect(blob.previews!.map((p) => p.name)).toEqual(['webstack/Chart.yaml', 'webstack/values.yaml']);
+    expect(blob.previews![0]!.text).toContain('name: webstack');
+  });
+
+  it('flags the runtime-config blob whose declared digest is wrong', async () => {
+    const { element, diagnostics } = await elementByName('delivery.ctf.tar', 'runtime-config');
+    expect(element!.ocm!.blob!.kind).toBe('yaml');
+    expect(element!.ocm!.blob!.digestCheck).toBe('mismatch');
+    const mismatch = diagnostics.find((d) => d.code === 'OCM_DIGEST_MISMATCH');
+    expect(mismatch?.severity).toBe('warning');
+    expect(mismatch?.message).toContain('runtime-config');
+  });
+
+  it('lists the OCI artifact set layers and verifies ociArtifactDigest/v1', async () => {
+    const { element } = await elementByName('delivery.ctf.tar', 'dashboards-image');
+    const blob = element!.ocm!.blob!;
+    expect(blob.kind).toBe('oci-artifact');
+    expect(blob.digestCheck).toBe('match');
+    expect(blob.oci!.layers).toHaveLength(2);
+    expect(blob.oci!.layers[0]!.digest).toMatch(/^sha256:/);
+  });
+
+  it('leaves referenced-only artifacts without blob info and reports the check tally', async () => {
+    const { element: gateway, diagnostics } = await elementByName('delivery.ctf.tar', 'gateway-image');
+    expect(gateway!.ocm!.blob).toBeUndefined();
+
+    const sbom = await elementByName('delivery.ctf.tar', 'webstack-sbom');
+    expect(sbom.element!.ocm!.blob!.kind).toBe('json');
+    expect(sbom.element!.ocm!.blob!.digestCheck).toBeUndefined(); // no digest declared
+
+    const tally = diagnostics.find((d) => d.code === 'OCM_DIGESTS_NOT_VERIFIED');
+    expect(tally?.message).toContain('3 artifact(s)');
+  });
+
+  it('inspects blobs in the component-archive layout too', async () => {
+    const { element } = await elementByName('component-archive.tar', 'webstack-chart');
+    expect(element!.ocm!.blob!.kind).toBe('helm-chart');
+    expect(element!.ocm!.blob!.digestCheck).toBe('match');
+  });
+});
+
 describe('readOcmDelivery — component archive & sweep', () => {
   it('reads a component archive with its local blobs', async () => {
     const result = await readOcmDelivery('component-archive.tar', fixtureBytes('ocm/component-archive.tar'));
