@@ -120,8 +120,10 @@ essentials for component descriptors), the dropdown offers:
   **SHA-512** hash (the algorithm is enforced via the v2 `algorithms`
   modifier), plus dependency enumeration; unique IDs (purl/CPE) are reported
   informationally. It is deliberately labelled an *approximation*: the TR
-  accepts only SPDX 3.0.1+ or CycloneDX 1.6+, so passing these checks
-  measures data completeness on an SPDX 2.x document, not TR conformance.
+  accepts only SPDX 3.0.1+ or CycloneDX 1.6+, so on an SPDX 2.x document
+  these checks measure data completeness, not TR conformance. SPDX 3.0.x
+  documents load since v0.15.0 and evaluate against the same checks; the
+  profile still verifies field coverage, not the full TR.
   What the engine cannot check (component filenames, the
   executable/archive/structured properties, source URIs, the completeness
   indication) is listed in the profile's own description, so exported

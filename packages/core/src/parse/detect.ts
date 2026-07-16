@@ -3,6 +3,7 @@ import { isRecord } from '../util/narrow';
 export type Detection =
   | { format: 'spdx2-json'; parsed: Record<string, unknown>; serialization: 'json' | 'yaml' }
   | { format: 'spdx2-tag-value' }
+  | { format: 'spdx3-json'; parsed: Record<string, unknown>; serialization: 'json' | 'yaml' }
   | { format: 'ocm-cd'; parsed: Record<string, unknown>; serialization: 'json' | 'yaml' }
   | { format: 'unsupported'; code: string; reason: string };
 
@@ -73,10 +74,7 @@ function classifyObject(parsed: unknown, serialization: 'json' | 'yaml'): Detect
   const context = parsed['@context'];
   const contextStr = Array.isArray(context) ? context.join(' ') : String(context ?? '');
   if (contextStr.includes('spdx.org/rdf/3.')) {
-    return unsupported(
-      'SPDX3_NOT_YET_SUPPORTED',
-      'This is an SPDX 3.x document (JSON-LD). SPDX 3.0 support is on the roadmap; SPDX 2.x documents work today.',
-    );
+    return { format: 'spdx3-json', parsed, serialization };
   }
 
   const spdxVersion = parsed.spdxVersion;

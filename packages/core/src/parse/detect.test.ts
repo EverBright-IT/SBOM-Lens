@@ -38,9 +38,9 @@ describe('detect', () => {
     expect(result).toMatchObject({ format: 'unsupported', code: 'TRIVY_NATIVE_NOT_SUPPORTED' });
   });
 
-  it('recognizes SPDX 3.x with a roadmap message', () => {
+  it('routes SPDX 3.x JSON-LD to the spdx3 parser', () => {
     const result = detect(loadFixture('negative/spdx3.json'));
-    expect(result).toMatchObject({ format: 'unsupported', code: 'SPDX3_NOT_YET_SUPPORTED' });
+    expect(result).toMatchObject({ format: 'spdx3-json' });
   });
 
   it('rejects arbitrary text', () => {

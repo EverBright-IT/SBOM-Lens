@@ -1,0 +1,116 @@
+{
+  "@context": "https://spdx.org/rdf/3.0.1/spdx-context.jsonld",
+  "@graph": [
+    {
+      "type": "CreationInfo",
+      "@id": "_:creationinfo",
+      "specVersion": "3.0.1",
+      "created": "2026-06-01T10:00:00Z",
+      "createdBy": ["https://acme.example/agent/acme"],
+      "createdUsing": ["https://acme.example/agent/sbomtool"]
+    },
+    {
+      "type": "Organization",
+      "spdxId": "https://acme.example/agent/acme",
+      "creationInfo": "_:creationinfo",
+      "name": "ACME Corp"
+    },
+    {
+      "type": "Tool",
+      "spdxId": "https://acme.example/agent/sbomtool",
+      "creationInfo": "_:creationinfo",
+      "name": "acme-sbom-tool 2.0"
+    },
+    {
+      "type": "SpdxDocument",
+      "spdxId": "https://acme.example/doc/webstack-3.0.0",
+      "creationInfo": "_:creationinfo",
+      "name": "acme-webstack-3.0.0",
+      "profileConformance": ["core", "software"],
+      "rootElement": ["https://acme.example/pkg/webstack"]
+    },
+    {
+      "type": "software_Package",
+      "spdxId": "https://acme.example/pkg/webstack",
+      "creationInfo": "_:creationinfo",
+      "name": "webstack",
+      "software_packageVersion": "3.0.0",
+      "suppliedBy": "https://acme.example/agent/acme",
+      "software_downloadLocation": "https://acme.example/dl/webstack-3.0.0.tgz",
+      "software_primaryPurpose": "application",
+      "software_copyrightText": "Copyright ACME Corp",
+      "verifiedUsing": [
+        {
+          "type": "Hash",
+          "algorithm": "sha256",
+          "hashValue": "AABB00112233445566778899aabbccddeeff00112233445566778899aabbccdd"
+        }
+      ],
+      "externalIdentifier": [
+        {
+          "type": "ExternalIdentifier",
+          "externalIdentifierType": "packageUrl",
+          "identifier": "pkg:npm/%40acme/webstack@3.0.0"
+        },
+        {
+          "type": "ExternalIdentifier",
+          "externalIdentifierType": "cpe23",
+          "identifier": "cpe:2.3:a:acme:webstack:3.0.0:*:*:*:*:*:*:*"
+        }
+      ]
+    },
+    {
+      "type": "software_Package",
+      "spdxId": "https://acme.example/pkg/nginx",
+      "creationInfo": "_:creationinfo",
+      "name": "nginx-gateway",
+      "software_packageVersion": "1.27.1",
+      "software_downloadLocation": "https://spdx.org/rdf/3.0.1/terms/Core/NoAssertion"
+    },
+    {
+      "type": "software_File",
+      "spdxId": "https://acme.example/file/nginx-conf",
+      "creationInfo": "_:creationinfo",
+      "name": "config/nginx.conf",
+      "verifiedUsing": [
+        { "type": "Hash", "algorithm": "sha1", "hashValue": "0011223344556677889900112233445566778899" }
+      ]
+    },
+    {
+      "type": "simplelicensing_LicenseExpression",
+      "spdxId": "https://acme.example/license/apache",
+      "creationInfo": "_:creationinfo",
+      "simplelicensing_licenseExpression": "Apache-2.0"
+    },
+    {
+      "type": "Relationship",
+      "spdxId": "https://acme.example/rel/contains",
+      "creationInfo": "_:creationinfo",
+      "from": "https://acme.example/pkg/webstack",
+      "relationshipType": "contains",
+      "to": ["https://acme.example/pkg/nginx", "https://acme.example/file/nginx-conf"]
+    },
+    {
+      "type": "Relationship",
+      "spdxId": "https://acme.example/rel/depends",
+      "creationInfo": "_:creationinfo",
+      "from": "https://acme.example/pkg/webstack",
+      "relationshipType": "dependsOn",
+      "to": ["https://acme.example/pkg/nginx"]
+    },
+    {
+      "type": "Relationship",
+      "spdxId": "https://acme.example/rel/lic",
+      "creationInfo": "_:creationinfo",
+      "from": "https://acme.example/pkg/webstack",
+      "relationshipType": "hasDeclaredLicense",
+      "to": ["https://acme.example/license/apache"]
+    },
+    {
+      "type": "ai_AIPackage",
+      "spdxId": "https://acme.example/pkg/model",
+      "creationInfo": "_:creationinfo",
+      "name": "recommendation-model"
+    }
+  ]
+}

@@ -4,6 +4,22 @@ All notable changes to SBOM Lens. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [SemVer](https://semver.org) (0.x: the API surface is the app itself).
 
+## [0.15.0] - 2026-07-16
+
+### Added
+- **[SBOM Lens] SPDX 3.0.x documents load.** JSON-LD serializations of
+  SPDX 3.0.x (the only SPDX line BSI TR-03183-2 v2.1.0 accepts) now parse
+  into the same views as 2.x: packages and files with versions, suppliers,
+  purposes, hashes, and external identifiers (purl, CPE); relationships with
+  multi-target expansion; `hasDeclaredLicense`/`hasConcludedLicense`
+  relationships folded into the license fields they represent; *describes*
+  derived from the SpdxDocument's `rootElement`. Compliance profiles
+  (NTIA, BSI) evaluate on 3.x documents unchanged. Elements from profiles
+  beyond core/software (AI, dataset, build) are counted in a notice instead
+  of being dropped silently. SPDX 2.x support is untouched; the 2.3 field
+  tooltips stay off on 3.x documents rather than linking into the wrong
+  spec.
+
 ## [0.14.0] - 2026-07-16
 
 ### Added

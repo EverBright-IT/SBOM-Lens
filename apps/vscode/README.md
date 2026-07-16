@@ -47,8 +47,9 @@ release diff, and quality reports.
 
 ## Limits
 
-- **SPDX 2.x only** (tag-value / JSON / YAML). SPDX 3.x is detected but not
-  yet loaded; CycloneDX is recognized with a conversion hint.
+- **SPDX 2.x** (tag-value / JSON / YAML) in full; **SPDX 3.0.x** as JSON-LD
+  with the core/software profiles mapped. CycloneDX is recognized with a
+  conversion hint.
 - The **workspace scan skips files over 50 MB** (open those by hand). A
   single large SPDX document has no hard cap; parsing runs off the UI thread.
 - Compliance profiles are capped at 64 KB / 200 checks; up to 16 persist.

@@ -95,7 +95,6 @@ describe('parseDocument: unsupported formats', () => {
   it.each([
     ['negative/cyclonedx.json', 'CYCLONEDX_NOT_SUPPORTED'],
     ['negative/trivy-native.json', 'TRIVY_NATIVE_NOT_SUPPORTED'],
-    ['negative/spdx3.json', 'SPDX3_NOT_YET_SUPPORTED'],
     ['negative/garbage.txt', 'UNRECOGNIZED_FORMAT'],
   ])('%s → null document with %s', (fixture, code) => {
     const { document, diagnostics } = parseDocument(fixtureInput(fixture));

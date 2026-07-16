@@ -3,6 +3,7 @@ import type { Diagnostic } from '../model/diagnostics';
 import { diag } from '../model/diagnostics';
 import { detect } from './detect';
 import { parseSpdx2Json } from './spdx2/json';
+import { parseSpdx3Json } from './spdx3/json';
 import { parseSpdx2TagValue } from './spdx2/tag-value';
 
 export interface SourceInput {
@@ -44,6 +45,8 @@ export function parseDocument(input: SourceInput): ParseResult {
       return parseSpdx2Json(input, detection.parsed, detection.serialization);
     case 'spdx2-tag-value':
       return parseSpdx2TagValue(input);
+    case 'spdx3-json':
+      return parseSpdx3Json(input, detection.parsed);
     case 'ocm-cd':
       return ocmParser
         ? ocmParser(input, detection.parsed, detection.serialization)

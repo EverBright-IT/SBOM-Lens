@@ -123,22 +123,30 @@ in a VS Code workspace. Reports export as Markdown. See
 
 - **SPDX 2.x tag-value** (`.spdx`), **JSON**, and **YAML**: fully supported.
   Detection is content-based, never by file extension.
-- **SPDX 3.x**: detected and reported; support is on the roadmap.
+- **SPDX 3.0.x JSON-LD**: loads. Packages, files, relationships, hashes,
+  external identifiers (purl, CPE), and license relationships map onto the
+  same views as 2.x; elements from profiles outside core/software (AI,
+  dataset, build) are counted in a notice rather than shown. Tag-value has
+  no 3.x serialization; other 3.x serializations are not parsed.
 - **CycloneDX** and **Trivy-native JSON**: recognized with a pointer to the
   right conversion (`trivy --format spdx-json`, `cyclonedx convert`).
 
 The detail views carry the spec with them: hover the info icon next to a field
 to read the SPDX 2.3 specification's own documentation for it, distilled at
 build time from the official JSON schema (`npm run generate:spec-docs`). Click
-the icon to open that field's section in the rendered specification.
+the icon to open that field's section in the rendered specification. SPDX 3.x
+documents render without these tooltips for now: the 2.3 texts would be wrong
+for 3.0 fields, and curated 3.0.1 texts are a follow-up.
 
 ## Limits
 
 Known boundaries, stated plainly so nothing surprises you:
 
-- **Format scope.** SPDX 2.x only. SPDX 3.x is detected and named but not yet
-  loaded (on the roadmap); CycloneDX and Trivy-native JSON are recognized
-  with a conversion hint, not parsed. Detection is content-based.
+- **Format scope.** SPDX 2.x in full; SPDX 3.0.x as JSON-LD with the
+  core/software profiles mapped (other profiles are counted, not rendered,
+  and external document maps are not followed). CycloneDX and Trivy-native
+  JSON are recognized with a conversion hint, not parsed. Detection is
+  content-based.
 - **HTTPS or localhost required.** Cascade resolution hashes file bytes with
   `crypto.subtle`, which browsers expose only in secure contexts. Over plain
   HTTP on a non-localhost host, hashing (and therefore checksum-based
@@ -286,8 +294,9 @@ validate against a private SBOM collection without committing it:
 
 ## Roadmap
 
-- **SPDX 3.x** ingestion, next up. The internal model is already
-  element-shaped; 3.x maps into it as an additional parser.
+- **SPDX 3.x, deeper**: curated 3.0.1 field tooltips, external document
+  maps, and serializations beyond JSON-LD. Loading 3.0.x JSON works today
+  (see [Supported formats](#supported-formats)).
 - **Chromium extension** ("Open in SBOM Lens" for raw SBOMs in the browser):
   a thin shell around the same codebase, like the VS Code extension that now
   lives in [apps/vscode](apps/vscode/README.md) ("Open with SBOM Lens",
