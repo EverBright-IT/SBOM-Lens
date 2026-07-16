@@ -1,5 +1,9 @@
 node_modules
 dist
+dist-ocm
+dist-vscode
+dist-vscode-ocm
+*.vsix
 coverage
 .git
 .gitlab-ci.yml

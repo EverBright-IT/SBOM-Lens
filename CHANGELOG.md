@@ -6,6 +6,15 @@ All notable changes to SBOM Lens. The format follows
 
 ## [0.11.2] - 2026-07-15
 
+### Fixed
+- The container image builds again. It ran the root typecheck across every
+  workspace, so it depended on the VS Code extensions it does not ship, and
+  the new `@sbomlens/vscode-shell` package was missing from the manifests
+  layer: `Cannot find module '@sbomlens/vscode-shell'`. The same class of
+  break cost a release before, so the image now typechecks and builds only
+  the web app it serves. Linting, typechecking and testing every workspace
+  stays with the `test` job, which runs on the same pipeline.
+
 ### Changed
 - **[OCM Lens]** The store listing now matches SBOM Lens': a hero screenshot
   showing what the product actually does (a delivery as one tree, with the

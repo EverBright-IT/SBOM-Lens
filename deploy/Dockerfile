@@ -2,16 +2,20 @@
 # Run:    docker run --rm -p 8080:80 sbomlens
 FROM node:22-alpine AS build
 WORKDIR /app
-# Manifests first so the npm ci layer survives source-only changes.
-# ALL workspace manifests must be here — a missing one makes npm ci skip that
-# workspace's deps, and the root typecheck (all workspaces) fails later.
+# Manifests first so the npm ci layer survives source-only changes. Only the
+# workspaces this image actually ships are listed: the root, the SPDX domain,
+# and the web app.
 COPY package.json package-lock.json ./
 COPY packages/core/package.json packages/core/
 COPY apps/web/package.json apps/web/
-COPY apps/vscode/package.json apps/vscode/
 RUN npm ci
 COPY . .
-RUN npm run build
+# Deliberately NOT `npm run build`: that runs the root typecheck across every
+# workspace, which tied this image to the VS Code extensions it does not
+# contain — adding a workspace then broke the image build (twice). Linting,
+# typechecking and testing the whole repo is the `test` CI job's business and
+# runs on the same pipeline; here we typecheck and build what we serve.
+RUN npm run typecheck -w @sbomlens/web && npm run build -w @sbomlens/web
 
 FROM nginx:1.31-alpine
 # The nginx image lags the alpine security repos by a few packages between
