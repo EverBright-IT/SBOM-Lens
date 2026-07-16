@@ -260,6 +260,13 @@ npm version 0.X.0 --workspaces --include-workspace-root --no-git-tag-version
 git commit -am "release: v0.X.0" && git tag -a v0.X.0 -m "SBOM Lens 0.X.0"
 ```
 
+The tag pipeline turns the tag into a GitLab release automatically: the
+notes are that version's CHANGELOG section, the assets are both vsix files
+and the self-SBOM (served from the package registry, so the links do not
+expire). Pushing the same tag in the
+[OCM Lens product home](https://gitlab.com/everbrightit-group/ocm-lens)
+creates the matching release there.
+
 Supply-chain hygiene: every push runs an osv-scanner CVE gate, SAST, and
 secret detection; releases additionally get a Trivy image scan and ship
 their own SPDX SBOM (`sbomlens-<tag>.spdx.json`, which opens in SBOM Lens).

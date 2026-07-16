@@ -220,6 +220,76 @@ publish-ocmlens:
     - node -e "const v=require('./apps/vscode-ocm/package.json').version; if ('v'+v !== process.env.CI_COMMIT_TAG) { console.error(`vsix is ${v}, tag is ${process.env.CI_COMMIT_TAG}`); process.exit(1); }"
     - npx --yes ovsx@$OVSX_VERSION publish ocmlens.vsix
 
+# GitLab releases for the tag, on BOTH instances. Releases are project
+# metadata, not git data: the push mirror forwards the tag but never the
+# release object. The same two jobs therefore run twice: internally on the
+# tag push, and again on gitlab.com when the mirrored tag triggers the
+# pipeline there. Each run creates the release in its own project with the
+# job token; no extra credentials.
+#
+# Assets: job artifacts expire, so the vsix files and the self-SBOM go into
+# the executing project's generic package registry first (permanent URLs,
+# job-token auth). Requires the Packages feature to be enabled on the
+# project (it is by default).
+release-assets:
+  stage: deploy
+  needs: [vsix, vsix-ocm, self-sbom]
+  image: alpine:3.22
+  cache: []
+  before_script: []
+  script:
+    - apk add --no-cache curl
+    - PKG="$CI_API_V4_URL/projects/$CI_PROJECT_ID/packages/generic"
+    - 'curl -fsS --header "JOB-TOKEN: $CI_JOB_TOKEN" --upload-file sbomlens.vsix "$PKG/sbomlens/$CI_COMMIT_TAG/sbomlens.vsix"'
+    - 'curl -fsS --header "JOB-TOKEN: $CI_JOB_TOKEN" --upload-file ocmlens.vsix "$PKG/ocmlens/$CI_COMMIT_TAG/ocmlens.vsix"'
+    - 'curl -fsS --header "JOB-TOKEN: $CI_JOB_TOKEN" --upload-file "sbomlens-$CI_COMMIT_TAG.spdx.json" "$PKG/self-sbom/$CI_COMMIT_TAG/sbomlens-$CI_COMMIT_TAG.spdx.json"'
+    # Release notes: this tag's CHANGELOG section. Entries carry their own
+    # [SBOM Lens]/[OCM Lens] prefixes, so one release covers both products.
+    - awk -v ver="${CI_COMMIT_TAG#v}" 'index($0,"## ["ver"]")==1{f=1;next} /^## \[/{f=0} f' CHANGELOG.md > changelog-section.md
+    - '[ -s changelog-section.md ] || echo "_No CHANGELOG section found for this tag._" > changelog-section.md'
+    - |
+      {
+        echo "One tag, two products: SBOM Lens and OCM Lens release in lockstep from this monorepo."
+        echo
+        cat changelog-section.md
+        echo
+        echo "Install: [SBOM Lens on Open VSX](https://open-vsx.org/extension/everbright-it/sbomlens) | [OCM Lens on Open VSX](https://open-vsx.org/extension/everbright-it/ocmlens)"
+      } > release-notes.md
+  artifacts:
+    paths: [release-notes.md]
+    expire_in: 1 week
+  rules:
+    - if: $CI_COMMIT_TAG
+
+# Waits for the image gate on purpose: a release object should only appear
+# for a build that passed every blocking check. NOT manual: the decision
+# point stays the tag push (and, for the stores, the manual publish jobs).
+release-gitlab:
+  stage: publish
+  needs: [release-assets, image-scan]
+  image: registry.gitlab.com/gitlab-org/release-cli:latest
+  cache: []
+  before_script: []
+  script:
+    - echo "Creating release $CI_COMMIT_TAG on $CI_SERVER_HOST"
+  release:
+    tag_name: $CI_COMMIT_TAG
+    name: $CI_COMMIT_TAG
+    description: release-notes.md
+    assets:
+      links:
+        - name: sbomlens.vsix
+          url: '$CI_API_V4_URL/projects/$CI_PROJECT_ID/packages/generic/sbomlens/$CI_COMMIT_TAG/sbomlens.vsix'
+          link_type: package
+        - name: ocmlens.vsix
+          url: '$CI_API_V4_URL/projects/$CI_PROJECT_ID/packages/generic/ocmlens/$CI_COMMIT_TAG/ocmlens.vsix'
+          link_type: package
+        - name: 'sbomlens-$CI_COMMIT_TAG.spdx.json (self-SBOM)'
+          url: '$CI_API_V4_URL/projects/$CI_PROJECT_ID/packages/generic/self-sbom/$CI_COMMIT_TAG/sbomlens-$CI_COMMIT_TAG.spdx.json'
+          link_type: other
+  rules:
+    - if: $CI_COMMIT_TAG
+
 # Self-hosting image, pushed to the project's container registry on tags.
 docker:
   stage: deploy
