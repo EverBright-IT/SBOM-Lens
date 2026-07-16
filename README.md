@@ -10,6 +10,15 @@ package. Everything runs in your browser; files never leave your machine.
 page lives at <https://sbom-lens.everbright-it.de/>. The VS Code extension is
 on [Open VSX](https://open-vsx.org/extension/everbright-it/sbomlens).
 
+> **Two products ship from this monorepo.** This page is about **SBOM Lens**,
+> the SPDX viewer. Its sibling **OCM Lens** reads Open Component Model
+> deliveries (CTF and component archives, signature verification included)
+> and has its own product home:
+> [repository](https://gitlab.com/everbrightit-group/ocm-lens) ·
+> [landing](https://ocm-lens.everbright-it.de/) ·
+> [Open VSX](https://open-vsx.org/extension/everbright-it/ocmlens).
+> Issues for both products live in this repo's tracker.
+
 ![SBOM Lens: the Explore view with the demo cascade loaded, showing the tree with cross-document badges, the detail pane with relationships, and the document map](docs/screenshot.png)
 
 <sub>Regenerate with `npm run screenshot -w @sbomlens/web` (dev server running).</sub>
@@ -279,7 +288,10 @@ apps/vscode/          the VS Code extension: custom editor + workspace scan
 
 The repository also builds a sibling product from this codebase: **OCM Lens**,
 a viewer for Open Component Model component versions and deliveries
-([docs/ocm.md](docs/ocm.md)). It is a separate concern, and the split is
+([docs/ocm.md](docs/ocm.md); product home
+[gitlab.com/everbrightit-group/ocm-lens](https://gitlab.com/everbrightit-group/ocm-lens),
+live at [ocm-lens.everbright-it.de](https://ocm-lens.everbright-it.de/)).
+It is a separate concern, and the split is
 structural, not cosmetic: descriptor mapping, the tar reader, and gzip live
 behind `@sbomlens/core/ocm`, only OCM Lens wires them in, and a CI gate fails
 the build if a byte of that code reaches the SBOM Lens bundle. SBOM Lens is an

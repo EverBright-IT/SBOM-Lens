@@ -11,6 +11,7 @@
     "type": "git",
     "url": "https://gitlab.com/everbrightit-group/sbom-lens.git"
   },
+  "homepage": "https://sbom-lens.everbright-it.de/",
   "engines": {
     "vscode": "^1.90.0"
   },
