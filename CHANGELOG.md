@@ -4,6 +4,16 @@ All notable changes to SBOM Lens. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [SemVer](https://semver.org) (0.x — the API surface is the app itself).
 
+## [0.11.2] — 2026-07-15
+
+### Changed
+- **[OCM Lens]** The store listing now matches SBOM Lens': a hero screenshot
+  showing what the product actually does (a delivery as one tree, with the
+  OCM identity and access spec of a real artifact), the Open VSX version
+  badge, an install section, a pointer to the sibling extension, and links to
+  the OCM mapping docs and the hosted app. It shipped as text-only — the one
+  thing a store page is for is showing the thing.
+
 ## [0.11.1] — 2026-07-15
 
 ### Fixed
