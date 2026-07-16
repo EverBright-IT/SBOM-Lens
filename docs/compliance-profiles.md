@@ -88,3 +88,23 @@ profile (falls back to the builtin: NTIA minimum elements in SBOM Lens,
 OCM component essentials in OCM Lens); **Export** writes the current report
 as Markdown for audits. Up to 16 imported profiles (256 KB total) persist;
 anything beyond that stays session-only with a notice.
+
+## Builtin presets
+
+Besides the default (NTIA minimum elements for SPDX documents, OCM component
+essentials for component descriptors), the dropdown offers:
+
+- **BSI TR-03183-2 field coverage (approximation)**: the machine-checkable
+  field requirements of BSI TR-03183 part 2 v2.1.0, gated at 100%: SBOM
+  creator with contact (email or URL), timestamp, per-component version,
+  creator, licence, and hash, plus dependency enumeration; unique IDs
+  (purl/CPE) are reported informationally. It is deliberately labelled an
+  *approximation*: the TR accepts only SPDX 3.0.1+ or CycloneDX 1.6+, so
+  passing these checks measures data completeness on an SPDX 2.x document,
+  not TR conformance. What the engine cannot check (component filenames,
+  the executable/archive/structured properties, SHA-512 as the algorithm,
+  source URIs, the completeness indication) is listed in the profile's own
+  description, so exported reports carry the caveat with them.
+
+Builtin presets are code, not stored data: they cannot be removed, and the
+selection persists per product.

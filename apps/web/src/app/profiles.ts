@@ -1,5 +1,5 @@
 import type { ComplianceProfile, SpecInfo } from '@sbomlens/core';
-import { MAX_PROFILE_BYTES, NTIA_PROFILE, validateProfile } from '@sbomlens/core';
+import { BSI_TR_03183_PROFILE, MAX_PROFILE_BYTES, NTIA_PROFILE, validateProfile } from '@sbomlens/core';
 import { OCM_ESSENTIALS_PROFILE } from '@sbomlens/core/ocm';
 import { HAS_DELIVERIES, pref } from './brand';
 import { host } from '../host/adapter';
@@ -60,12 +60,13 @@ export function initProfiles(): void {
   const active = host().readPref(ACTIVE_KEY);
   if (
     active &&
-    (active === 'builtin:ntia' ||
+    (active.startsWith('builtin:') ||
       restored.some((p) => p.id === active) ||
       // Catalog profiles arrive async after this — keep the selection; the
       // UI falls back to NTIA until the profile is (re)loaded.
       active.startsWith('catalog:'))
   ) {
+    // `builtin:ntia` is the persisted spelling of "the model's default".
     actions.setActiveProfileId(active === 'builtin:ntia' ? null : active);
   }
 }
@@ -172,11 +173,23 @@ export function builtinProfileName(model: SpecInfo['model']): string {
   return builtinProfile(model).name;
 }
 
+/**
+ * Extra selectable builtins beyond the model default. Keyed by a stable
+ * `builtin:` id — never persisted as profile data, never removable.
+ */
+export function extraBuiltinProfiles(model: SpecInfo['model']): { id: string; profile: ComplianceProfile }[] {
+  if (HAS_DELIVERIES && model === 'ocm') return [];
+  return [{ id: 'builtin:bsi-tr-03183', profile: BSI_TR_03183_PROFILE }];
+}
+
 /** Resolves the active profile, falling back to the model's builtin. */
 export function useActiveProfile(model: SpecInfo['model']): ComplianceProfile {
   const activeId = useAppStore((s) => s.activeProfileId);
   const profiles = useAppStore((s) => s.profiles);
   if (activeId === null) return builtinProfile(model);
+  if (activeId.startsWith('builtin:')) {
+    return extraBuiltinProfiles(model).find((b) => b.id === activeId)?.profile ?? builtinProfile(model);
+  }
   return profiles.find((p) => p.id === activeId)?.profile ?? builtinProfile(model);
 }
 

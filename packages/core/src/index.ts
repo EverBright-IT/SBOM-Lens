@@ -107,6 +107,7 @@ export { sniffProfile, validateProfile } from './profile/validate';
 export type { CoverageStat, ProfileCheckResult, ProfileReport } from './profile/evaluate';
 export { evaluateProfile } from './profile/evaluate';
 export { NTIA_PROFILE } from './profile/ntia';
+export { BSI_TR_03183_PROFILE } from './profile/bsi';
 export { profileReportToMarkdown } from './profile/markdown';
 
 export type { SpecFieldDoc } from './spec/spdx23-field-docs';

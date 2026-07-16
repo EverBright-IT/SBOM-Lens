@@ -8,7 +8,13 @@ import {
   refKey,
 } from '@sbomlens/core';
 import { HAS_DELIVERIES } from '../../app/brand';
-import { builtinProfileName, removeProfile, setActiveProfile, useActiveProfile } from '../../app/profiles';
+import {
+  builtinProfileName,
+  extraBuiltinProfiles,
+  removeProfile,
+  setActiveProfile,
+  useActiveProfile,
+} from '../../app/profiles';
 import { useAppStore } from '../../app/store';
 import { host } from '../../host/adapter';
 import { CheckIcon, CloseIcon } from '../icons';
@@ -149,15 +155,21 @@ function QualitySection({ ws, loaded }: { ws: WorkspaceState; loaded: LoadedDocu
     );
   };
 
+  const extraBuiltins = extraBuiltinProfiles(loaded.document.spec.model);
   const sectionActions = (
     <>
-      {profiles.length > 0 && (
+      {(profiles.length > 0 || extraBuiltins.length > 0) && (
         <select
           value={activeProfileId ?? 'builtin'}
           onChange={(e) => setActiveProfile(e.target.value === 'builtin' ? null : e.target.value)}
           className="max-w-44 rounded border border-slate-200 bg-transparent px-1 py-0.5 text-[11px] text-slate-600 outline-none focus:border-accent-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
         >
           <option value="builtin">{builtinProfileName(loaded.document.spec.model)}</option>
+          {extraBuiltins.map((b) => (
+            <option key={b.id} value={b.id}>
+              {b.profile.name}
+            </option>
+          ))}
           {profiles.map((p) => (
             <option key={p.id} value={p.id}>
               {p.profile.name}
@@ -166,7 +178,7 @@ function QualitySection({ ws, loaded }: { ws: WorkspaceState; loaded: LoadedDocu
           ))}
         </select>
       )}
-      {activeProfileId !== null && (
+      {activeProfileId !== null && !activeProfileId.startsWith('builtin:') && (
         <button
           type="button"
           title="Remove this imported profile"
