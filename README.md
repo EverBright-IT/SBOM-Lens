@@ -1,4 +1,4 @@
-![SBOM Lens — a fast, minimal viewer for SPDX SBOMs](docs/banner.png)
+![SBOM Lens: a fast, minimal viewer for SPDX SBOMs](docs/banner.png)
 
 # SBOM Lens
 
@@ -6,11 +6,11 @@ Drop a release-level SPDX document plus its component SBOMs and navigate the who
 supply chain as one tree: release → component → sub-component → container image →
 package. Everything runs in your browser; files never leave your machine.
 
-**Try it:** <https://sbom-lens.everbright-it.de/app/> — the project landing
+**Try it:** <https://sbom-lens.everbright-it.de/app/>. The project landing
 page lives at <https://sbom-lens.everbright-it.de/>. The VS Code extension is
 on [Open VSX](https://open-vsx.org/extension/everbright-it/sbomlens).
 
-![SBOM Lens — the Explore view with the demo cascade loaded: tree with cross-document badges, detail pane with relationships, document map](docs/screenshot.png)
+![SBOM Lens: the Explore view with the demo cascade loaded, showing the tree with cross-document badges, the detail pane with relationships, and the document map](docs/screenshot.png)
 
 <sub>Regenerate with `npm run screenshot -w @sbomlens/web` (dev server running).</sub>
 
@@ -19,7 +19,7 @@ on [Open VSX](https://open-vsx.org/extension/everbright-it/sbomlens).
 - **Cascading documents are first-class.** SPDX 2.3 links documents via
   `ExternalDocumentRef` and cross-document relationships
   (`DocumentRef-X:SPDXRef-Y`). SBOM Lens resolves those references across every
-  file you load — by checksum first, then namespace — and renders one continuous,
+  file you load, by checksum first and then namespace, and renders one continuous,
   lazily-expanded tree across document boundaries. Unresolved references appear as
   actionable placeholders: fetch them by URL, drop the file, or confirm a
   suggested match.
@@ -28,7 +28,7 @@ on [Open VSX](https://open-vsx.org/extension/everbright-it/sbomlens).
   a prebuilt index with ranked results. No pagination, no jank.
 - **Private by design.** A static, client-only app. SBOMs are parsed locally and
   never uploaded. URL fetching only happens when you explicitly ask for it.
-- **Honest about dirty data.** Real SBOMs have quirks — checksum spacing variants,
+- **Honest about dirty data.** Real SBOMs have quirks: checksum spacing variants,
   duplicate SPDXIDs, references without relationships, unknown relationship
   types, versions hiding in purls. The parser tolerates all of it and reports
   what it found as per-document diagnostics instead of refusing to load.
@@ -56,14 +56,14 @@ Click **Load example** for a bundled four-document demo cascade, or drop your ow
 | Open ▸ Files / Folder | Standard pickers |
 | Open ▸ From URL | Fetches a document over HTTP(S), e.g. from a GitLab generic package registry |
 | Placeholder ▸ Fetch | Each unresolved reference offers a one-click fetch of its recorded URL |
-| **Fetch all** (status bar) | Downloads every referenced document **recursively** until the cascade is complete — one click for the full tree instead of one per placeholder |
+| **Fetch all** (status bar) | Downloads every referenced document **recursively** until the cascade is complete. One click for the full tree instead of one per placeholder |
 
 **Access tokens:** for private registries, add a per-host token in the URL dialog
 (GitLab `PRIVATE-TOKEN` or `Authorization: Bearer`). Tokens live in
-`sessionStorage` only — they die with the tab and are never persisted.
+`sessionStorage` only: they die with the tab and are never persisted.
 
 **CORS:** the browser can only fetch URLs whose server allows cross-origin
-requests. When it doesn't, SBOM Lens says so plainly — download the file and drop
+requests. When it doesn't, SBOM Lens says so plainly. Download the file and drop
 it in instead, or self-host the viewer behind the same reverse proxy as your
 registry so requests are same-origin.
 
@@ -71,15 +71,15 @@ registry so requests are same-origin.
 
 For every `ExternalDocumentRef` of every loaded document, in order of precedence:
 
-1. **Checksum** — the reference's SHA-1 matches a loaded file's bytes. The
+1. **Checksum**: the reference's SHA-1 matches a loaded file's bytes. The
    strongest signal, and the only one that works when reference URIs are download
    URLs rather than namespaces.
-2. **Namespace** — the reference URI equals a loaded document's
+2. **Namespace**: the reference URI equals a loaded document's
    `documentNamespace` (the spec-blessed path).
-3. **Manual** — you bind a file to the reference yourself.
+3. **Manual**: you bind a file to the reference yourself.
 
 Name similarity ("looks like `acme-auth-service`") is only ever shown as a
-one-click *suggestion* — never auto-bound, because DocumentRef names drift from
+one-click *suggestion*, never auto-bound, because DocumentRef names drift from
 actual file versions in the wild.
 
 References that no relationship points into (scan reports, attestations, release
@@ -90,20 +90,20 @@ documents** without nagging you to resolve them.
 
 | View | What it answers |
 | --- | --- |
-| **Explore** | "What does this release contain?" — the cascading tree, detail pane, and raw source. Shift+click a chevron (or press `*`) to expand an entire subtree including resolved sub-SBOMs; the funnel next to the search box filters the tree in place — matches plus their ancestors, everything else hidden |
-| **Map** | "How is this cascade wired?" — the document topology as a collapsible left-to-right tree: documents as nodes, resolved references as method-styled edges, missing documents as dashed stubs. Nodes fold their subtree behind a `+N` badge (large workspaces start folded), search force-reveals matches, pan/zoom, click selects, double-click jumps into Explore |
-| **Inventory** | "Give me the parts list as a file." — one sortable table across all documents, filtered by the same search + facet chips (documents, kinds, purposes, licenses), exportable as CSV/JSON |
-| **Conflicts** | "Which packages ship in more than one version?" — grouped by purl identity across the whole cascade, each occurrence one click from its place in the tree |
-| **Diff** | "What changed between these two releases?" — added/removed/version-changed packages between two cascades (each side is a document plus everything reachable through its resolved references), copyable as Markdown for release notes |
+| **Explore** | "What does this release contain?" The cascading tree, detail pane, and raw source. Shift+click a chevron (or press `*`) to expand an entire subtree including resolved sub-SBOMs; the funnel next to the search box filters the tree in place, leaving matches plus their ancestors and hiding everything else |
+| **Map** | "How is this cascade wired?" The document topology as a collapsible left-to-right tree: documents as nodes, resolved references as method-styled edges, missing documents as dashed stubs. Nodes fold their subtree behind a `+N` badge (large workspaces start folded), search force-reveals matches, pan/zoom, click selects, double-click jumps into Explore |
+| **Inventory** | "Give me the parts list as a file." One sortable table across all documents, filtered by the same search + facet chips (documents, kinds, purposes, licenses), exportable as CSV/JSON |
+| **Conflicts** | "Which packages ship in more than one version?" Grouped by purl identity across the whole cascade, each occurrence one click from its place in the tree |
+| **Diff** | "What changed between these two releases?" Added, removed and version-changed packages between two cascades (each side is a document plus everything reachable through its resolved references), copyable as Markdown for release notes |
 
 Each document's detail pane additionally shows a **quality report** oriented on
 the NTIA minimum elements: author/timestamp/namespace/relationship checks, plus
-per-package coverage of versions, suppliers, unique IDs, checksums, and licenses
-— factual numbers, no invented score. Organizations can go further with
+per-package coverage of versions, suppliers, unique IDs, checksums, and licenses.
+Factual numbers, no invented score. Organizations can go further with
 **custom compliance profiles**: a small JSON file with your own minimum
 elements (field presence, patterns, coverage thresholds, recency) that imports
 per drag&drop, via the deployment catalog, or from `.sbomlens/profile.json`
-in a VS Code workspace — reports export as Markdown. See
+in a VS Code workspace. Reports export as Markdown. See
 [docs/compliance-profiles.md](docs/compliance-profiles.md).
 
 ## Keyboard
@@ -121,16 +121,16 @@ in a VS Code workspace — reports export as Markdown. See
 
 ## Supported formats
 
-- **SPDX 2.x tag-value** (`.spdx`), **JSON**, and **YAML** — fully supported.
+- **SPDX 2.x tag-value** (`.spdx`), **JSON**, and **YAML**: fully supported.
   Detection is content-based, never by file extension.
-- **SPDX 3.x** — detected and reported; support is on the roadmap.
-- **CycloneDX** and **Trivy-native JSON** — recognized with a pointer to the
+- **SPDX 3.x**: detected and reported; support is on the roadmap.
+- **CycloneDX** and **Trivy-native JSON**: recognized with a pointer to the
   right conversion (`trivy --format spdx-json`, `cyclonedx convert`).
 
-The detail views carry the spec with them: hover the ⓘ next to a field to read
-the SPDX 2.3 specification's own documentation for it, distilled at build time
-from the official JSON schema (`npm run generate:spec-docs`) — click the ⓘ to
-open that field's section in the rendered specification.
+The detail views carry the spec with them: hover the info icon next to a field
+to read the SPDX 2.3 specification's own documentation for it, distilled at
+build time from the official JSON schema (`npm run generate:spec-docs`). Click
+the icon to open that field's section in the rendered specification.
 
 ## Self-hosting
 
@@ -145,7 +145,7 @@ docker run --rm -p 8080:80 sbomlens
 ```
 
 The bundled nginx config ships hardened security headers (CSP,
-`nosniff`, `frame-ancestors 'none'`, …) by default — see
+`nosniff`, `frame-ancestors 'none'`) by default. See
 [deploy/nginx.conf](deploy/nginx.conf) for what the CSP allows and why.
 Serve the app over **HTTPS** (or localhost): the SHA-1 hashing that drives
 cascade resolution uses `crypto.subtle`, which browsers only expose in
@@ -153,15 +153,15 @@ secure contexts. When proxying private registries through the same origin,
 scope the server-side token read-only and restrict who can reach the proxy
 (notes in the config).
 
-The build uses relative asset paths, so it works at any base path — GitLab or
-GitHub Pages subpaths included. The app is a PWA: once visited, it keeps
+The build uses relative asset paths, so it works at any base path, including
+GitLab or GitHub Pages subpaths. The app is a PWA: once visited, it keeps
 working offline (including the bundled examples).
 
 ### Preconfigured SBOM catalog
 
 A self-hosted instance can ship a curated list of SBOMs so users just open the
-viewer and analyze — no file hunting. Place a `sbomlens.catalog.json` next to
-`index.html`:
+viewer and analyze, without hunting for files. Place a `sbomlens.catalog.json`
+next to `index.html`:
 
 ```json
 {
@@ -180,7 +180,7 @@ viewer and analyze — no file hunting. Place a `sbomlens.catalog.json` next to
 
 Entries appear on the start screen and in the **Open** menu; `loadOnStart`
 sources load automatically. With `resolveRefs: true` you only list the root
-document — after it loads, every referenced SBOM is fetched recursively, so one
+document. After it loads, every referenced SBOM is fetched recursively, so one
 click gives users the complete tree for analysis. The catalog is only ever read
 from this fixed same-origin path (never from a URL parameter), and only
 http(s)/relative URLs are accepted.
@@ -189,9 +189,9 @@ http(s)/relative URLs are accepted.
 requests unless the server sends CORS headers, and GitLab's API does not. The
 robust pattern is a **same-origin reverse proxy**: the bundled
 [deploy/nginx.conf](deploy/nginx.conf) contains a commented sample that proxies
-`/sboms/…` to a GitLab generic-package registry and injects a **read-only**
+`/sboms/...` to a GitLab generic-package registry and injects a **read-only**
 token server-side. Users need no tokens, nothing is cross-origin, and no secret
-ever appears in the catalog file — never put tokens into
+ever appears in the catalog file. Never put tokens into
 `sbomlens.catalog.json`. Direct absolute URLs also work where the server allows
 CORS; authentication then uses the per-host session tokens in the URL dialog.
 
@@ -214,17 +214,17 @@ git commit -am "release: v0.X.0" && git tag -a v0.X.0 -m "SBOM Lens 0.X.0"
 
 Supply-chain hygiene: every push runs an osv-scanner CVE gate, SAST, and
 secret detection; releases additionally get a Trivy image scan and ship
-their own SPDX SBOM (`sbomlens-<tag>.spdx.json` — open it in SBOM Lens).
+their own SPDX SBOM (`sbomlens-<tag>.spdx.json`, which opens in SBOM Lens).
 Dependency updates arrive as Renovate MRs. Details: [docs/ci-security.md](docs/ci-security.md).
 
 The repository is an npm workspace, layered deliberately:
 
 ```
-packages/core/        @sbomlens/core — framework-free domain: parsers
+packages/core/        @sbomlens/core, the framework-free domain: parsers
                       (tag-value/JSON/YAML), workspace, reference resolution,
                       graph indexes, tree derivation, search, analysis
                       (inventory/conflicts/diff/quality), generated spec docs.
-                      Zero React imports — enforced by ESLint.
+                      Zero React imports, enforced by ESLint.
 apps/web/src/worker/  a thin Web Worker shell around core parsing (hashing +
                       parsing off the UI thread; yaml loads only here).
 apps/web/src/app/     zustand store, ingest pipeline (files / folders / URLs),
@@ -244,7 +244,7 @@ a viewer for Open Component Model component versions and deliveries
 structural, not cosmetic: descriptor mapping, the tar reader, and gzip live
 behind `@sbomlens/core/ocm`, only OCM Lens wires them in, and a CI gate fails
 the build if a byte of that code reaches the SBOM Lens bundle. SBOM Lens is an
-SPDX viewer — it recognizes a component descriptor only well enough to tell
+SPDX viewer: it recognizes a component descriptor only well enough to tell
 you it isn't an SBOM.
 
 `packages/core/fixtures/` contains synthetic documents reproducing every
@@ -255,9 +255,9 @@ validate against a private SBOM collection without committing it:
 
 ## Roadmap
 
-- **SPDX 3.x** ingestion — next up. The internal model is already
+- **SPDX 3.x** ingestion, next up. The internal model is already
   element-shaped; 3.x maps into it as an additional parser.
-- **Chromium extension** ("Open in SBOM Lens" for raw SBOMs in the browser) —
+- **Chromium extension** ("Open in SBOM Lens" for raw SBOMs in the browser):
   a thin shell around the same codebase, like the VS Code extension that now
   lives in [apps/vscode](apps/vscode/README.md) ("Open with SBOM Lens",
   workspace scanning; published on
@@ -266,8 +266,8 @@ validate against a private SBOM collection without committing it:
   [docs/extension-architecture.md](docs/extension-architecture.md).
 - **CycloneDX** read support via the same adapter seam
 - Workspace persistence (File System Access API), shareable deep links
-  (deep links require addressable sources — catalog/URL-loaded documents)
-- Optional overlays (vulnerabilities) — kept out of the core model
+  (deep links require addressable sources: catalog or URL-loaded documents)
+- Optional overlays (vulnerabilities), kept out of the core model
 
 ## Repository & mirrors
 
@@ -277,12 +277,12 @@ repositories:
 - GitLab (canonical public repo): <https://gitlab.com/everbrightit-group/sbom-lens>
 - GitHub mirror: <https://github.com/EverBrightIT/SBOM-Lens>
 
-Issues and contributions are welcome on either platform — maintainers sync them
+Issues and contributions are welcome on either platform; maintainers sync them
 into the primary repository.
 
 ## License
 
-[Apache-2.0](LICENSE) © EverBright IT GmbH · Maintained by
+[Apache-2.0](LICENSE) © EverBright IT GmbH. Maintained by
 [EverBright IT GmbH](https://everbright-it.de). Field documentation shown in
 the UI is derived from the [SPDX specification](https://spdx.dev) (CC-BY-3.0,
 © The Linux Foundation and SPDX contributors).
