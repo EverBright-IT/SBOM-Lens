@@ -12,6 +12,8 @@ import { NO_VERSION, packageKey } from './conflicts';
 
 export interface DiffSide {
   versions: string[];
+  /** Normalized checksum fingerprints (`ALGO:hex`), sorted; may be empty. */
+  digests: string[];
   occurrences: VersionOccurrence[];
 }
 
@@ -21,11 +23,20 @@ export interface DiffEntry {
   side: DiffSide;
 }
 
+export type DiffReason = 'version' | 'digest';
+
 export interface DiffChange {
   key: string;
   name: string;
   a: DiffSide;
   b: DiffSide;
+  /**
+   * Why this entry counts as changed. 'digest' alone is the interesting
+   * delivery case: same version, different bytes (rebuild, repack, or
+   * tampering). Digests are only compared when BOTH sides carry at least
+   * one checksum — a side without checksums yields no digest verdict.
+   */
+  reasons: DiffReason[];
 }
 
 export interface CascadeDiff {
@@ -65,6 +76,7 @@ export function reachableDocs(
 interface SideEntry {
   name: string;
   versions: Set<string>;
+  digests: Set<string>;
   occurrences: VersionOccurrence[];
 }
 
@@ -78,10 +90,13 @@ function collectSide(ws: WorkspaceState, docIds: readonly DocumentId[]): Map<str
       const key = packageKey(element);
       let entry = entries.get(key);
       if (!entry) {
-        entry = { name: element.name, versions: new Set(), occurrences: [] };
+        entry = { name: element.name, versions: new Set(), digests: new Set(), occurrences: [] };
         entries.set(key, entry);
       }
       entry.versions.add(element.version ?? NO_VERSION);
+      for (const checksum of element.checksums ?? []) {
+        entry.digests.add(`${checksum.algorithm.toUpperCase()}:${checksum.value.toLowerCase()}`);
+      }
       entry.occurrences.push({ element, docId, docName: loaded.document.name });
     }
   }
@@ -106,8 +121,17 @@ export function diffCascades(ws: WorkspaceState, aRoot: DocumentId, bRoot: Docum
     const other = b.get(key);
     if (!other) {
       removed.push({ key, name: entry.name, side: toSide(entry) });
-    } else if (!sameVersions(entry.versions, other.versions)) {
-      changed.push({ key, name: entry.name, a: toSide(entry), b: toSide(other) });
+      continue;
+    }
+    const reasons: DiffReason[] = [];
+    if (!sameSet(entry.versions, other.versions)) reasons.push('version');
+    // Same version but different bytes is the delivery-grade signal; only
+    // judged when both sides actually carry checksums.
+    if (entry.digests.size > 0 && other.digests.size > 0 && !sameSet(entry.digests, other.digests)) {
+      reasons.push('digest');
+    }
+    if (reasons.length > 0) {
+      changed.push({ key, name: entry.name, a: toSide(entry), b: toSide(other), reasons });
     } else {
       unchanged++;
     }
@@ -123,11 +147,12 @@ export function diffCascades(ws: WorkspaceState, aRoot: DocumentId, bRoot: Docum
 function toSide(entry: SideEntry): DiffSide {
   return {
     versions: [...entry.versions].sort((x, y) => x.localeCompare(y, undefined, { numeric: true })),
+    digests: [...entry.digests].sort(),
     occurrences: entry.occurrences,
   };
 }
 
-function sameVersions(a: ReadonlySet<string>, b: ReadonlySet<string>): boolean {
+function sameSet(a: ReadonlySet<string>, b: ReadonlySet<string>): boolean {
   if (a.size !== b.size) return false;
   for (const v of a) if (!b.has(v)) return false;
   return true;
@@ -138,7 +163,7 @@ export function diffToMarkdown(diff: CascadeDiff, aName: string, bName: string):
   const lines = [
     `## SBOM diff: ${aName} → ${bName}`,
     '',
-    `${diff.added.length} added · ${diff.removed.length} removed · ${diff.changed.length} version-changed · ${diff.unchanged} unchanged`,
+    `${diff.added.length} added · ${diff.removed.length} removed · ${diff.changed.length} changed · ${diff.unchanged} unchanged`,
     '',
   ];
   const section = (title: string, entries: readonly DiffEntry[]) => {
@@ -150,9 +175,15 @@ export function diffToMarkdown(diff: CascadeDiff, aName: string, bName: string):
   section('Added', diff.added);
   section('Removed', diff.removed);
   if (diff.changed.length > 0) {
-    lines.push(`### Version changes (${diff.changed.length})`, '');
+    lines.push(`### Changed (${diff.changed.length})`, '');
     for (const change of diff.changed) {
-      lines.push(`- **${change.name}** ${change.a.versions.join(' / ')} → ${change.b.versions.join(' / ')}`);
+      const versionPart = `${change.a.versions.join(' / ')} → ${change.b.versions.join(' / ')}`;
+      const digestOnly = !change.reasons.includes('version');
+      lines.push(
+        digestOnly
+          ? `- **${change.name}** ${change.a.versions.join(' / ')} (content changed, same version)`
+          : `- **${change.name}** ${versionPart}${change.reasons.includes('digest') ? ' (content changed)' : ''}`,
+      );
     }
     lines.push('');
   }

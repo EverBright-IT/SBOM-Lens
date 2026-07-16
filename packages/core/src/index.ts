@@ -90,7 +90,7 @@ export {
 } from './analysis/inventory';
 export type { ConflictGroup, VersionGroup, VersionOccurrence } from './analysis/conflicts';
 export { NO_VERSION, findVersionConflicts, packageKey } from './analysis/conflicts';
-export type { CascadeDiff, DiffChange, DiffEntry, DiffSide } from './analysis/diff';
+export type { CascadeDiff, DiffChange, DiffEntry, DiffReason, DiffSide } from './analysis/diff';
 export { diffCascades, diffToMarkdown, reachableDocs } from './analysis/diff';
 export type { QualityReport } from './analysis/quality';
 export { documentIssues, documentQuality } from './analysis/quality';

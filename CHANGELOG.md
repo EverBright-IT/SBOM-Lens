@@ -4,6 +4,29 @@ All notable changes to SBOM Lens. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [SemVer](https://semver.org) (0.x: the API surface is the app itself).
 
+## [0.14.0] - 2026-07-16
+
+### Added
+- **Diff sees content changes, not just version strings.** The Diff view now
+  compares checksum fingerprints alongside versions: a package that ships
+  the same version with different bytes (a rebuild, repack, or tampering)
+  appears as changed with a *digest* chip, and the tooltip carries both
+  fingerprints. Judged conservatively: digests are only compared when both
+  sides actually declare checksums. Works for SPDX checksums and OCM digests
+  alike; the Markdown export annotates "(content changed, same version)".
+- **[OCM Lens] Structural lint for component descriptors.** Every descriptor
+  is checked against the spec's structural rules, reported as warnings
+  (`OCM_SCHEMA_*`): missing provider, names outside the spec pattern,
+  non-semver versions, bad relations, typeless access nodes, incomplete
+  digest triples, duplicate artifact identities, nameless labels, and
+  unparseable timestamps. The document loads regardless; the lint shows what
+  a stricter consumer would trip over.
+
+### Fixed
+- Same-named OCM artifacts that differ only in `extraIdentity` (e.g. one
+  config per platform) no longer merge into one identity in the Conflicts
+  and Diff views.
+
 ## [0.13.0] - 2026-07-16
 
 ### Added

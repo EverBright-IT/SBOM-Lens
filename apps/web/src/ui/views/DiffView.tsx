@@ -1,7 +1,7 @@
 import { useVirtualizer } from '@tanstack/react-virtual';
 import clsx from 'clsx';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { CascadeDiff, DocumentId, ElementId } from '@sbomlens/core';
+import type { CascadeDiff, DiffChange, DocumentId, ElementId } from '@sbomlens/core';
 import { diffCascades, diffToMarkdown, workspaceRoots } from '@sbomlens/core';
 import { useAppStore } from '../../app/store';
 import { revealElement } from '../navigate';
@@ -14,13 +14,15 @@ const COLUMNS_MIN_WIDTH = 1024;
 type DiffRow =
   | { kind: 'header'; label: string; count: number }
   | { kind: 'added' | 'removed'; name: string; versions: string; elementId: ElementId }
-  | { kind: 'changed'; name: string; from: string; to: string; elementId: ElementId };
+  | { kind: 'changed'; name: string; from: string; to: string; digestOnly: boolean; digestTitle?: string; elementId: ElementId };
 
 interface DiffCell {
   name: string;
   versions?: string;
   from?: string;
   to?: string;
+  digestOnly?: boolean;
+  digestTitle?: string;
   elementId: ElementId;
 }
 
@@ -79,13 +81,15 @@ export function DiffView() {
     if (!diff) return [];
     const result: DiffRow[] = [];
     if (diff.changed.length > 0) {
-      result.push({ kind: 'header', label: 'Version changes', count: diff.changed.length });
+      result.push({ kind: 'header', label: 'Changed', count: diff.changed.length });
       for (const change of diff.changed) {
         result.push({
           kind: 'changed',
           name: change.name,
           from: change.a.versions.join(' / '),
           to: change.b.versions.join(' / '),
+          digestOnly: !change.reasons.includes('version'),
+          digestTitle: digestTitle(change),
           elementId: change.b.occurrences[0]!.element.id,
         });
       }
@@ -121,13 +125,15 @@ export function DiffView() {
     return [
       {
         key: 'changed',
-        label: 'Version changes',
+        label: 'Changed',
         marker: '~',
         markerClass: 'text-amber-600 dark:text-amber-400',
         cells: diff.changed.map((change) => ({
           name: change.name,
           from: change.a.versions.join(' / '),
           to: change.b.versions.join(' / '),
+          digestOnly: !change.reasons.includes('version'),
+          digestTitle: digestTitle(change),
           elementId: change.b.occurrences[0]!.element.id,
         })),
       },
@@ -301,9 +307,17 @@ export function DiffView() {
                         </span>
                         <span className="truncate">{cell.name}</span>
                         {col.key === 'changed' ? (
-                          <span className="shrink-0 font-mono text-xs text-slate-500 dark:text-slate-400">
-                            {cell.from} <span className="text-slate-300 dark:text-slate-600">→</span> {cell.to}
-                          </span>
+                          cell.digestOnly ? (
+                            <span className="flex shrink-0 items-baseline gap-1.5 font-mono text-xs text-slate-500 dark:text-slate-400">
+                              {cell.from}
+                              <DigestChip title={cell.digestTitle} />
+                            </span>
+                          ) : (
+                            <span className="flex shrink-0 items-baseline gap-1.5 font-mono text-xs text-slate-500 dark:text-slate-400">
+                              {cell.from} <span className="text-slate-300 dark:text-slate-600">→</span> {cell.to}
+                              {cell.digestTitle !== undefined && <DigestChip title={cell.digestTitle} />}
+                            </span>
+                          )
                         ) : (
                           <span className="shrink-0 font-mono text-xs text-slate-400">{cell.versions}</span>
                         )}
@@ -345,9 +359,17 @@ export function DiffView() {
                     </span>
                     <span className="truncate">{row.name}</span>
                     {row.kind === 'changed' ? (
-                      <span className="shrink-0 font-mono text-xs text-slate-500 dark:text-slate-400">
-                        {row.from} <span className="text-slate-300 dark:text-slate-600">→</span> {row.to}
-                      </span>
+                      row.digestOnly ? (
+                        <span className="flex shrink-0 items-baseline gap-1.5 font-mono text-xs text-slate-500 dark:text-slate-400">
+                          {row.from}
+                          <DigestChip title={row.digestTitle} />
+                        </span>
+                      ) : (
+                        <span className="flex shrink-0 items-baseline gap-1.5 font-mono text-xs text-slate-500 dark:text-slate-400">
+                          {row.from} <span className="text-slate-300 dark:text-slate-600">→</span> {row.to}
+                          {row.digestTitle !== undefined && <DigestChip title={row.digestTitle} />}
+                        </span>
+                      )
                     ) : (
                       <span className="shrink-0 font-mono text-xs text-slate-400">{row.versions}</span>
                     )}
@@ -358,4 +380,27 @@ export function DiffView() {
       </div>
     </div>
   );
+}
+
+/**
+ * Marks an entry whose bytes changed: for digest-only changes the version
+ * stayed the same, which is exactly the case worth a second look (rebuild,
+ * repack, or tampering). The tooltip carries the shortened fingerprints.
+ */
+function DigestChip({ title }: { title?: string }) {
+  return (
+    <span
+      title={title ?? 'The checksums differ between the two sides.'}
+      className="inline-flex shrink-0 cursor-help items-center rounded border border-amber-300 px-1 text-[10px] text-amber-700 dark:border-amber-700 dark:text-amber-400"
+    >
+      digest
+    </span>
+  );
+}
+
+function digestTitle(change: DiffChange): string | undefined {
+  if (!change.reasons.includes('digest')) return undefined;
+  const short = (list: readonly string[]) =>
+    list.map((d) => `${d.slice(0, d.indexOf(':') + 1)}${d.slice(d.indexOf(':') + 1, d.indexOf(':') + 13)}...`).join(', ') || 'none';
+  return `Content changed: ${short(change.a.digests)} vs. ${short(change.b.digests)}`;
 }

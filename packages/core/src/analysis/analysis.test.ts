@@ -3,7 +3,7 @@ import { emptyFacets } from '../graph/search';
 import { loadFixtureDocument, loadedFromText } from '../test-fixtures';
 import type { WorkspaceState } from '../workspace/workspace';
 import { addDocument, emptyWorkspace } from '../workspace/workspace';
-import { findVersionConflicts } from './conflicts';
+import { findVersionConflicts, packageKey } from './conflicts';
 import { diffCascades, diffToMarkdown, reachableDocs } from './diff';
 import { inventoryRows, inventoryToCsv, sortInventory } from './inventory';
 import { documentQuality } from './quality';
@@ -135,6 +135,82 @@ describe('cascade diff', () => {
     const markdown = diffToMarkdown(diff, 'release-1', 'release-2');
     expect(markdown).toContain('### Added (1)');
     expect(markdown).toContain('- **foo** 1.0.0 → 1.1.0');
+  });
+
+  const checksumDoc = (name: string, packages: [name: string, version: string, sha: string][]) => {
+    const lines = [
+      'SPDXVersion: SPDX-2.3',
+      'SPDXID: SPDXRef-DOCUMENT',
+      `DocumentName: ${name}`,
+      `DocumentNamespace: https://example.org/spdxdocs/${name}`,
+    ];
+    packages.forEach(([pkgName, version, sha], i) => {
+      lines.push(
+        `PackageName: ${pkgName}`,
+        `SPDXID: SPDXRef-P${i}`,
+        `PackageVersion: ${version}`,
+        'PackageDownloadLocation: NOASSERTION',
+        `PackageChecksum: SHA256: ${sha}`,
+      );
+    });
+    return lines.join('\n') + '\n';
+  };
+
+  it('flags same version but different bytes as a digest-only change', () => {
+    const v1 = loadedFromText('d1.spdx', checksumDoc('deliv-1', [['gateway', '2.1.0', 'aa'.repeat(32)]]));
+    const v2 = loadedFromText('d2.spdx', checksumDoc('deliv-2', [['gateway', '2.1.0', 'bb'.repeat(32)]]));
+    let ws = addDocument(emptyWorkspace, v1).workspace;
+    ws = addDocument(ws, v2).workspace;
+    const [aId, bId] = ws.order;
+
+    const diff = diffCascades(ws, aId!, bId!);
+    expect(diff.changed).toHaveLength(1);
+    expect(diff.changed[0]!.reasons).toEqual(['digest']);
+    expect(diff.changed[0]!.a.digests).toEqual([`SHA256:${'aa'.repeat(32)}`]);
+    expect(diff.unchanged).toBe(0);
+
+    const markdown = diffToMarkdown(diff, 'deliv-1', 'deliv-2');
+    expect(markdown).toContain('(content changed, same version)');
+  });
+
+  it('reports both reasons when version AND bytes changed', () => {
+    const v1 = loadedFromText('d1.spdx', checksumDoc('deliv-1', [['gateway', '2.1.0', 'aa'.repeat(32)]]));
+    const v2 = loadedFromText('d2.spdx', checksumDoc('deliv-2', [['gateway', '2.2.0', 'bb'.repeat(32)]]));
+    let ws = addDocument(emptyWorkspace, v1).workspace;
+    ws = addDocument(ws, v2).workspace;
+    const diff = diffCascades(ws, ws.order[0]!, ws.order[1]!);
+    expect(diff.changed[0]!.reasons).toEqual(['version', 'digest']);
+  });
+
+  it('never judges digests when one side has no checksums', () => {
+    const v1 = loadedFromText('d1.spdx', checksumDoc('deliv-1', [['gateway', '2.1.0', 'aa'.repeat(32)]]));
+    const v2 = loadedFromText('d2.spdx', tagValueDoc('deliv-2', [['gateway', '2.1.0']]));
+    let ws = addDocument(emptyWorkspace, v1).workspace;
+    ws = addDocument(ws, v2).workspace;
+    const diff = diffCascades(ws, ws.order[0]!, ws.order[1]!);
+    expect(diff.changed).toHaveLength(0);
+    expect(diff.unchanged).toBe(1);
+  });
+});
+
+describe('packageKey with extraIdentity', () => {
+  it('keeps same-named artifacts with different extraIdentity apart', () => {
+    const base = {
+      id: 'e1' as never,
+      documentId: 'd' as never,
+      spdxId: 'SPDXRef-a',
+      kind: 'package' as const,
+      name: 'config',
+      raw: { kind: 'json' as const, value: {} },
+    };
+    const linux = { ...base, ocm: { role: 'resource' as const, extraIdentity: { os: 'linux', arch: 'amd64' } } };
+    const darwin = { ...base, ocm: { role: 'resource' as const, extraIdentity: { arch: 'arm64', os: 'darwin' } } };
+    const plain = { ...base };
+    expect(packageKey(linux)).not.toBe(packageKey(darwin));
+    expect(packageKey(linux)).not.toBe(packageKey(plain));
+    // Key order inside extraIdentity must not matter.
+    const linuxReordered = { ...base, ocm: { role: 'resource' as const, extraIdentity: { arch: 'amd64', os: 'linux' } } };
+    expect(packageKey(linux)).toBe(packageKey(linuxReordered));
   });
 });
 

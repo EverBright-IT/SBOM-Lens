@@ -32,7 +32,19 @@ export interface ConflictGroup {
 export const NO_VERSION = '(no version)';
 
 export function packageKey(element: SbomElement): string {
-  return element.purl ? `purl:${purlWithoutVersion(element.purl)}` : `name:${element.name.toLowerCase()}`;
+  const base = element.purl
+    ? `purl:${purlWithoutVersion(element.purl)}`
+    : `name:${element.name.toLowerCase()}`;
+  // OCM artifacts are identified by name PLUS extraIdentity: two resources
+  // named "config" for different platforms are different artifacts and must
+  // never merge into one conflict/diff identity.
+  const extra = element.ocm?.extraIdentity;
+  if (!extra) return base;
+  const suffix = Object.entries(extra)
+    .sort(([x], [y]) => x.localeCompare(y))
+    .map(([k, v]) => `${k}=${v}`)
+    .join(',');
+  return suffix ? `${base}#${suffix}` : base;
 }
 
 export function findVersionConflicts(ws: WorkspaceState): ConflictGroup[] {

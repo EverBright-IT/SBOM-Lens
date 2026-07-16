@@ -63,6 +63,17 @@ and its resource shows an **Artifact content** section:
   produce a wrong verdict. Resources that are only referenced
   (`ociArtifact` and friends) carry no blob and no check.
 
+## Structural lint
+
+Beyond loading tolerantly, OCM Lens lints every descriptor against the spec's
+structural rules and reports findings as warnings (`OCM_SCHEMA_*`) in the
+diagnostics drawer: missing provider, component names outside the spec
+pattern, non-semver versions, relations other than local/external, access
+nodes without a type, incomplete digest triples, duplicate artifact
+identities (name + extraIdentity + version), nameless labels, and unparseable
+timestamps. The document always loads; the lint tells you what a stricter
+consumer would trip over.
+
 ## Signature verification
 
 A signed component descriptor carries `signatures[]`; each is a digest over a

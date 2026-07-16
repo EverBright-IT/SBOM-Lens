@@ -13,6 +13,7 @@ import { makeDocumentId, makeElementId } from '../../model/ids';
 import { asRecordArray, asString, isRecord } from '../../util/narrow';
 import type { ParseResult, SourceInput } from '../parser';
 import { dedupeBySpdxId } from '../spdx2/common';
+import { validateCdStructure } from './validate';
 
 /**
  * OCM Component Descriptors map onto the SPDX document model so the whole
@@ -78,6 +79,8 @@ export function parseOcmComponentDescriptor(
       diag('info', 'OCM_V3ALPHA1', 'OCM v3alpha1 descriptor: mapped best-effort (v2 is the primary format).'),
     );
   }
+  // Structural lint: spec-shaped warnings, the document loads regardless.
+  diagnostics.push(...validateCdStructure(root, cd));
 
   const namespace = ocmNamespace(cd.name, cd.version);
   const documentId = makeDocumentId(namespace, input.sha1);
