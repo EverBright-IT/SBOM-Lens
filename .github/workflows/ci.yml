@@ -20,7 +20,16 @@ jobs:
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test
+      # Both product flavors, with the same four gates as the GitLab
+      # build/build-ocm jobs: brand leak (twice), separation (no OCM code in
+      # the SBOM Lens bundle), and the counter-check that a passing gate
+      # means "correctly excluded", never "silently never built".
       - run: npm run build
+      - run: '! grep -riq "OCM Lens" apps/web/dist/index.html apps/web/dist/assets'
+      - run: '! grep -raEq "TAR_CORRUPT|ARCHIVE_LIMIT_EXCEEDED|artifact-index\.json|componentReferences|DecompressionStream" apps/web/dist/assets'
+      - run: npm run build:ocm
+      - run: '! grep -riq "SBOM Lens" apps/web/dist-ocm/index.html apps/web/dist-ocm/assets'
+      - run: 'grep -raq "artifact-index.json" apps/web/dist-ocm/assets'
 
   # Same known-vulnerability gate as the GitLab pipeline (osv-scan job).
   osv-scan:

@@ -1,0 +1,80 @@
+# GitHub counterpart of the GitLab release jobs (.gitlab-ci.yml:
+# release-assets + release-gitlab). Releases are per-platform metadata, so
+# the mirrored tag has to produce its own release here too. GitHub releases
+# carry their assets directly, so there is no package-registry detour; the
+# automatic GITHUB_TOKEN is enough.
+#
+# Verification first: the GitLab release only appears behind the blocking
+# gates, so this one runs lint, typecheck, tests, and the osv scan before
+# packaging anything.
+name: Release
+
+on:
+  push:
+    tags: ['v*.*.*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      SYFT_VERSION: '1.46.0'
+      SYFT_SHA256: 'd654f678b709eb53c393d38519d5ed7d2e57205529404018614cfefa0fb2b5ca'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+
+      # Both vsix packages, same recipe as the GitLab vsix / vsix-ocm jobs.
+      - name: Package sbomlens.vsix
+        run: |
+          npm run build:vscode -w @sbomlens/web
+          npm run compile -w sbomlens
+          npm run package -w sbomlens
+      - name: Package ocmlens.vsix
+        run: |
+          npm run build:vscode-ocm -w @sbomlens/web
+          npm run compile -w ocmlens
+          npm run package -w ocmlens
+
+      # Dogfooding: the release ships its own SPDX SBOM (pinned syft, same
+      # version and checksum as the GitLab self-sbom job).
+      - name: Generate self-SBOM
+        run: |
+          curl -fsSL "https://github.com/anchore/syft/releases/download/v${SYFT_VERSION}/syft_${SYFT_VERSION}_linux_amd64.tar.gz" -o /tmp/syft.tgz
+          echo "$SYFT_SHA256  /tmp/syft.tgz" | sha256sum -c -
+          tar -xzf /tmp/syft.tgz -C /usr/local/bin syft
+          syft dir:. --source-name sbomlens --source-version "$GITHUB_REF_NAME" -o "spdx-json=sbomlens-$GITHUB_REF_NAME.spdx.json"
+
+      # Release notes: this tag's CHANGELOG section (entries carry their own
+      # [SBOM Lens]/[OCM Lens] prefixes), same extraction as GitLab.
+      - name: Assemble release notes
+        run: |
+          ver="${GITHUB_REF_NAME#v}"
+          awk -v ver="$ver" 'index($0,"## ["ver"]")==1{f=1;next} /^## \[/{f=0} f' CHANGELOG.md > changelog-section.md
+          [ -s changelog-section.md ] || echo "_No CHANGELOG section found for this tag._" > changelog-section.md
+          {
+            echo "One tag, two products: SBOM Lens and OCM Lens release in lockstep from this monorepo."
+            echo
+            cat changelog-section.md
+            echo
+            echo "Install: [SBOM Lens on Open VSX](https://open-vsx.org/extension/everbright-it/sbomlens) | [OCM Lens on Open VSX](https://open-vsx.org/extension/everbright-it/ocmlens)"
+          } > release-notes.md
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --verify-tag \
+            --title "$GITHUB_REF_NAME" \
+            --notes-file release-notes.md \
+            sbomlens.vsix ocmlens.vsix "sbomlens-$GITHUB_REF_NAME.spdx.json"
