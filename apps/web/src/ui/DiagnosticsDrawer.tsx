@@ -38,7 +38,7 @@ export function DiagnosticsDrawer() {
           .map((loaded) => (
             <Group
               key={loaded.document.id}
-              title={`${loaded.document.name} — ${loaded.source.fileName}`}
+              title={`${loaded.document.name} (${loaded.source.fileName})`}
             >
               {loaded.document.diagnostics.map((d, i) => (
                 <Row

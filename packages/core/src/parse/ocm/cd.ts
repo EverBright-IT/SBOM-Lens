@@ -75,7 +75,7 @@ export function parseOcmComponentDescriptor(
   }
   if (cd.v3) {
     diagnostics.push(
-      diag('info', 'OCM_V3ALPHA1', 'OCM v3alpha1 descriptor — mapped best-effort (v2 is the primary format).'),
+      diag('info', 'OCM_V3ALPHA1', 'OCM v3alpha1 descriptor: mapped best-effort (v2 is the primary format).'),
     );
   }
 
@@ -192,7 +192,7 @@ export function parseOcmComponentDescriptor(
         diag(
           'info',
           'OCM_SBOM_IN_ARCHIVE',
-          `SBOM resource "${name}" is stored in the delivery archive — load the CTF/component archive to see its contents.`,
+          `SBOM resource "${name}" is stored in the delivery archive. Load the CTF/component archive to see its contents.`,
         ),
       );
       return;
@@ -244,18 +244,16 @@ export function parseOcmComponentDescriptor(
 
   for (const [type, count] of unsupportedAccess) {
     diagnostics.push(
-      diag('info', 'OCM_ACCESS_UNSUPPORTED', `${count} resource(s) use access type "${type}" — listed without download location.`),
+      diag('info', 'OCM_ACCESS_UNSUPPORTED', `${count} resource(s) use access type "${type}": listed without download location.`),
     );
   }
-  diagnostics.push(
-    diag(
-      'info',
-      'OCM_DIGESTS_NOT_VERIFIED',
-      checkedBlobs > 0
-        ? `Blob digests of ${checkedBlobs} artifact(s) were checked against the delivery contents; component and reference digests are displayed, not verified.`
-        : 'OCM digests are displayed, not verified.',
-    ),
-  );
+  const blobNote =
+    checkedBlobs > 0 ? `Blob digests of ${checkedBlobs} artifact(s) were checked against the delivery contents. ` : '';
+  const signatureNote =
+    cd.signatures.length > 0
+      ? 'Signatures can be verified against a public key in the Signatures section.'
+      : 'Component and reference digests are displayed, not verified.';
+  diagnostics.push(diag('info', 'OCM_DIGESTS_NOT_VERIFIED', `${blobNote}${signatureNote}`.trim()));
 
   const document: SbomDocument = {
     id: documentId,

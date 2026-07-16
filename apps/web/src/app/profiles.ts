@@ -114,7 +114,7 @@ export function importProfileText(
   if (origin === 'imported') {
     actions.toast(
       `${existing ? 'Replaced' : 'Imported'} profile “${result.profile.name}”` +
-        (persisted ? '' : ' — kept for this session only (storage full)'),
+        (persisted ? '' : '. Kept for this session only (storage full)'),
       'success',
     );
   }

@@ -35,22 +35,22 @@ function rejectBinary(container: ContainerKind): { code: string; message: string
     return {
       code: 'ARCHIVE_ZIP_NOT_SUPPORTED',
       message: HAS_DELIVERIES
-        ? 'ZIP archives are not supported — repack the delivery as .tar or .tar.gz.'
-        : 'ZIP archives are not supported — unpack it and drop the documents in.',
+        ? 'ZIP archives are not supported: repack the delivery as .tar or .tar.gz.'
+        : 'ZIP archives are not supported: unpack it and drop the documents in.',
     };
   }
   if (!HAS_DELIVERIES && (container === 'gzip' || container === 'tar')) {
     return {
       code: 'ARCHIVE_NOT_SUPPORTED',
-      message: 'Archives are not supported — unpack it and drop the documents in.',
+      message: 'Archives are not supported: unpack it and drop the documents in.',
     };
   }
   if (container === 'binary') {
     return {
       code: 'UNRECOGNIZED_BINARY',
       message: HAS_DELIVERIES
-        ? 'Unrecognized binary file — expected a component descriptor, a tar/tar.gz delivery, or SPDX text.'
-        : 'Unrecognized binary file — expected an SPDX document as text, JSON, or YAML.',
+        ? 'Unrecognized binary file: expected a component descriptor, a tar/tar.gz delivery, or SPDX text.'
+        : 'Unrecognized binary file: expected an SPDX document as text, JSON, or YAML.',
     };
   }
   return null;

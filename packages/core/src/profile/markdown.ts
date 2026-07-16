@@ -15,7 +15,7 @@ export function profileReportToMarkdown(
   },
 ): string {
   const lines: string[] = [];
-  lines.push(`# Quality report — ${opts.docName}`);
+  lines.push(`# Quality report: ${opts.docName}`);
   lines.push('');
   lines.push(`- Profile: **${report.profileName}**`);
   if (opts.sourceFileName) lines.push(`- Source file: \`${opts.sourceFileName}\``);
@@ -29,7 +29,7 @@ export function profileReportToMarkdown(
     lines.push('## Document checks');
     lines.push('');
     for (const result of booleans) {
-      lines.push(`- [${result.pass ? 'x' : ' '}] ${result.label} — ${result.actual ?? ''}`.trimEnd());
+      lines.push(`- [${result.pass ? 'x' : ' '}] ${result.label}: ${result.actual ?? ''}`.trimEnd());
     }
     lines.push('');
   }
@@ -42,7 +42,7 @@ export function profileReportToMarkdown(
     lines.push('| --- | --- | --- | --- | --- |');
     for (const result of coverages) {
       const c = result.coverage!;
-      const threshold = c.threshold === undefined ? '—' : `≥ ${c.threshold}%`;
+      const threshold = c.threshold === undefined ? '-' : `≥ ${c.threshold}%`;
       const verdict = c.threshold === undefined ? 'info' : result.pass ? 'pass' : '**fail**';
       lines.push(`| ${result.label} | ${c.satisfied}/${c.total} | ${c.percent}% | ${threshold} | ${verdict} |`);
     }

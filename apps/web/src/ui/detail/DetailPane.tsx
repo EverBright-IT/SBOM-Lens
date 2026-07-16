@@ -133,7 +133,7 @@ function Breadcrumb({ path }: { path: string }) {
     <div className="mb-1 flex min-w-0 items-center gap-1 overflow-hidden text-xs text-slate-400 dark:text-slate-500">
       {keys.map((key, i) => {
         const target = targetFromKey(key);
-        const title = target ? describeTarget(ws, target).title : '…';
+        const title = target ? describeTarget(ws, target).title : '...';
         const prefixPath = keys.slice(0, i + 1).join(PATH_SEP);
         const isLast = i === keys.length - 1;
         return (

@@ -52,8 +52,8 @@ export function validateProfile(raw: unknown): ProfileValidation {
       ok: false,
       errors: [
         typeof schema === 'string' && schema.startsWith('sbomlens-profile/')
-          ? `unsupported profile schema "${schema}" — this build understands ${PROFILE_SCHEMA_V1} and ${PROFILE_SCHEMA_V2}`
-          : `missing or invalid "schema" — expected "${PROFILE_SCHEMA_V1}" or "${PROFILE_SCHEMA_V2}"`,
+          ? `unsupported profile schema "${schema}": this build understands ${PROFILE_SCHEMA_V1} and ${PROFILE_SCHEMA_V2}`
+          : `missing or invalid "schema": expected "${PROFILE_SCHEMA_V1}" or "${PROFILE_SCHEMA_V2}"`,
       ],
     };
   }

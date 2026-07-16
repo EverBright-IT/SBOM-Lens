@@ -248,7 +248,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
       get().actions.removeDocs(ids);
       const kept =
         !includeOrphans && plan.orphaned.length > 0
-          ? ` — kept ${plan.orphaned.length} as new root${plan.orphaned.length === 1 ? '' : 's'}`
+          ? `. Kept ${plan.orphaned.length} as new root${plan.orphaned.length === 1 ? '' : 's'}`
           : '';
       get().actions.toast(`Removed ${ids.length} document${ids.length === 1 ? '' : 's'}${kept}`, 'info');
     },

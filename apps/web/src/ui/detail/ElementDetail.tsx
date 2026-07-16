@@ -153,7 +153,7 @@ function SubtreeInventoryButton({
   return (
     <button
       type="button"
-      title="Filter the Inventory to this package and everything reachable below it — across resolved sub-SBOM boundaries"
+      title="Filter the Inventory to this package and everything reachable below it, across resolved sub-SBOM boundaries"
       onClick={() => {
         const rootId = makeElementId(loaded.document.id, element.spdxId);
         const { ids, capped } = collectElementSubtree(ws, rootId);

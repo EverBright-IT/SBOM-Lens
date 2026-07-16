@@ -33,6 +33,11 @@ and SBOMs stored in a delivery are extracted and linked automatically.
   exportable preview. Declared blob digests are recomputed from the real
   bytes: a tampered or corrupted artifact shows a red *digest mismatch*
   right on the resource.
+- **Verify signatures, in the browser.** Paste a public key or certificate
+  and OCM Lens recomputes the descriptor's normalised digest and checks the
+  RSA signature client-side: no server, no upload. Verified against the real
+  `ocm` CLI, and honest by design: it reports *valid*, *invalid*, or
+  *unverifiable* with a reason, never a guessed verdict.
 - **Analysis views.** A sortable resource/package inventory (CSV/JSON
   export), version conflicts, version-to-version diffs, and quality reports.
   Component versions are checked against "OCM component essentials" by

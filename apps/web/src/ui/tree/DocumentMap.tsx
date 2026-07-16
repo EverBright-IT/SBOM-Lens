@@ -138,7 +138,7 @@ export function DocumentMap() {
                 className="cursor-pointer"
                 onClick={() => selectTarget({ kind: 'document', docId: node.docId })}
               >
-                <title>{`${node.name} — ${node.packageCount} packages${node.isRoot ? ' (root)' : ''}`}</title>
+                <title>{`${node.name}: ${node.packageCount} packages${node.isRoot ? ' (root)' : ''}`}</title>
                 <rect
                   width={NODE_W}
                   height={NODE_H}
@@ -168,7 +168,7 @@ export function DocumentMap() {
                       : 'fill-slate-600 text-[10px] dark:fill-slate-300'
                   }
                 >
-                  {node.name.length > 17 ? `${node.name.slice(0, 16)}…` : node.name}
+                  {node.name.length > 17 ? `${node.name.slice(0, 14)}...` : node.name}
                 </text>
               </g>
             ))}
@@ -187,7 +187,7 @@ export function DocumentMap() {
                   })
                 }
               >
-                <title>{`${stub.docRef} — not loaded`}</title>
+                <title>{`${stub.docRef} (not loaded)`}</title>
                 <rect
                   width={NODE_W}
                   height={NODE_H}

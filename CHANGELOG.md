@@ -4,6 +4,24 @@ All notable changes to SBOM Lens. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [SemVer](https://semver.org) (0.x: the API surface is the app itself).
 
+## [0.13.0] - 2026-07-16
+
+### Added
+- **[OCM Lens] Signature verification, client-side.** A signed component
+  descriptor can now be verified in the browser: paste a public key (PEM) or
+  a certificate in the Signatures section, and OCM Lens recomputes the
+  descriptor's normalised digest and checks the RSA signature via
+  `crypto.subtle`: no server, no upload. Supports `jsonNormalisation`
+  v4alpha1/v3/v2, RSASSA-PSS and RSASSA-PKCS1-v1_5, SHA-256/512. It reports
+  *valid*, *invalid* (distinguishing a bad signature from a changed
+  descriptor), or *unverifiable* with a reason, and never guesses a verdict:
+  an unknown normalisation, an unsupported algorithm, a non-canonicalisable
+  descriptor, or a key that will not import all yield *unverifiable*.
+  Verified end to end against the real `ocm` CLI (v0.9.0), including the
+  maximum-salt-length PSS convention the CLI uses. Certificate chains and
+  trust policy are out of scope: a certificate is used only for its public
+  key, stated plainly in the dialog. See `docs/ocm.md`.
+
 ## [0.12.1] - 2026-07-16
 
 Hardening release after an internal review of 0.12.0.

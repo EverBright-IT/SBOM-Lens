@@ -24,6 +24,12 @@ export type { OcmFieldDoc } from './spec/ocm-field-docs';
 export { OCM_DOCS } from './spec/ocm-field-docs';
 export { OCM_ESSENTIALS_PROFILE } from './profile/ocm';
 
+export type { NormalisationAlgorithm } from './ocm/normalize';
+export { normalizeDescriptor, SUPPORTED_NORMALISATIONS } from './ocm/normalize';
+export { spkiFromPem } from './ocm/pem';
+export type { SignatureNode, SignatureResult, SignatureVerdict } from './ocm/verify';
+export { verifyDocumentSignatures, verifySignature } from './ocm/verify';
+
 export type {
   OcmAccessInfo,
   OcmBlobInfo,

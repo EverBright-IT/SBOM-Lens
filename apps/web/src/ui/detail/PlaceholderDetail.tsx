@@ -61,7 +61,7 @@ export function PlaceholderDetail({ ws, target }: { ws: WorkspaceState; target: 
       if (added && state.ws.documents.has(added)) {
         actions.bindManualRef(key, added);
         actions.toast(
-          `Bound ${target.docRef} manually — its checksum does not match the reference`,
+          `Bound ${target.docRef} manually. Its checksum does not match the reference`,
           'info',
         );
       }
@@ -116,7 +116,7 @@ export function PlaceholderDetail({ ws, target }: { ws: WorkspaceState; target: 
               onClick={() => void fetchNow()}
               className="inline-flex items-center gap-1.5 rounded border border-accent-300 bg-accent-50 px-2.5 py-1.5 text-xs font-medium text-accent-800 hover:bg-accent-100 disabled:opacity-50 dark:border-accent-800 dark:bg-accent-950/60 dark:text-accent-200 dark:hover:bg-accent-900/50"
             >
-              <LinkIcon /> {fetchState === 'busy' ? 'Fetching…' : 'Fetch from URL'}
+              <LinkIcon /> {fetchState === 'busy' ? 'Fetching...' : 'Fetch from URL'}
             </button>
           )}
           <button
@@ -124,7 +124,7 @@ export function PlaceholderDetail({ ws, target }: { ws: WorkspaceState; target: 
             onClick={() => fileInputRef.current?.click()}
             className="inline-flex items-center gap-1.5 rounded border border-slate-300 px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:border-slate-400 dark:border-slate-700 dark:text-slate-300 dark:hover:border-slate-500"
           >
-            <UploadIcon /> Load the file…
+            <UploadIcon /> Load the file...
           </button>
           <input
             ref={fileInputRef}

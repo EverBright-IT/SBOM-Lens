@@ -271,13 +271,13 @@ export function parseSpdx2TagValue(input: SourceInput): ParseResult {
 
   if (orphanTags.size > 0) {
     diagnostics.push(
-      diag('info', 'TV_ORPHAN_TAGS', `Tags outside any known block were ignored: ${[...orphanTags].slice(0, 5).join(', ')}${orphanTags.size > 5 ? ', …' : ''}.`),
+      diag('info', 'TV_ORPHAN_TAGS', `Tags outside any known block were ignored: ${[...orphanTags].slice(0, 5).join(', ')}${orphanTags.size > 5 ? ', ...' : ''}.`),
     );
   }
   const skippedTotal = skipped.snippets + skipped.licenses + skipped.annotations;
   if (skippedTotal > 0) {
     diagnostics.push(
-      diag('info', 'TV_BLOCKS_SKIPPED', `Skipped ${skipped.snippets} snippet(s), ${skipped.licenses} extracted licensing info(s), ${skipped.annotations} annotation(s) — not displayed in this version.`),
+      diag('info', 'TV_BLOCKS_SKIPPED', `Skipped ${skipped.snippets} snippet(s), ${skipped.licenses} extracted licensing info(s), ${skipped.annotations} annotation(s): not displayed in this version.`),
     );
   }
   if (!doc.namespace) {
@@ -383,5 +383,5 @@ function parseChecksum(value: string): Checksum | undefined {
 }
 
 function truncate(s: string): string {
-  return s.length > 80 ? `${s.slice(0, 77)}…` : s;
+  return s.length > 80 ? `${s.slice(0, 75)}...` : s;
 }

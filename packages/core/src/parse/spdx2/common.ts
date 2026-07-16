@@ -142,7 +142,7 @@ export function checkRelationshipDocRefs(
       diag(
         'warning',
         'REL_UNKNOWN_DOCREF',
-        `Relationships reference ${unknown.size} DocumentRef(s) with no ExternalDocumentRef entry: ${[...unknown].slice(0, 3).join(', ')}${unknown.size > 3 ? ', …' : ''}.`,
+        `Relationships reference ${unknown.size} DocumentRef(s) with no ExternalDocumentRef entry: ${[...unknown].slice(0, 3).join(', ')}${unknown.size > 3 ? ', ...' : ''}.`,
       ),
     );
   }

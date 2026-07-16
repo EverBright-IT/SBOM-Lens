@@ -60,14 +60,14 @@ export function detect(text: string): Detection {
 
   return unsupported(
     'UNRECOGNIZED_FORMAT',
-    'Unrecognized file format — expected SPDX 2.x as tag-value (*.spdx), JSON, or YAML.',
+    'Unrecognized file format: expected SPDX 2.x as tag-value (*.spdx), JSON, or YAML.',
   );
 }
 
 function classifyObject(parsed: unknown, serialization: 'json' | 'yaml'): Detection {
   const label = serialization.toUpperCase();
   if (!isRecord(parsed)) {
-    return unsupported(`${label}_NOT_OBJECT`, `${label} root is not an object — not an SPDX document.`);
+    return unsupported(`${label}_NOT_OBJECT`, `${label} root is not an object: not an SPDX document.`);
   }
 
   const context = parsed['@context'];
@@ -84,7 +84,7 @@ function classifyObject(parsed: unknown, serialization: 'json' | 'yaml'): Detect
     if (spdxVersion.startsWith('SPDX-2')) return { format: 'spdx2-json', parsed, serialization };
     return unsupported(
       'SPDX_UNSUPPORTED_VERSION',
-      `Unsupported SPDX version "${spdxVersion}" — SPDX 2.x is supported today.`,
+      `Unsupported SPDX version "${spdxVersion}": SPDX 2.x is supported today.`,
     );
   }
 
@@ -108,14 +108,14 @@ function classifyObject(parsed: unknown, serialization: 'json' | 'yaml'): Detect
   if (typeof parsed.schema === 'string' && parsed.schema.startsWith('sbomlens-profile/')) {
     return unsupported(
       'SBOMLENS_PROFILE',
-      'This is a compliance profile, not an SBOM — drop it into the app to import it as a quality profile.',
+      'This is a compliance profile, not an SBOM. Drop it into the app to import it as a quality profile.',
     );
   }
 
   if (parsed.bomFormat === 'CycloneDX') {
     return unsupported(
       'CYCLONEDX_NOT_SUPPORTED',
-      'This is a CycloneDX BOM. This viewer reads SPDX — convert it (e.g. `cyclonedx convert`) or export SPDX from your tool.',
+      'This is a CycloneDX BOM. This viewer reads SPDX: convert it (e.g. `cyclonedx convert`) or export SPDX from your tool.',
     );
   }
 
@@ -128,7 +128,7 @@ function classifyObject(parsed: unknown, serialization: 'json' | 'yaml'): Detect
 
   return unsupported(
     `${label}_NOT_SPDX`,
-    `${label} document has no "spdxVersion" — not an SPDX 2.x document.`,
+    `${label} document has no "spdxVersion": not an SPDX 2.x document.`,
   );
 }
 

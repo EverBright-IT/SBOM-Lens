@@ -48,7 +48,7 @@ function ThemeToggle() {
   return (
     <button
       type="button"
-      title={`${THEME_LABEL[mode]} — click to switch`}
+      title={`${THEME_LABEL[mode]}. Click to switch`}
       aria-label={THEME_LABEL[mode]}
       onClick={cycle}
       className={ICON_BUTTON}
@@ -265,12 +265,12 @@ function SplitHandle({
     <div
       role="separator"
       aria-orientation="vertical"
-      aria-label="Resize sidebar — drag, arrow keys, double-click to reset"
+      aria-label="Resize sidebar: drag, arrow keys, double-click to reset"
       aria-valuemin={SIDEBAR_MIN}
       aria-valuemax={SIDEBAR_MAX}
       aria-valuenow={current}
       tabIndex={0}
-      title="Drag to resize — double-click to reset"
+      title="Drag to resize, double-click to reset"
       className="group -mx-1 flex w-2.5 shrink-0 cursor-col-resize touch-none items-center justify-center outline-none hover:bg-accent-200/30 active:bg-accent-300/30 focus-visible:bg-accent-200/40 dark:hover:bg-accent-800/20 dark:active:bg-accent-800/30 dark:focus-visible:bg-accent-800/30"
       onPointerDown={(event) => {
         event.preventDefault();

@@ -82,7 +82,7 @@ export function UrlDialog() {
           <input
             value={url}
             onChange={(e) => setUrl(e.target.value)}
-            placeholder="https://gitlab.example.com/api/v4/projects/…/release.spdx"
+            placeholder="https://gitlab.example.com/api/v4/projects/.../release.spdx"
             autoFocus
             spellCheck={false}
             className="mt-1 w-full rounded border border-slate-300 bg-transparent px-2 py-1.5 font-mono text-xs outline-none focus:border-accent-400 dark:border-slate-600"
@@ -139,7 +139,7 @@ export function UrlDialog() {
             disabled={busy || url.trim() === ''}
             className="rounded bg-accent-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-700 disabled:opacity-50"
           >
-            {busy ? 'Fetching…' : 'Fetch'}
+            {busy ? 'Fetching...' : 'Fetch'}
           </button>
         </div>
       </form>

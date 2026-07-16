@@ -64,7 +64,7 @@ export function activateLens(context: vscode.ExtensionContext, config: LensShell
     await vscode.window.withProgress(
       {
         location: vscode.ProgressLocation.Notification,
-        title: `${config.displayName}: loading ${kept.length} file(s)…`,
+        title: `${config.displayName}: loading ${kept.length} file(s)...`,
       },
       () => setupWebview(context, config, sharedPanel!, kept),
     );
@@ -83,7 +83,7 @@ export function activateLens(context: vscode.ExtensionContext, config: LensShell
       return;
     }
     const folderName = folder.path.split('/').pop() ?? 'folder';
-    await showDeliveryPanel(uris, `${config.displayName} — ${folderName}`);
+    await showDeliveryPanel(uris, `${config.displayName}: ${folderName}`);
   }
 
   async function scanWorkspace(): Promise<void> {
@@ -94,7 +94,7 @@ export function activateLens(context: vscode.ExtensionContext, config: LensShell
       );
       return;
     }
-    await showDeliveryPanel(uris, `${config.displayName} — workspace`);
+    await showDeliveryPanel(uris, `${config.displayName}: workspace`);
   }
 
   class LensEditorProvider implements vscode.CustomReadonlyEditorProvider {
@@ -128,7 +128,7 @@ export function activateLens(context: vscode.ExtensionContext, config: LensShell
           void vscode.commands.executeCommand('vscode.openWith', selection[0], config.viewType);
           return;
         }
-        void showDeliveryPanel(selection, `${config.displayName} — ${selection.length} files`);
+        void showDeliveryPanel(selection, `${config.displayName}: ${selection.length} files`);
       },
     ),
     vscode.commands.registerCommand(`${config.commandPrefix}.openFolder`, (uri?: vscode.Uri) => {

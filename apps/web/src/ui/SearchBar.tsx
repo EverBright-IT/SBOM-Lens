@@ -10,11 +10,11 @@ import { formatCount } from './nodeInfo';
 export const SEARCH_INPUT_ID = 'sbomlens-search';
 
 const PLACEHOLDERS = {
-  explore: 'Search packages across all documents…',
-  map: 'Highlight documents in the map…',
-  inventory: 'Filter the inventory…',
-  conflicts: 'Search packages across all documents…',
-  diff: 'Search packages across all documents…',
+  explore: 'Search packages across all documents...',
+  map: 'Highlight documents in the map...',
+  inventory: 'Filter the inventory...',
+  conflicts: 'Search packages across all documents...',
+  diff: 'Search packages across all documents...',
 } as const;
 
 export function SearchBar() {
@@ -97,7 +97,7 @@ export function SearchBar() {
             type="button"
             title={
               treeFilter
-                ? 'Tree filter on — matches shown in place. Click for the results dropdown.'
+                ? 'Tree filter on: matches shown in place. Click for the results dropdown.'
                 : 'Filter the tree in place instead of the results dropdown'
             }
             aria-pressed={treeFilter}
@@ -165,7 +165,7 @@ export function SearchBar() {
           </div>
           <div className="border-t border-slate-100 px-3 py-1.5 text-[11px] text-slate-400 dark:border-slate-800">
             {formatCount(total)} match{total === 1 ? '' : 'es'}
-            {total > 100 && ' — refine the query to narrow down'}
+            {total > 100 && '. Refine the query to narrow down'}
           </div>
         </div>
       )}

@@ -62,7 +62,7 @@ export function WorkspaceTree() {
     const { paths, capped } = collectSubtreePaths(ws, node);
     actions.expandPaths(paths);
     if (capped) {
-      actions.toast(`Expanded ${paths.length} nodes — large subtree, expansion capped`, 'info');
+      actions.toast(`Expanded ${paths.length} nodes: large subtree, expansion capped`, 'info');
     }
   };
 
@@ -154,7 +154,7 @@ export function WorkspaceTree() {
           <span>
             {formatCount(shown)} match{shown === 1 ? '' : 'es'} in tree
             {total > shown && ` (of ${formatCount(total)})`}
-            {rows.length === 0 && ' — nothing to show'}
+            {rows.length === 0 && ': nothing to show'}
           </span>
           <span className="min-w-0 flex-1" />
           <button

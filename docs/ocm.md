@@ -7,10 +7,9 @@
 > extension.
 >
 > **Read-only.** Deliveries are displayed, never modified. Blob digests of
-> artifacts inside a loaded delivery ARE checked against the actual bytes;
-> component and reference digests and signatures are shown as recorded, and
-> their cryptographic verification is on the roadmap
-> (`OCM_DIGESTS_NOT_VERIFIED` keeps that honest until then).
+> artifacts inside a loaded delivery are checked against the actual bytes,
+> and signatures can be verified against a public key you paste in
+> (client-side, no upload). Signing is out of scope.
 
 OCM Lens opens [OCM](https://ocm.software) component descriptors and local
 delivery archives and shows the whole delivery as one navigable tree: the
@@ -64,11 +63,40 @@ and its resource shows an **Artifact content** section:
   produce a wrong verdict. Resources that are only referenced
   (`ociArtifact` and friends) carry no blob and no check.
 
+## Signature verification
+
+A signed component descriptor carries `signatures[]`; each is a digest over a
+canonical form of the descriptor plus an RSA signature over that digest. In
+the **Signatures** section, paste a public key (PEM) or a certificate and OCM
+Lens verifies it entirely in your browser via `crypto.subtle`: no server, no
+upload.
+
+- **Normalisation**: `jsonNormalisation/v4alpha1` (the current `ocm` CLI
+  default), `/v3`, and `/v2`. OCM Lens recomputes the normalised digest and
+  reports whether it matches the one the signature records.
+- **Signature**: RSASSA-PSS (`application/vnd.ocm.signature.rsa.pss`) and
+  RSASSA-PKCS1-v1_5 (`application/vnd.ocm.signature.rsa`), SHA-256/512. The
+  PSS check accepts both the maximum-salt convention the CLI uses and the
+  hash-length convention, so signatures from either signer verify.
+- **Verdicts**: *valid*, *invalid* (with "signature does not verify" vs.
+  "descriptor does not match the signed digest"), or *unverifiable* with a
+  reason (an unknown normalisation or algorithm, a key that will not import,
+  or a descriptor that cannot be canonicalised). It never guesses a verdict.
+
+Verified end to end against the real `ocm` CLI (v0.9.0): our normalisation
+reproduces the CLI's recorded digest byte-for-byte.
+
+**Out of scope**: signing; certificate-chain and trust-policy validation (a
+certificate is used only for its public key, stated in the dialog);
+timestamping; and `jsonNormalisation/v1` (deprecated), which stays
+*unverifiable*.
+
 ## Limits (deliberate)
 
-- **Read-only**: no signing. Component and reference digests and signatures
-  are displayed, not verified (`OCM_DIGESTS_NOT_VERIFIED` reminds you);
-  blob digests inside a loaded delivery are the exception and ARE checked.
+- **Read-only**: no signing. Blob digests inside a loaded delivery are
+  checked against the actual bytes, and signatures are verifiable against a
+  public key you supply (above). Component/reference digests without a
+  signature are displayed as recorded.
 - Unknown access types (`s3`, `npm`, ...) are listed without download location
   and reported as diagnostics.
 - ZIP is rejected with a repack hint; archives are capped at 10k entries /

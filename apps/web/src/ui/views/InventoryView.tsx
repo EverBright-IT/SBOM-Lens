@@ -82,8 +82,8 @@ export function InventoryView() {
             onClick={() => actions.setInventoryScope(null)}
             title={
               `Showing only the sub-components of ${scope.rootLabel}` +
-              (scope.capped ? ' (traversal capped — very large subtree)' : '') +
-              ' — click to show everything again'
+              (scope.capped ? ' (traversal capped: very large subtree)' : '') +
+              '. Click to show everything again'
             }
             className="flex items-center gap-1 rounded-full border border-accent-300 bg-accent-50 px-2 py-0.5 text-[11px] font-medium text-accent-800 hover:border-accent-400 dark:border-accent-700 dark:bg-accent-950 dark:text-accent-200"
           >

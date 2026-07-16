@@ -140,7 +140,7 @@ export function MapView() {
   const compact = metrics === COMPACT;
   const truncate = (name: string) => {
     const max = compact ? 20 : 23;
-    return name.length > max ? `${name.slice(0, max - 1)}…` : name;
+    return name.length > max ? `${name.slice(0, max - 3)}...` : name;
   };
 
   return (
@@ -205,7 +205,7 @@ export function MapView() {
                 }
               }}
             >
-              <title>{`${stub.docRef} — not loaded`}</title>
+              <title>{`${stub.docRef} (not loaded)`}</title>
               <rect
                 width={metrics.nodeW}
                 height={metrics.nodeH}
@@ -303,7 +303,7 @@ function MapNode({
       onClick={onSelect}
       onDoubleClick={onOpen}
     >
-      <title>{`${name} — ${formatCount(pkgs)} packages${isRoot ? ' (root)' : ''}\nDouble-click: open in Explore${doc.hasChildren ? ' · chevron: expand/collapse' : ''}`}</title>
+      <title>{`${name}: ${formatCount(pkgs)} packages${isRoot ? ' (root)' : ''}\nDouble-click: open in Explore${doc.hasChildren ? ' · chevron: expand/collapse' : ''}`}</title>
       <rect
         width={metrics.nodeW}
         height={metrics.nodeH}

@@ -57,6 +57,6 @@ export function setHost(adapter: HostAdapter): void {
 }
 
 export function host(): HostAdapter {
-  if (!current) throw new Error('HostAdapter not initialized — call setHost() first.');
+  if (!current) throw new Error('HostAdapter not initialized: call setHost() first.');
   return current;
 }

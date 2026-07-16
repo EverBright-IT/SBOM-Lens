@@ -44,7 +44,7 @@ export function readTar(bytes: Uint8Array): TarResult {
         return { entries: [], diagnostics };
       }
       diagnostics.push(
-        diag('warning', 'TAR_BAD_CHECKSUM', `Header checksum mismatch at offset ${offset} — stopped reading.`),
+        diag('warning', 'TAR_BAD_CHECKSUM', `Header checksum mismatch at offset ${offset}: stopped reading.`),
       );
       break;
     }
@@ -52,14 +52,14 @@ export function readTar(bytes: Uint8Array): TarResult {
     const size = parseOctal(header.subarray(124, 136));
     if (size === null) {
       diagnostics.push(
-        diag('warning', 'TAR_SIZE_UNSUPPORTED', 'Entry with non-octal (base-256) size skipped — files >8 GiB are unsupported.'),
+        diag('warning', 'TAR_SIZE_UNSUPPORTED', 'Entry with non-octal (base-256) size skipped: files >8 GiB are unsupported.'),
       );
       break; // cannot know where the next header starts
     }
     const dataStart = offset + BLOCK;
     const dataEnd = dataStart + size;
     if (dataEnd > bytes.length) {
-      diagnostics.push(diag('warning', 'TAR_TRUNCATED', 'Archive ends mid-entry — remaining entries dropped.'));
+      diagnostics.push(diag('warning', 'TAR_TRUNCATED', 'Archive ends mid-entry: remaining entries dropped.'));
       break;
     }
 
@@ -83,7 +83,7 @@ export function readTar(bytes: Uint8Array): TarResult {
       totalBytes += size;
       if (entries.length >= MAX_ENTRIES || totalBytes > MAX_TOTAL_BYTES) {
         diagnostics.push(
-          diag('warning', 'ARCHIVE_LIMIT_EXCEEDED', `Archive exceeds ${MAX_ENTRIES} entries or ${MAX_TOTAL_BYTES / (1024 * 1024)} MB — remaining entries dropped.`),
+          diag('warning', 'ARCHIVE_LIMIT_EXCEEDED', `Archive exceeds ${MAX_ENTRIES} entries or ${MAX_TOTAL_BYTES / (1024 * 1024)} MB: remaining entries dropped.`),
         );
         break;
       }

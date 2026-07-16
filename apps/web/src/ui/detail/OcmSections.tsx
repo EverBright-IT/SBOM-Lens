@@ -1,5 +1,7 @@
+import { useEffect, useState } from 'react';
 import type { SbomDocument, SbomElement } from '@sbomlens/core';
-import type { OcmBlobInfo, OcmDigest, OcmLabel } from '@sbomlens/core/ocm';
+import type { OcmBlobInfo, OcmDigest, OcmLabel, OcmSignatureInfo, SignatureResult } from '@sbomlens/core/ocm';
+import { verifyDocumentSignatures } from '@sbomlens/core/ocm';
 import { host } from '../../host/adapter';
 import { formatBytes } from '../nodeInfo';
 import { Chip, CopyButton, FieldRow, Section } from './FieldRow';
@@ -33,7 +35,7 @@ export function OcmElementSections({ element }: { element: SbomElement }) {
       )}
 
       {ocm.access && (
-        <Section title={`Access — ${ocm.access.type ?? 'unknown'}`}>
+        <Section title={`Access: ${ocm.access.type ?? 'unknown'}`}>
           {Object.entries(ocm.access.raw)
             .filter(([key]) => key !== 'type')
             .map(([key, value]) => (
@@ -209,37 +211,133 @@ export function OcmDocumentSections({ doc }: { doc: SbomDocument }) {
         </Section>
       )}
 
-      {ocm.signatures && (
-        <Section title={`Signatures (${ocm.signatures.length})`}>
-          <div className="space-y-2">
-            {ocm.signatures.map((sig, i) => (
-              <div key={i} className="rounded border border-slate-100 px-2.5 py-1.5 dark:border-slate-800">
-                <div className="flex items-center gap-2">
-                  <span className="min-w-0 truncate text-[13px] font-medium">{sig.name ?? `signature ${i + 1}`}</span>
-                  <Chip>not verified</Chip>
-                </div>
-                <FieldRow label="Algorithm" value={sig.algorithm} mono />
-                <FieldRow label="Media type" value={sig.mediaType} mono />
-                <FieldRow label="Issuer" value={sig.issuer} mono />
-                {sig.digest && <DigestRows digest={sig.digest} inline />}
-                {sig.value && (
-                  <div className="grid grid-cols-[9rem_1fr] items-baseline gap-x-3 py-1">
-                    <div className="text-xs text-slate-400 dark:text-slate-500">Signature</div>
-                    <div className="flex min-w-0 items-baseline gap-1 font-mono text-xs">
-                      <span className="truncate" title={sig.value}>
-                        {sig.value.length > 48 ? `${sig.value.slice(0, 48)}…` : sig.value}
-                      </span>
-                      <CopyButton text={sig.value} />
-                    </div>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        </Section>
-      )}
+      {ocm.signatures && <SignatureSection doc={doc} signatures={ocm.signatures} />}
     </>
   );
+}
+
+/**
+ * Signatures with client-side verification. Paste a public key (PEM) or a
+ * certificate and OCM Lens recomputes the normalised digest and checks the
+ * RSA signature with crypto.subtle: no server, no upload. Honest by design:
+ * a gap it cannot bridge shows "unverifiable" with a reason, never a false
+ * green or red.
+ */
+function SignatureSection({ doc, signatures }: { doc: SbomDocument; signatures: OcmSignatureInfo[] }) {
+  const [open, setOpen] = useState(false);
+  const [pem, setPem] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [results, setResults] = useState<SignatureResult[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  // Results belong to the document they were computed for; drop them on switch.
+  useEffect(() => {
+    setResults(null);
+    setError(null);
+    setOpen(false);
+    setPem('');
+  }, [doc.id]);
+
+  const verdictFor = (name: string | undefined, index: number): SignatureResult | undefined =>
+    results?.find((r) => r.name === (name ?? 'signature')) ?? results?.[index];
+
+  const runVerify = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      setResults(await verifyDocumentSignatures(doc, pem));
+    } catch {
+      setError('Could not verify against this key. Check that it is a PEM public key or certificate.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Section
+      title={`Signatures (${signatures.length})`}
+      actions={
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          className="rounded border border-slate-200 px-1.5 py-0.5 text-[10px] text-slate-500 hover:border-accent-300 hover:text-accent-700 dark:border-slate-700 dark:text-slate-400 dark:hover:border-accent-700 dark:hover:text-accent-400"
+        >
+          {open ? 'Close' : 'Verify...'}
+        </button>
+      }
+    >
+      {open && (
+        <div className="mb-2 space-y-1.5 rounded border border-slate-100 p-2 dark:border-slate-800">
+          <label className="block text-xs text-slate-500 dark:text-slate-400">
+            Public key or certificate (PEM). Nothing is uploaded: the check runs in your browser.
+          </label>
+          <textarea
+            value={pem}
+            onChange={(e) => setPem(e.target.value)}
+            spellCheck={false}
+            rows={4}
+            placeholder="-----BEGIN PUBLIC KEY-----"
+            className="w-full resize-y rounded border border-slate-200 bg-transparent p-1.5 font-mono text-xs outline-none focus:border-accent-400 dark:border-slate-700 dark:bg-slate-900"
+          />
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              disabled={busy || pem.trim().length === 0}
+              onClick={() => void runVerify()}
+              className="rounded bg-accent-600 px-2 py-0.5 text-xs text-white hover:bg-accent-700 disabled:opacity-40"
+            >
+              {busy ? 'Verifying...' : 'Verify'}
+            </button>
+            {results && (
+              <span className="text-xs text-slate-400">
+                Chain is NOT validated: a certificate is used only for its public key.
+              </span>
+            )}
+          </div>
+          {error && <p className="text-xs text-red-600 dark:text-red-400">{error}</p>}
+        </div>
+      )}
+
+      <div className="space-y-2">
+        {signatures.map((sig, i) => {
+          const result = verdictFor(sig.name, i);
+          return (
+            <div key={i} className="rounded border border-slate-100 px-2.5 py-1.5 dark:border-slate-800">
+              <div className="flex items-center gap-2">
+                <span className="min-w-0 truncate text-[13px] font-medium">{sig.name ?? `signature ${i + 1}`}</span>
+                <SignatureChip result={result} />
+              </div>
+              {result?.reason && (
+                <p className="py-0.5 text-xs text-slate-500 dark:text-slate-400">{result.reason}</p>
+              )}
+              <FieldRow label="Algorithm" value={sig.algorithm} mono />
+              <FieldRow label="Media type" value={sig.mediaType} mono />
+              <FieldRow label="Issuer" value={sig.issuer} mono />
+              {sig.digest && <DigestRows digest={sig.digest} inline />}
+              {sig.value && (
+                <div className="grid grid-cols-[9rem_1fr] items-baseline gap-x-3 py-1">
+                  <div className="text-xs text-slate-400 dark:text-slate-500">Signature</div>
+                  <div className="flex min-w-0 items-baseline gap-1 font-mono text-xs">
+                    <span className="truncate" title={sig.value}>
+                      {sig.value.length > 48 ? `${sig.value.slice(0, 48)}...` : sig.value}
+                    </span>
+                    <CopyButton text={sig.value} />
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </Section>
+  );
+}
+
+function SignatureChip({ result }: { result?: SignatureResult }) {
+  if (!result) return <Chip>not verified</Chip>;
+  if (result.verdict === 'valid') return <Chip tone="ok">valid</Chip>;
+  if (result.verdict === 'invalid') return <Chip tone="danger">invalid</Chip>;
+  return <Chip tone="warn">unverifiable</Chip>;
 }
 
 function DigestRows({ digest, title, inline }: { digest: OcmDigest; title?: string; inline?: boolean }) {

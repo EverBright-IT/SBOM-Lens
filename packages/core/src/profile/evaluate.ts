@@ -227,7 +227,7 @@ function safeRegex(pattern: string | undefined): RegExp | null {
 function renderActual(value: string | string[] | undefined): string {
   const text = Array.isArray(value) ? value.join(' · ') : (value ?? '');
   if (!text) return 'missing';
-  return text.length > ACTUAL_MAX ? `${text.slice(0, ACTUAL_MAX - 1)}…` : text;
+  return text.length > ACTUAL_MAX ? `${text.slice(0, ACTUAL_MAX - 3)}...` : text;
 }
 
 function defaultLabel(check: ProfileCheck): string {

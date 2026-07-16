@@ -227,7 +227,7 @@ describe('profileReportToMarkdown', () => {
       issues: { danglingLocalRefs: 1, unresolvedStructuralRefs: 0, duplicateSpdxIds: 0 },
       generatedAt: '2026-07-11',
     });
-    expect(md).toContain('# Quality report — t');
+    expect(md).toContain('# Quality report: t');
     expect(md).toContain('**Test**');
     expect(md).toContain('1/2 gated checks passed');
     expect(md).toContain('- [x] Author');

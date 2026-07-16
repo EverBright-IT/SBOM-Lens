@@ -60,7 +60,7 @@ const SBOM: Branding = {
   nameAccent: 'Lens',
   tagline: 'a fast, minimal viewer for SPDX SBOMs',
   emptyStateHint:
-    'Drop SPDX files or folders anywhere in this window — cascading documents ' +
+    'Drop SPDX files or folders anywhere in this window: cascading documents ' +
     'link up automatically.',
   formatsNote: 'Supports SPDX 2.x as tag-value (.spdx), JSON, and YAML.',
   catalogHeading: 'Preconfigured SBOMs',
@@ -83,10 +83,10 @@ const OCM: Branding = {
   tagline: 'a fast, minimal viewer for OCM component versions and deliveries',
   emptyStateHint:
     'Drop OCM component descriptors or deliveries (CTF / component archives) anywhere in ' +
-    'this window — components, references, and embedded SBOMs link up automatically.',
+    'this window: components, references, and embedded SBOMs link up automatically.',
   formatsNote:
     'Supports OCM component descriptors (YAML/JSON) and CTF / component archives ' +
-    '(.ctf, .tar, .tgz) — plus SPDX 2.x for the SBOMs they carry.',
+    '(.ctf, .tar, .tgz), plus SPDX 2.x for the SBOMs they carry.',
   catalogHeading: 'Preconfigured deliveries',
   dropHint: 'Drop OCM deliveries or component descriptors',
   urlDialogLabel: 'URL of a component descriptor or delivery',

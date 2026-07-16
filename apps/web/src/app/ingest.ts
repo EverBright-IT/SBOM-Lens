@@ -247,13 +247,13 @@ export async function ingestUrl(url: string): Promise<UrlIngestResult> {
       return {
         ok: false,
         message:
-          'Could not fetch — the server likely blocks cross-origin requests (CORS) or is unreachable. ' +
+          'Could not fetch: the server likely blocks cross-origin requests (CORS) or is unreachable. ' +
           'Download the file and drop it here instead.',
       };
     }
     const hint =
       result.status === 401 || result.status === 403
-        ? ' The server requires authentication — add an access token for this host.'
+        ? ' The server requires authentication. Add an access token for this host.'
         : '';
     return {
       ok: false,

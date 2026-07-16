@@ -108,7 +108,7 @@ export function parseSpdx2Json(
 
   const snippetCount = asRecordArray(root.snippets).length;
   if (snippetCount > 0) {
-    diagnostics.push(diag('info', 'JSON_SNIPPETS_SKIPPED', `Skipped ${snippetCount} snippet(s) — not displayed in this version.`));
+    diagnostics.push(diag('info', 'JSON_SNIPPETS_SKIPPED', `Skipped ${snippetCount} snippet(s): not displayed in this version.`));
   }
 
   const relationships: Relationship[] = [];

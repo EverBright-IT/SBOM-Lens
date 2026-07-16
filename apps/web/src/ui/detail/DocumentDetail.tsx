@@ -190,7 +190,7 @@ function QualitySection({ ws, loaded }: { ws: WorkspaceState; loaded: LoadedDocu
           title="Remove this imported profile"
           onClick={() => {
             removeProfile(activeProfileId);
-            actions.toast('Profile removed — back to the builtin profile', 'info');
+            actions.toast('Profile removed. Back to the builtin profile', 'info');
           }}
           className="rounded px-1 text-slate-400 hover:text-red-600 dark:hover:text-red-400"
         >
@@ -209,7 +209,7 @@ function QualitySection({ ws, loaded }: { ws: WorkspaceState; loaded: LoadedDocu
   );
 
   return (
-    <Section title={`Quality — ${report.profileName}`} actions={sectionActions}>
+    <Section title={`Quality: ${report.profileName}`} actions={sectionActions}>
       {report.gatedFailed > 0 && (
         <p className="mb-2 text-xs text-amber-700 dark:text-amber-400">
           {report.gatedFailed} of {report.gatedPassed + report.gatedFailed} gated checks failing

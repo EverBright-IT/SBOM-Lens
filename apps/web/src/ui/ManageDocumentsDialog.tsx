@@ -153,7 +153,7 @@ export function ManageDocumentsDialog() {
             onClick={() => actions.requestRemoval([...selected])}
             className="rounded bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-700 disabled:opacity-40"
           >
-            Remove {selected.size > 0 ? formatCount(selected.size) : ''}…
+            Remove {selected.size > 0 ? formatCount(selected.size) : ''}...
           </button>
         </div>
       </div>

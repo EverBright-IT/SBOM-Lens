@@ -53,12 +53,12 @@ export async function fetchAllReferences(): Promise<RefFetchSummary | null> {
 
   const summary = { fetched, failed };
   if (fetched === 0 && failed.length === 0) {
-    actions.toast('No fetchable references — everything is either resolved or has no URL.', 'info');
+    actions.toast('No fetchable references: everything is either resolved or has no URL.', 'info');
   } else if (failed.length === 0) {
     actions.toast(`Fetched ${fetched} referenced document${fetched === 1 ? '' : 's'}`, 'success');
   } else {
     actions.toast(
-      `Fetched ${fetched} · ${failed.length} failed — open a placeholder for details`,
+      `Fetched ${fetched} · ${failed.length} failed. Open a placeholder for details`,
       fetched > 0 ? 'info' : 'error',
     );
   }

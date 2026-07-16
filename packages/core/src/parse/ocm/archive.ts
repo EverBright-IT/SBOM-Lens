@@ -95,7 +95,7 @@ async function walkCtf(
   try {
     parsedIndex = JSON.parse(decode(index.bytes));
   } catch {
-    result.diagnostics.push(diag('warning', 'CTF_INDEX_INVALID', 'artifact-index.json is not valid JSON — falling back to a content sweep.'));
+    result.diagnostics.push(diag('warning', 'CTF_INDEX_INVALID', 'artifact-index.json is not valid JSON: falling back to a content sweep.'));
     return;
   }
   const artifacts = isRecord(parsedIndex) ? asRecordArray(parsedIndex.artifacts) : [];
@@ -109,7 +109,7 @@ async function walkCtf(
     const blob = digest ? byName.get(`blobs/${digest.replace(':', '.')}`) : undefined;
     if (!blob) {
       result.diagnostics.push(
-        diag('warning', 'CTF_ARTIFACT_UNREADABLE', `Artifact ${asString(artifact.repository) ?? '?'}:${asString(artifact.tag) ?? '?'} — blob missing.`),
+        diag('warning', 'CTF_ARTIFACT_UNREADABLE', `Artifact ${asString(artifact.repository) ?? '?'}:${asString(artifact.tag) ?? '?'}: blob missing.`),
       );
       continue;
     }
@@ -294,7 +294,7 @@ async function emitCd(
         diag(
           'warning',
           'OCM_SBOM_FORMAT_UNSUPPORTED',
-          `SBOM resource "${asString(resource.name) ?? '?'}" is not SPDX (${asString(access.mediaType) ?? 'unknown media type'}) — skipped.`,
+          `SBOM resource "${asString(resource.name) ?? '?'}" is not SPDX (${asString(access.mediaType) ?? 'unknown media type'}): skipped.`,
         ),
       );
       continue;
