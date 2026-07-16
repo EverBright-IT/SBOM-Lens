@@ -4,7 +4,7 @@ All notable changes to SBOM Lens. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [SemVer](https://semver.org) (0.x: the API surface is the app itself).
 
-## [0.11.2] - 2026-07-15
+## [0.11.3] - 2026-07-16
 
 ### Added
 - **Open VSX publishing runs in CI.** Every tag pipeline now offers a manual
@@ -18,13 +18,22 @@ All notable changes to SBOM Lens. The format follows
   a command line or a job log. See `apps/vscode/DEVELOPMENT.md`.
 
 ### Fixed
-- The container image builds again. It ran the root typecheck across every
-  workspace, so it depended on the VS Code extensions it does not ship, and
-  the new `@sbomlens/vscode-shell` package was missing from the manifests
-  layer: `Cannot find module '@sbomlens/vscode-shell'`. The same class of
-  break cost a release before, so the image now typechecks and builds only
-  the web app it serves. Linting, typechecking and testing every workspace
-  stays with the `test` job, which runs on the same pipeline.
+- The container image builds again, and 0.11.2 was the release that proved
+  it: its docker job failed with `Cannot find module '@sbomlens/vscode-shell'`.
+  The image ran the root typecheck across every workspace, so it depended on
+  the VS Code extensions it does not ship, and a new workspace package was
+  missing from the manifests layer. The same class of break cost a release
+  before, so the image now typechecks and builds only the web app it serves.
+  Linting, typechecking and testing every workspace stays with the `test`
+  job, which runs on the same pipeline.
+
+### Changed
+- Plain punctuation across every public text: the READMEs, the store
+  descriptions of both extensions, the docs, and this changelog. Em-dashes
+  read as machine-written, and the store listing is the first thing a user
+  sees of either product.
+
+## [0.11.2] - 2026-07-15
 
 ### Changed
 - **[OCM Lens]** The store listing now matches SBOM Lens': a hero screenshot

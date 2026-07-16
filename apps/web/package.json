@@ -1,6 +1,6 @@
 {
   "name": "@sbomlens/web",
-  "version": "0.11.2",
+  "version": "0.11.3",
   "description": "SBOM Lens web app: a fast, minimal viewer for SPDX SBOMs.",
   "license": "Apache-2.0",
   "private": true,
