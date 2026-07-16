@@ -93,14 +93,23 @@ timestamping; and `jsonNormalisation/v1` (deprecated), which stays
 
 ## Limits (deliberate)
 
-- **Read-only**: no signing. Blob digests inside a loaded delivery are
-  checked against the actual bytes, and signatures are verifiable against a
-  public key you supply (above). Component/reference digests without a
-  signature are displayed as recorded.
-- Unknown access types (`s3`, `npm`, ...) are listed without download location
-  and reported as diagnostics.
-- ZIP is rejected with a repack hint; archives are capped at 10k entries /
-  512 MB expanded (zip-bomb guard). Links inside tars are never followed.
+- **Read-only**: no signing, no registry writes. Blob digests inside a loaded
+  delivery are checked against the actual bytes, and signatures are verifiable
+  against a public key you supply (above). Component/reference digests without
+  a signature are displayed as recorded. Remote OCI-registry browsing is on
+  the roadmap (via the VS Code extension host, which fetches without CORS).
+- **Sizes.** Delivery archives are capped at **10,000 entries / 512 MB**
+  expanded (a zip-bomb guard); ZIP is rejected with a repack hint, and links
+  inside tars are never followed. Artifact-content previews are capped at
+  **64 KB of text**, **500 files** listed, and a **256-byte** hex head for
+  binaries; the raw blob bytes are inspected in the worker and then dropped.
+  The VS Code workspace scan skips files over **50 MB**.
+- **Verification needs a secure context**: `crypto.subtle` drives both the
+  cascade checksums and signature verification, so HTTPS or localhost is
+  required (plain HTTP on a remote host disables them).
+- Component descriptors: schema v2 fully, v3alpha1 best-effort. Unknown access
+  types (`s3`, `npm`, ...) are listed without download location and reported
+  as diagnostics.
 - CycloneDX SBOMs inside a delivery are reported, not loaded (same conversion
   hint as standalone files).
 

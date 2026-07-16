@@ -45,6 +45,18 @@ release diff, and quality reports.
 > sibling extension built from the same codebase. SBOM Lens stays a focused
 > SPDX viewer.
 
+## Limits
+
+- **SPDX 2.x only** (tag-value / JSON / YAML). SPDX 3.x is detected but not
+  yet loaded; CycloneDX is recognized with a conversion hint.
+- The **workspace scan skips files over 50 MB** (open those by hand). A
+  single large SPDX document has no hard cap; parsing runs off the UI thread.
+- Compliance profiles are capped at 64 KB / 200 checks; up to 16 persist.
+- No license-compliance judgement and no vulnerability overlays: license and
+  quality fields are shown, not interpreted.
+- Documents are parsed locally and never uploaded; only preferences and
+  imported profiles persist.
+
 ## Install
 
 - **Open VSX** (VSCodium, Cursor, Gitpod, Theia):

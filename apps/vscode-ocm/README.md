@@ -54,6 +54,25 @@ and SBOMs stored in a delivery are extracted and linked automatically.
 > [SBOM Lens](https://open-vsx.org/extension/everbright-it/sbomlens), the
 > sibling extension built from the same codebase: same views, SPDX-first.
 
+## Limits
+
+- **Read-only, local only.** No signing, no registry writes; remote
+  OCI-registry browsing is on the roadmap. Nothing is uploaded.
+- **Delivery archives** are capped at **10,000 entries / 512 MB** expanded
+  (a zip-bomb guard); ZIP is rejected with a repack hint, and links inside
+  tars are never followed. The workspace scan skips files over 50 MB.
+- **Artifact previews are capped**: 64 KB of text, 500 files listed, a 256-byte
+  hex head for binaries. The raw bytes stay in the parse worker.
+- **Digest checks** cover `genericBlobDigest/v1` and `ociArtifactDigest/v1`;
+  any other normalisation is shown as *unchecked*, never guessed.
+- **Signature verification** handles RSASSA-PSS and RSASSA-PKCS1-v1_5 over
+  SHA-256/512. Out of scope: signing, certificate-chain and trust-policy
+  validation, timestamping, and the deprecated `jsonNormalisation/v1`
+  (reported *unverifiable*).
+- **Descriptors**: schema v2 fully, v3alpha1 best-effort. Unknown access
+  types are listed without a download location. Verification needs HTTPS or
+  localhost (`crypto.subtle` runs only in secure contexts).
+
 ## Install
 
 - **Open VSX** (VSCodium, Cursor, Gitpod, Theia):

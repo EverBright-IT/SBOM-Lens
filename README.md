@@ -132,6 +132,37 @@ to read the SPDX 2.3 specification's own documentation for it, distilled at
 build time from the official JSON schema (`npm run generate:spec-docs`). Click
 the icon to open that field's section in the rendered specification.
 
+## Limits
+
+Known boundaries, stated plainly so nothing surprises you:
+
+- **Format scope.** SPDX 2.x only. SPDX 3.x is detected and named but not yet
+  loaded (on the roadmap); CycloneDX and Trivy-native JSON are recognized
+  with a conversion hint, not parsed. Detection is content-based.
+- **HTTPS or localhost required.** Cascade resolution hashes file bytes with
+  `crypto.subtle`, which browsers expose only in secure contexts. Over plain
+  HTTP on a non-localhost host, hashing (and therefore checksum-based
+  reference resolution) does not run.
+- **URL loading needs CORS.** The browser can only fetch a document whose
+  server allows cross-origin requests. When it can't, SBOM Lens says so;
+  download the file and drop it in, or self-host behind the same origin as
+  your registry (see below).
+- **Size.** No hard cap on a single SPDX document: multi-megabyte files with
+  thousands of packages parse in a Web Worker. In the **VS Code** extension,
+  the workspace scan skips individual files over **50 MB** (open those by
+  hand). Expanding an entire subtree stops at **2,000 nodes** with a notice,
+  and the tree walks to a depth of 64.
+- **Compliance profiles.** A profile file is capped at **64 KB** and **200
+  checks**; up to **16** imported profiles persist (**256 KB** total), beyond
+  which they stay for the session only.
+- **Private, and it stays that way.** No upload path, no telemetry. Only
+  preferences and imported profiles are persisted (locally); loaded documents
+  are not. Deep links therefore need addressable sources (a catalog entry or
+  a URL-loaded document), not dropped files.
+- **Not in scope by design.** No license-compliance judgement (license fields
+  are shown, not interpreted) and no vulnerability or VEX overlays in the
+  core model.
+
 ## Self-hosting
 
 SBOM Lens builds to a fully static site (`apps/web/dist/`) that any web server
