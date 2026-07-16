@@ -4,6 +4,33 @@ All notable changes to SBOM Lens. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [SemVer](https://semver.org) (0.x: the API surface is the app itself).
 
+## [0.12.0] - 2026-07-16
+
+### Added
+- **[OCM Lens] Artifact content: what the delivery physically ships.** Every
+  local blob in a loaded CTF or component archive is now inspected inside the
+  parse worker, and its resource shows an "Artifact content" section: helm
+  charts with their file list and Chart.yaml/values.yaml previews, OCI
+  artifact sets with the manifest and a layer table, JSON/YAML/text blobs
+  with exportable content, binaries with a hex head. Previews are hard-capped
+  (64 KB text, 500 files); the raw bytes never leave the worker.
+- **[OCM Lens] Blob digests are checked, not just displayed.** Resources
+  declaring `genericBlobDigest/v1` or `ociArtifactDigest/v1` get their digest
+  recomputed from the actual bytes: a green *digest match* or a red *digest
+  mismatch* chip, plus an `OCM_DIGEST_MISMATCH` warning. Other normalisations
+  stay honestly *unchecked* rather than risking a wrong verdict; component
+  and reference digests remain display-only until signature verification
+  lands. The demo delivery shows all three states.
+- **Builtin compliance preset: BSI TR-03183-2 field coverage
+  (approximation).** The Quality dropdown now offers the machine-checkable
+  field requirements of BSI TR-03183 part 2 v2.1.0 (creator with contact,
+  timestamp, per-component version/creator/licence/hash at 100%, dependency
+  enumeration; purl/CPE informational). Deliberately labelled an
+  approximation: the TR accepts only SPDX 3.0.1+ or CycloneDX 1.6+, so these
+  checks measure data completeness on SPDX 2.x, not TR conformance; what the
+  engine cannot check rides in the profile description and every exported
+  report.
+
 ## [0.11.3] - 2026-07-16
 
 ### Added
