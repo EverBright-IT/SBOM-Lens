@@ -73,10 +73,15 @@ One-time setup:
    `npx ovsx create-namespace everbright-it -p <TOKEN>`. (Done; the
    namespace *claim*, i.e. verified-publisher status, runs separately via an
    EclipseFdn issue + DNS TXT record.)
-3. Add that token as **`OVSX_TOKEN`**, a *masked* and *protected* CI variable
-   (protected so only tag/protected-branch pipelines can read it). `ovsx`
-   reads it from the environment as `OVSX_PAT`, so it never reaches a command
-   line or a job log.
+3. Add that token as **`OVSX_TOKEN`**, a *masked* and *protected* CI variable.
+   `ovsx` reads it from the environment as `OVSX_PAT`, so it never reaches a
+   command line or a job log.
+4. **Protect the release tags** so the protected variable actually reaches the
+   publish job: *Settings → Repository → Protected tags* → protect `v*`. A
+   protected variable is passed *only* to pipelines on protected branches or
+   protected tags; without this the job sees an empty token and stops with
+   "OVSX_TOKEN is not set". If a tag pipeline was created before you protected
+   the pattern, push a fresh tag rather than retrying the old job.
 
 Publishing by hand still works, e.g. before the variable exists:
 

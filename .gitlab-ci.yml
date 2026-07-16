@@ -174,8 +174,11 @@ vsix-ocm:
 #
 # Setup, once: OVSX_TOKEN as a masked, protected CI variable (Open VSX → user
 # settings → access tokens; the account must own the `everbright-it`
-# namespace). ovsx picks it up as OVSX_PAT from the environment, so the token
-# never appears in a command line, a process list, or the job log.
+# namespace), AND protect the release tags (Settings → Repository → Protected
+# tags → `v*`). A protected variable only reaches pipelines on protected refs;
+# on an unprotected tag the token arrives empty and the guard below stops the
+# job. ovsx picks it up as OVSX_PAT from the environment, so the token never
+# appears in a command line, a process list, or the job log.
 #
 # The VS Code Marketplace can extend the same shape (`vsce publish`) once its
 # publisher exists; see apps/vscode/DEVELOPMENT.md.
