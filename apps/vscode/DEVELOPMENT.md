@@ -56,17 +56,34 @@ the account ids MUST match it.
 ### Open VSX (VSCodium, Gitpod, Theia, Cursor...)
 
 Published: the listing lives at
-<https://open-vsx.org/extension/everbright-it/sbomlens>.
+<https://open-vsx.org/extension/everbright-it/sbomlens>. OCM Lens publishes
+to the same namespace as `everbright-it.ocmlens`.
+
+**CI does this.** Every tag pipeline builds both vsix and offers a manual
+`publish-sbomlens` / `publish-ocmlens` job in the `publish` stage. They are
+manual on purpose: an Open VSX version is immutable, so nobody can take back
+an accidental publish. Each job verifies the token, then refuses to run if
+the tag and the manifest version disagree.
+
+One-time setup:
 
 1. Log in at <https://open-vsx.org> with GitHub, link the Eclipse account,
    and sign the publisher agreement. (Done.)
 2. Create an access token (user settings), then once:
    `npx ovsx create-namespace everbright-it -p <TOKEN>`. (Done; the
-   namespace *claim*: verified-publisher status: runs separately via an
+   namespace *claim*, i.e. verified-publisher status, runs separately via an
    EclipseFdn issue + DNS TXT record.)
-3. Re-publish a new version: bump the workspace version (lockstep procedure
-   in the root README), rebuild, then
-   `npx ovsx publish sbomlens.vsix -p <TOKEN>`.
+3. Add that token as **`OVSX_TOKEN`**, a *masked* and *protected* CI variable
+   (protected so only tag/protected-branch pipelines can read it). `ovsx`
+   reads it from the environment as `OVSX_PAT`, so it never reaches a command
+   line or a job log.
+
+Publishing by hand still works, e.g. before the variable exists:
+
+```sh
+npx ovsx publish sbomlens.vsix -p <TOKEN>
+npx ovsx publish ocmlens.vsix -p <TOKEN>
+```
 
 ### VS Code Marketplace (status: publisher setup pending)
 
@@ -95,7 +112,9 @@ Published: the listing lives at
 - The store pages render `README.md`; the icon comes from `icon.png`
   (rasterized from `docs/brand/vscode-icon.svg`). Images/links in the README
   must be absolute URLs: relative paths break on the registry pages.
-- Versions are immutable per registry: bump before re-publishing.
-- Store the PATs outside the repo. For CI publishing later: masked CI
-  variables and a manual tag job (`vsce publish` + `ovsx publish`) -
-  deliberately not wired up until both accounts exist.
+- Versions are immutable per registry: bump before re-publishing. Publishing
+  the same version twice fails loudly rather than silently doing nothing,
+  which is the point: a no-op that looks like success is worse than an error.
+- Store the PATs outside the repo. Open VSX publishing runs in CI (see
+  above); the Marketplace stays manual until its publisher exists, then it
+  can extend the same job shape with `vsce publish`.

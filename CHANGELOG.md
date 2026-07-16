@@ -6,6 +6,17 @@ All notable changes to SBOM Lens. The format follows
 
 ## [0.11.2] - 2026-07-15
 
+### Added
+- **Open VSX publishing runs in CI.** Every tag pipeline now offers a manual
+  `publish-sbomlens` and `publish-ocmlens` job. Manual is the feature, not a
+  shortcut: a published version is immutable, so tagging must never publish
+  on its own, and the two products stay independently releasable. Each job
+  verifies the token against the namespace first and refuses to publish when
+  the tag and the manifest version disagree, because a mislabelled version
+  cannot be corrected afterwards. Setup is one masked CI variable
+  (`OVSX_TOKEN`), which `ovsx` reads from the environment so it never reaches
+  a command line or a job log. See `apps/vscode/DEVELOPMENT.md`.
+
 ### Fixed
 - The container image builds again. It ran the root typecheck across every
   workspace, so it depended on the VS Code extensions it does not ship, and

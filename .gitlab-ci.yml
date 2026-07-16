@@ -1,8 +1,9 @@
 # test → build → GitLab Pages on the default branch (Pages root = the
-# viewer); container image, vsix, image scan, and a self-SBOM on tags.
+# viewer); container image, vsix, image scan, and a self-SBOM on tags, then
+# an optional manual publish of each extension to Open VSX.
 # Security scanning runs on every push; Renovate runs in its own
 # scheduled pipeline (see docs/ci-security.md).
-stages: [test, build, deploy]
+stages: [test, build, deploy, publish]
 
 include:
   - template: Jobs/SAST.gitlab-ci.yml
@@ -11,7 +12,7 @@ include:
 variables:
   SAST_EXCLUDED_PATHS: '**/dist, **/dist-vscode, apps/vscode/media, packages/core/fixtures, apps/web/public/examples'
   # Diagnostic (temporary): the template analyzers finish without writing
-  # their gl-*-report.json on this runner — debug logs show why.
+  # their gl-*-report.json on this runner; debug logs show why.
   SECURE_LOG_LEVEL: 'debug'
 
 default:
@@ -35,7 +36,7 @@ test:
     - npm run test
 
 # Known-vulnerability gate over the lockfile (blocking). Ignores, when ever
-# needed, go into osv-scanner.toml — see docs/ci-security.md.
+# needed, go into osv-scanner.toml; see docs/ci-security.md.
 osv-scan:
   stage: test
   image:
@@ -92,7 +93,7 @@ build:
     - '! grep -riq "OCM Lens" apps/web/dist/index.html apps/web/dist/assets'
     # Separation gate: SBOM Lens is an SPDX viewer. Not one line of the
     # descriptor mapper, the tar reader, or the gzip path may reach its
-    # bundle — that is what @sbomlens/core/ocm and HAS_DELIVERIES are for.
+    # bundle: that is what @sbomlens/core/ocm and HAS_DELIVERIES are for.
     # ("ustar" is NOT a marker: sniffContainer's magic-byte check belongs here.)
     - '! grep -raEq "TAR_CORRUPT|ARCHIVE_LIMIT_EXCEEDED|artifact-index\.json|componentReferences|DecompressionStream" apps/web/dist/assets'
   artifacts:
@@ -117,7 +118,7 @@ build-ocm:
     paths: [apps/web/dist-ocm]
     expire_in: 1 week
 
-# Pages serves the viewer itself — https://<namespace>.gitlab.io/<project>/
+# Pages serves the viewer itself: https://<namespace>.gitlab.io/<project>/
 # IS the app (vite base './' keeps the build relocatable). No landing-repo
 # clone, no redirect: the landing page deploys to its own host from its own
 # repo and is not part of this deployment.
@@ -137,7 +138,7 @@ pages:
       when: never
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
 
-# VS Code extension packages on tags (registry publishing stays manual).
+# VS Code extension packages on tags; publishing them is a manual job below.
 vsix:
   stage: deploy
   script:
@@ -161,6 +162,55 @@ vsix-ocm:
     expire_in: 4 weeks
   rules:
     - if: $CI_COMMIT_TAG
+
+# Open VSX publishing, one job per product.
+#
+# MANUAL on purpose. A published version is immutable: it cannot be replaced
+# or withdrawn, only superseded by a new version. Tagging must therefore never
+# publish by itself: someone decides, per product, that this build is the one
+# users get. Manual also keeps the ordering free, which matters while a
+# listing is still being bootstrapped (a README that links to a sibling
+# extension wants that sibling to exist first).
+#
+# Setup, once: OVSX_TOKEN as a masked, protected CI variable (Open VSX → user
+# settings → access tokens; the account must own the `everbright-it`
+# namespace). ovsx picks it up as OVSX_PAT from the environment, so the token
+# never appears in a command line, a process list, or the job log.
+#
+# The VS Code Marketplace can extend the same shape (`vsce publish`) once its
+# publisher exists; see apps/vscode/DEVELOPMENT.md.
+.ovsx-publish:
+  stage: publish
+  image: node:22-alpine
+  cache: []
+  before_script: []
+  variables:
+    OVSX_VERSION: '1.0.2'
+    OVSX_PAT: $OVSX_TOKEN
+  rules:
+    - if: $CI_COMMIT_TAG
+      when: manual
+
+publish-sbomlens:
+  extends: .ovsx-publish
+  needs: [vsix]
+  script:
+    - test -n "$OVSX_TOKEN" || { echo "OVSX_TOKEN is not set. Add it as a masked CI variable."; exit 1; }
+    # Fail on a bad or expired token before touching the registry.
+    - npx --yes ovsx@$OVSX_VERSION verify-pat everbright-it
+    # A tag that disagrees with the manifest would publish a mislabelled
+    # extension under a version number nobody can correct afterwards.
+    - node -e "const v=require('./apps/vscode/package.json').version; if ('v'+v !== process.env.CI_COMMIT_TAG) { console.error(`vsix is ${v}, tag is ${process.env.CI_COMMIT_TAG}`); process.exit(1); }"
+    - npx --yes ovsx@$OVSX_VERSION publish sbomlens.vsix
+
+publish-ocmlens:
+  extends: .ovsx-publish
+  needs: [vsix-ocm]
+  script:
+    - test -n "$OVSX_TOKEN" || { echo "OVSX_TOKEN is not set. Add it as a masked CI variable."; exit 1; }
+    - npx --yes ovsx@$OVSX_VERSION verify-pat everbright-it
+    - node -e "const v=require('./apps/vscode-ocm/package.json').version; if ('v'+v !== process.env.CI_COMMIT_TAG) { console.error(`vsix is ${v}, tag is ${process.env.CI_COMMIT_TAG}`); process.exit(1); }"
+    - npx --yes ovsx@$OVSX_VERSION publish ocmlens.vsix
 
 # Self-hosting image, pushed to the project's container registry on tags.
 docker:
@@ -199,7 +249,7 @@ image-scan:
   rules:
     - if: $CI_COMMIT_TAG
 
-# Dogfooding: every release ships its own SPDX SBOM — open it in SBOM Lens.
+# Dogfooding: every release ships its own SPDX SBOM, openable in SBOM Lens.
 # Pinned syft binary on alpine instead of the anchore/syft image: that image
 # is distroless (no shell, no sleep), which container-keepalive runners
 # cannot start. The checksum pins the exact release.
