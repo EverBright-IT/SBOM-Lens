@@ -1,9 +1,9 @@
-# Extension architecture — VS Code & Chromium
+# Extension architecture: VS Code & Chromium
 
-Status: **accepted roadmap design** (v0.7.0–v0.9.0). Nothing in this document
+Status: **accepted roadmap design** (v0.7.0-v0.9.0). Nothing in this document
 is built yet; it records the architecture so the enabler work lands in the
 right shape. Guiding constraints: one reusable codebase, one version, one
-release pipeline — and the privacy story (documents are parsed locally) must
+release pipeline, and the privacy story (documents are parsed locally) must
 survive every host.
 
 ## The enabler (v0.7.0): workspace split + host adapter
@@ -11,10 +11,10 @@ survive every host.
 Two structural changes, no user-visible features:
 
 1. **npm workspaces.**
-   - `packages/core` — the React-free core, moved verbatim from `src/core`
+   - `packages/core`: the React-free core, moved verbatim from `src/core`
      (the ESLint fence was built for this). Publishable as `@sbomlens/core`
      for third-party tooling.
-   - `apps/web` — the current application (`src/app`, `src/ui`, `src/worker`).
+   - `apps/web`: the current application (`src/app`, `src/ui`, `src/worker`).
    - Later: `apps/vscode`, `apps/chrome` as thin shells.
    One root version; CI builds every artifact from the same tag.
 
@@ -25,7 +25,7 @@ Two structural changes, no user-visible features:
    ```ts
    interface HostAdapter {
      /** Fetch SBOM bytes. Web: fetch + CORS rules. Extensions: privileged
-      *  host fetch — CORS does not apply. */
+      *  host fetch: CORS does not apply. */
      fetchDocument(url: string): Promise<ArrayBuffer>;
      /** UI preferences (sidebar width, map state). Web: localStorage.
       *  VS Code: Memento. Chrome: storage.local. */
@@ -50,10 +50,10 @@ Two structural changes, no user-visible features:
 ## VS Code extension (v0.8.0, `apps/vscode`)
 
 - **Surface:** `CustomReadonlyEditorProvider` registered for `*.spdx`,
-  `*.spdx.json`, `*.spdx.yaml` ("Open with… SBOM Lens"), an explorer context
+  `*.spdx.json`, `*.spdx.yaml` ("Open with... SBOM Lens"), an explorer context
   menu entry, and a "SBOM Lens: scan workspace for SBOMs" command that feeds
   detected documents into the workspace like a catalog.
-- **Webview:** hosts the built web app unchanged — local assets only, strict
+- **Webview:** hosts the built web app unchanged: local assets only, strict
   CSP (`default-src 'none'`, explicit `script-src`/`style-src`/`worker-src`
   for the parse worker), `retainContextWhenHidden` so the workspace survives
   tab switches.
@@ -67,7 +67,7 @@ Two structural changes, no user-visible features:
 ## Chromium extension (v0.9.0, `apps/chrome`, Manifest V3)
 
 - **The app ships inside the extension** as its own page
-  (`chrome-extension://…/index.html`) — works offline, needs no hosted
+  (`chrome-extension://.../index.html`): works offline, needs no hosted
   instance. An options setting can instead hand off to a self-hosted
   instance URL for enterprises that prefer their catalog-equipped deployment.
 - **Detection:** a content script sniffs raw document tabs (content type
@@ -78,14 +78,14 @@ Two structural changes, no user-visible features:
   `optional_host_permissions` granted on demand (privacy-preserving: no
   blanket host access), opens the bundled viewer tab, and delivers the bytes
   via `chrome.runtime` messaging into the ingest channel. Recursive
-  `Fetch all` routes through the background worker — CORS-free.
+  `Fetch all` routes through the background worker: CORS-free.
 - **Release:** CI zips the extension on tags; Chrome Web Store / Edge Add-ons
   publishing is asynchronous to tagging (store review takes days).
 
 ## Non-goals for now
 
 - No Firefox port until the MV3 surface stabilizes there.
-- No monorepo before v0.7.0 — the split is its own reviewable, feature-free
+- No monorepo before v0.7.0: the split is its own reviewable, feature-free
   release.
 - No shared state between browser tabs / VS Code windows; each host instance
   owns one workspace.

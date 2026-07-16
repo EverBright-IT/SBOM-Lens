@@ -2,7 +2,7 @@
 
 SBOM Lens is a client-only viewer: documents are parsed locally in the
 browser (or the VS Code webview) and never uploaded. Even so, a viewer for
-untrusted supply-chain documents is security-relevant software — we treat
+untrusted supply-chain documents is security-relevant software: we treat
 parser robustness, archive handling, and the deployment story as part of the
 attack surface and want to hear about anything you find.
 
@@ -24,7 +24,7 @@ days**. We will credit you in the release notes unless you prefer otherwise.
 In scope:
 
 - Parsing of SPDX documents (tag-value/JSON/YAML), compliance profiles, and
-  OCM deliveries (tar/gzip handling, zip-bomb and path-traversal resistance —
+  OCM deliveries (tar/gzip handling, zip-bomb and path-traversal resistance -
   archive entry names are never used as filesystem paths and links are never
   followed).
 - The web app and its PWA/service-worker behavior, the deployment catalog
@@ -39,7 +39,7 @@ Out of scope:
 - Vulnerabilities in third-party SBOM *generators*.
 - Issues that require a compromised host or browser.
 - The content of SBOMs themselves (we display them; we do not vouch for them
-  — OCM digests are explicitly displayed, not verified).
+ : OCM digests are explicitly displayed, not verified).
 
 ## Supported versions
 

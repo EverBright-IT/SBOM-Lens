@@ -1,12 +1,12 @@
 # Compliance profiles
 
-SBOM Lens ships the NTIA minimum elements as its default quality report — and
+SBOM Lens ships the NTIA minimum elements as its default quality report, and
 lets every organization define its **own** minimum elements as a small JSON
 file. The active profile drives the Quality section of each document and its
 Markdown export; nothing else in the app changes.
 
 Profiles are pure data. There is no code execution, and license checks stay
-field-level (presence, patterns) — SBOM Lens does not do legal interpretation.
+field-level (presence, patterns): SBOM Lens does not do legal interpretation.
 
 ## Format (`sbomlens-profile/v1`)
 
@@ -35,17 +35,17 @@ field-level (presence, patterns) — SBOM Lens does not do legal interpretation.
 | Type | Checks | Fields |
 | --- | --- | --- |
 | `document-field` | the field is present (and matches the modifiers) | `name`, `namespace`, `created`, `creators`, `dataLicense`, `comment` |
-| `relationships` | the document has at least `minCount` (default 1) relationships | — |
-| `created-recency` | `created` parses and is at most `maxAgeDays` old (boundary inclusive) | — |
+| `relationships` | the document has at least `minCount` (default 1) relationships | - |
+| `created-recency` | `created` parses and is at most `maxAgeDays` old (boundary inclusive) | - |
 | `package-coverage` | the share of packages satisfying the field (and modifiers) reaches `threshold` % | `version`, `supplier`, `purl`, `uniqueId`, `checksum`, `license`, `downloadLocation`, `purpose`, `copyright`, `originator` |
 
 ### Modifiers and semantics
 
-- **`pattern`** — a regular expression the value must match. `RegExp.test` is
-  a substring match: anchor with `^…$` when you mean the full value. No
+- **`pattern`**: a regular expression the value must match. `RegExp.test` is
+  a substring match: anchor with `^...$` when you mean the full value. No
   flags in v1 (matching is case-sensitive).
-- **`values`** — exact-match allow-list. Combined with `pattern` via AND.
-- **`creators`** is an array: SOME semantics — at least one creator must
+- **`values`**: exact-match allow-list. Combined with `pattern` via AND.
+- **`creators`** is an array: SOME semantics: at least one creator must
   satisfy the modifiers.
 - **`threshold`** on `package-coverage` is optional. Without it the check is
   an informational meter and never fails. Gating is exact
@@ -61,30 +61,30 @@ field-level (presence, patterns) — SBOM Lens does not do legal interpretation.
 ### Validation is fail-closed
 
 An unknown check type or field rejects the **whole** profile with a list of
-errors — an older SBOM Lens will never half-evaluate a newer profile and
+errors: an older SBOM Lens will never half-evaluate a newer profile and
 report a false "pass". Limits: 200 checks, 64 KB per file, patterns ≤ 500
 chars (must compile), ids unique.
 
 ## Importing a profile
 
-- **Drop it into the window** (or *Open → Compliance profile…*). Detection is
+- **Drop it into the window** (or *Open → Compliance profile...*). Detection is
   content-based (the `schema` field), not by file name. Imported profiles
   persist in the browser/editor and auto-activate.
-- **Deployment catalog** — `sbomlens.catalog.json` may list profiles the
+- **Deployment catalog**: `sbomlens.catalog.json` may list profiles the
   instance rolls out to everyone (never auto-activated):
 
   ```json
   { "profiles": [{ "name": "ACME minimum elements", "url": "profiles/acme.json" }] }
   ```
 
-- **VS Code** — put `.sbomlens/profile.json` into the workspace; the
+- **VS Code**: put `.sbomlens/profile.json` into the workspace; the
   extension pushes it into every SBOM Lens panel automatically. In **OCM
-  Lens** the same mechanism reads `.ocmlens/profile.json` — each product
+  Lens** the same mechanism reads `.ocmlens/profile.json`: each product
   keeps its own directory so both can live in one workspace with different
   rules.
 
 Switch profiles in the Quality section's dropdown; `×` removes an imported
-profile (falls back to the builtin — NTIA minimum elements in SBOM Lens,
+profile (falls back to the builtin: NTIA minimum elements in SBOM Lens,
 OCM component essentials in OCM Lens); **Export** writes the current report
 as Markdown for audits. Up to 16 imported profiles (256 KB total) persist;
 anything beyond that stays session-only with a notice.
