@@ -122,30 +122,62 @@ async function parseEntry(
  * worker: this is the one funnel all byte paths share (file picker/drop via
  * ingestFiles, the VS Code push channel, and — via its own call —
  * ingestUrl), so overlays import the same way everywhere. Consumed entries
- * never reach the parse worker or the parsing counters. Decoding here is
- * safe: buffers transfer only later, in parseInWorker.
+ * never reach the parse worker or the parsing counters.
+ *
+ * Cost discipline: profiles decode at most 64 KB, and a VEX candidate is
+ * pre-screened with a raw byte scan for the openvex.dev marker (UTF-8
+ * makes the ASCII substring byte-stable), so ordinary SBOM drops are never
+ * text-decoded on the UI thread just to be ruled out.
  */
 function siftOverlays(entries: ReadonlyArray<IngestEntry>): IngestEntry[] {
   const sboms: IngestEntry[] = [];
   for (const entry of entries) {
     if ('buffer' in entry && entry.buffer.byteLength <= MAX_VEX_BYTES) {
-      const text = new TextDecoder().decode(entry.buffer);
-      if (withinProfileSizeCap(entry.buffer.byteLength)) {
-        const sniff = sniffProfile(text);
-        if (sniff.isProfile) {
-          importProfileText(entry.fileName, text, 'imported');
-          continue;
+      const smallEnoughForProfile = withinProfileSizeCap(entry.buffer.byteLength);
+      const vexCandidate = hasVexMarker(entry.buffer);
+      if (smallEnoughForProfile || vexCandidate) {
+        const text = new TextDecoder().decode(entry.buffer);
+        if (smallEnoughForProfile) {
+          const sniff = sniffProfile(text);
+          if (sniff.isProfile) {
+            importProfileText(entry.fileName, text, 'imported');
+            continue;
+          }
         }
-      }
-      const vexSniff = sniffVex(text);
-      if (vexSniff.isVex) {
-        importVexRaw(entry.fileName, vexSniff.raw);
-        continue;
+        if (vexCandidate) {
+          const vexSniff = sniffVex(text);
+          if (vexSniff.isVex) {
+            importVexRaw(entry.fileName, vexSniff.raw);
+            continue;
+          }
+        }
       }
     }
     sboms.push(entry);
   }
   return sboms;
+}
+
+const VEX_MARKER = new TextEncoder().encode('openvex.dev');
+
+/** Raw byte scan — cheap enough to run on every drop, no decode needed. */
+function hasVexMarker(buffer: ArrayBuffer): boolean {
+  const bytes = new Uint8Array(buffer);
+  const first = VEX_MARKER[0]!;
+  let from = 0;
+  while (true) {
+    const i = bytes.indexOf(first, from);
+    if (i === -1 || i + VEX_MARKER.length > bytes.length) return false;
+    let match = true;
+    for (let j = 1; j < VEX_MARKER.length; j++) {
+      if (bytes[i + j] !== VEX_MARKER[j]) {
+        match = false;
+        break;
+      }
+    }
+    if (match) return true;
+    from = i + 1;
+  }
 }
 
 /** Parse + commit one OpenVEX document; findings recompute in the store. */

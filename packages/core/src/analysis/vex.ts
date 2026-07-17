@@ -251,7 +251,11 @@ export function purlMatchKey(purl: string): { pkg: string; version?: string } | 
   if (question !== -1) rest = rest.slice(0, question);
   const at = rest.lastIndexOf('@');
   let version: string | undefined;
-  if (at > 0) {
+  // A raw '/' after the '@' means the '@' belongs to an unencoded scope
+  // (pkg:npm/@angular/core), not a version separator: a purl version part
+  // never contains a raw slash. Without this guard the versionless scoped
+  // form would split into garbage and silently never match.
+  if (at > 0 && !rest.slice(at + 1).includes('/')) {
     version = decodeSegment(rest.slice(at + 1));
     rest = rest.slice(0, at);
   }

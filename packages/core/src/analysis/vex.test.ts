@@ -134,6 +134,15 @@ describe('purlMatchKey', () => {
     expect(purlMatchKey('pkg:npm/left-pad')).toEqual({ pkg: 'npm//left-pad' });
     expect(purlMatchKey('not-a-purl')).toBeUndefined();
   });
+
+  it('treats a raw @ in an unencoded scope as part of the name, not a version', () => {
+    // Versionless unencoded scope: the '@' is the scope marker, nothing splits.
+    expect(purlMatchKey('pkg:npm/@angular/core')).toEqual({ pkg: 'npm/@angular/core' });
+    // Encoded and unencoded forms of the same package produce the same key.
+    expect(purlMatchKey('pkg:npm/@angular/core@1.0.0')).toEqual(
+      purlMatchKey('pkg:npm/%40angular/core@1.0.0'),
+    );
+  });
 });
 
 describe('matchVex', () => {

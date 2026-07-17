@@ -120,10 +120,10 @@ export function parseSpdx3Json(input: SourceInput, root: Record<string, unknown>
     const docIri = hash > 0 ? externalSpdxId.slice(0, hash) : undefined;
     const locationHint = asString(entry.locationHint);
     const docKey = docIri ?? locationHint ?? externalSpdxId;
+    const hashes = readHashes(entry.verifiedUsing);
+    const checksum = hashes?.find((h) => h.algorithm === 'SHA1') ?? hashes?.[0];
     let ref = refByDocKey.get(docKey);
     if (!ref) {
-      const hashes = readHashes(entry.verifiedUsing);
-      const checksum = hashes?.find((h) => h.algorithm === 'SHA1') ?? hashes?.[0];
       ref = {
         docRef: docKey,
         uri: docIri ?? locationHint ?? externalSpdxId,
@@ -131,6 +131,10 @@ export function parseSpdx3Json(input: SourceInput, root: Record<string, unknown>
       };
       refByDocKey.set(docKey, ref);
       externalDocumentRefs.push(ref);
+    } else if (!ref.checksum && checksum) {
+      // Several imports may point into the same defining document; any one
+      // of them carrying a hash is enough to feed the checksum resolver.
+      ref.checksum = checksum;
     }
     importedElements.set(externalSpdxId, ref.docRef);
   }

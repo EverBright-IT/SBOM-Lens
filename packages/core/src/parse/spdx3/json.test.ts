@@ -178,6 +178,32 @@ describe('SPDX 3 imports (ExternalMap)', () => {
     expect(rel.from.kind).toBe('local');
   });
 
+  it('keeps the checksum when a later import for the same document carries it', () => {
+    const source = JSON.stringify({
+      '@context': 'https://spdx.org/rdf/3.0.1/spdx-context.jsonld',
+      '@graph': [
+        {
+          type: 'SpdxDocument',
+          spdxId: 'https://acme.example/doc/platform-1.0',
+          name: 'p',
+          creationInfo: '_:ci',
+          import: [
+            { externalSpdxId: `${AUTH_DOC}#pkg-a` },
+            {
+              externalSpdxId: `${AUTH_DOC}#pkg-b`,
+              verifiedUsing: [{ type: 'Hash', algorithm: 'sha1', hashValue: 'AB'.repeat(20) }],
+            },
+          ],
+        },
+        { type: 'CreationInfo', '@id': '_:ci', specVersion: '3.0.1', created: '2026-07-01T00:00:00Z', createdBy: [] },
+      ],
+    });
+    const result = parseDocument({ fileName: 'p.spdx3.json', text: source, sha1: 'c'.repeat(40), byteSize: source.length });
+    expect(result.document!.externalDocumentRefs).toEqual([
+      { docRef: AUTH_DOC, uri: AUTH_DOC, checksum: { algorithm: 'SHA1', value: 'ab'.repeat(20) } },
+    ]);
+  });
+
   it('falls back to the locationHint when the IRI carries no fragment', () => {
     const doc = parseImporting({
       externalSpdxId: 'urn:acme:auth-service',
