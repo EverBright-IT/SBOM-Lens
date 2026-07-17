@@ -50,7 +50,11 @@ document's. Ties fall to the later-loaded document, so the hand-over
 **order is part of the contract**: the app matches in ingest order, and a
 programmatic consumer should sort its inputs stably (e.g. by path) before
 calling `matchVex`. Re-loading a document with the same `@id` replaces the
-earlier version. Each finding carries `source` (the document's @id) plus
+earlier version — deliberately, so an updated advisory supersedes its
+predecessor. The flip side: two *different* advisories that sloppily share
+one `@id` displace each other in the viewer. OpenVEX requires document ids
+to be unique; if you need both loaded, give them distinct `@id`s (a
+programmatic consumer calling `matchVex` with its own list is unaffected). Each finding carries `source` (the document's @id) plus
 `sourceFile` as an unambiguous join key, and `supersededCount` says how
 many older statements the time rule discarded. `vexCoverage()` quantifies
 the counterpart: how many packages are covered, uncovered (matchable purl,

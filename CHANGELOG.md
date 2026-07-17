@@ -18,6 +18,34 @@ All notable changes to SBOM Lens. The format follows
   equal option, because an Azure DevOps PAT now requires an organization and
   a new organization requires an active Azure subscription.
 
+## [0.20.1] - 2026-07-17
+
+### Added
+- **VEX API, verify-ready.** `vexCoverage()` classifies the package
+  inventory as covered / uncovered (matchable purl, no statement) /
+  unmatchable (no usable purl) — one shared classification for the UI
+  and report consumers. Findings carry `sourceFile` next to `source` as
+  an unambiguous join key back to the VEX document, plus
+  `supersededCount` for statements the time rule discarded. The
+  hand-over order of VEX documents is documented as part of the
+  matching contract and pinned by a determinism test.
+
+### Fixed
+- **purl matching: unencoded scopes.** A versionless purl with an
+  unencoded scope (`pkg:npm/@angular/core`) no longer mis-splits at the
+  scope's `@`; the wildcard form now matches, and encoded/unencoded
+  spellings of the same package produce the same match key.
+- **Faster drops.** The ingest sniff pre-screens VEX candidates with a
+  raw byte scan instead of text-decoding every dropped file up to 4 MB
+  on the UI thread; ordinary SBOM drops are never decoded just to be
+  ruled out.
+- **[SBOM Lens] SPDX 3.x import grouping** backfills the defining
+  document's checksum when a later import entry carries the hash the
+  first one lacked.
+- docs/vex.md states plainly that re-loading a VEX document with the
+  same `@id` replaces it (and what that means for advisories that
+  share an id).
+
 ## [0.20.0] - 2026-07-17
 
 ### Added
