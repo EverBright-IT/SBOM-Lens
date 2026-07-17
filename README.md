@@ -335,7 +335,7 @@ Development happens on EverBright's GitLab; changes are mirrored to the public
 repositories:
 
 - GitLab (canonical public repo): <https://gitlab.com/everbrightit-group/sbom-lens>
-- GitHub mirror: <https://github.com/EverBrightIT/SBOM-Lens>
+- GitHub mirror: <https://github.com/EverBright-IT/SBOM-Lens>
 
 Issues and contributions are welcome on either platform; maintainers sync them
 into the primary repository.
