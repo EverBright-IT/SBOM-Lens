@@ -49,6 +49,8 @@ export interface VexDocument {
   /** The document's @id, or the file name when absent. */
   id: string;
   fileName: string;
+  /** Source exchange format; drives a UI label, never the matching. */
+  format?: 'openvex' | 'csaf';
   author?: string;
   timestamp?: string;
   version?: number;
@@ -179,6 +181,7 @@ export function parseOpenVex(fileName: string, raw: unknown): VexDocument {
   return {
     id: typeof root['@id'] === 'string' && root['@id'] !== '' ? root['@id'] : fileName,
     fileName,
+    format: 'openvex',
     ...(typeof root.author === 'string' ? { author: root.author } : {}),
     ...(typeof root.timestamp === 'string' ? { timestamp: root.timestamp } : {}),
     ...(typeof root.version === 'number' ? { version: root.version } : {}),

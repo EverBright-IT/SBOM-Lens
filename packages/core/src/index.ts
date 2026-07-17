@@ -105,6 +105,7 @@ export {
   vexCoverage,
   worstVexStatus,
 } from './analysis/vex';
+export { MAX_CSAF_BYTES, parseCsaf, sniffCsaf } from './analysis/csaf';
 
 export type {
   ComplianceProfile,

@@ -100,6 +100,11 @@ export function VexDocumentsSection() {
       <div className="space-y-1.5">
         {vex.documents.map((doc) => (
           <div key={doc.id} className="flex items-baseline gap-2 text-xs">
+            {doc.format && (
+              <span className="shrink-0 rounded bg-slate-100 px-1 text-[9px] font-medium tracking-wide text-slate-500 uppercase dark:bg-slate-800 dark:text-slate-400">
+                {doc.format === 'csaf' ? 'CSAF' : 'OpenVEX'}
+              </span>
+            )}
             <span className="min-w-0 flex-1 truncate font-mono text-slate-600 dark:text-slate-300" title={doc.id}>
               {doc.id}
             </span>

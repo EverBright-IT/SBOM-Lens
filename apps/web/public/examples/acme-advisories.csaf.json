@@ -1,0 +1,117 @@
+{
+  "document": {
+    "csaf_version": "2.0",
+    "category": "csaf_vex",
+    "title": "ACME demo VEX advisory (CSAF 2.0)",
+    "publisher": {
+      "category": "vendor",
+      "name": "ACME Product Security",
+      "namespace": "https://acme.example"
+    },
+    "tracking": {
+      "id": "ACME-CSAF-2026-0007",
+      "status": "final",
+      "version": "1",
+      "initial_release_date": "2026-05-22T09:00:00Z",
+      "current_release_date": "2026-05-22T09:00:00Z"
+    }
+  },
+  "product_tree": {
+    "full_product_names": [
+      {
+        "product_id": "CSAFPID-0001",
+        "name": "openssl 3.0.9",
+        "product_identification_helper": {
+          "purl": "pkg:apk/alpine/openssl@3.0.9"
+        }
+      }
+    ],
+    "branches": [
+      {
+        "category": "vendor",
+        "name": "ACME",
+        "branches": [
+          {
+            "category": "product_name",
+            "name": "api-server",
+            "branches": [
+              {
+                "category": "product_version",
+                "name": "2.1.0",
+                "product": {
+                  "product_id": "CSAFPID-0002",
+                  "name": "ACME api-server 2.1.0",
+                  "product_identification_helper": {
+                    "purl": "pkg:npm/%40acme/api-server@2.1.0"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "relationships": [
+      {
+        "category": "default_component_of",
+        "product_reference": "CSAFPID-0001",
+        "relates_to_product_reference": "CSAFPID-0002",
+        "full_product_name": {
+          "product_id": "CSAFPID-0001-in-0002",
+          "name": "openssl 3.0.9 as a component of ACME api-server 2.1.0"
+        }
+      }
+    ]
+  },
+  "vulnerabilities": [
+    {
+      "cve": "CVE-2026-40711",
+      "ids": [{ "system_name": "GitHub Security Advisory", "text": "GHSA-demo-csaf-0001" }],
+      "notes": [
+        {
+          "category": "description",
+          "text": "Demo advisory: use-after-free in the bundled openssl reachable from the TLS handshake."
+        }
+      ],
+      "product_status": {
+        "known_affected": ["CSAFPID-0001"]
+      },
+      "remediations": [
+        {
+          "category": "vendor_fix",
+          "details": "Rebuild the runtime image on an openssl 3.0.10 base.",
+          "product_ids": ["CSAFPID-0001"]
+        }
+      ],
+      "threats": [
+        {
+          "category": "impact",
+          "details": "Remote code execution in the request path.",
+          "product_ids": ["CSAFPID-0001"]
+        }
+      ]
+    },
+    {
+      "cve": "CVE-2026-40990",
+      "notes": [
+        { "category": "description", "text": "Demo advisory: parser flaw that ACME does not ship the vulnerable path for." }
+      ],
+      "product_status": {
+        "known_not_affected": ["CSAFPID-0002"]
+      },
+      "flags": [
+        {
+          "label": "vulnerable_code_not_present",
+          "product_ids": ["CSAFPID-0002"]
+        }
+      ]
+    },
+    {
+      "cve": "CVE-2026-41250",
+      "notes": [{ "category": "description", "text": "Demo advisory: heap overflow, fixed upstream in the openssl component." }],
+      "product_status": {
+        "fixed": ["CSAFPID-0001-in-0002"]
+      }
+    }
+  ]
+}

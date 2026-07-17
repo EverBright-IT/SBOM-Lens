@@ -6,10 +6,13 @@
 > lookup, no version-range analysis, and no scanning — if nobody issued a
 > statement, the viewer shows nothing, and says so.
 
-Load an [OpenVEX](https://github.com/openvex/spec) document next to your
-SBOMs — drop it, pick it, or fetch it from a URL, exactly like any other
-file; the content sniff recognizes it — and every statement is matched
-against the loaded inventory by package URL.
+Load an [OpenVEX](https://github.com/openvex/spec) or
+[CSAF 2.0](https://docs.oasis-open.org/csaf/csaf/v2.0/csaf-v2.0.html)
+document next to your SBOMs — drop it, pick it, or fetch it from a URL,
+exactly like any other file; the content sniff recognizes both — and every
+statement is matched against the loaded inventory by package URL. The two
+formats share one overlay: load them together and their findings merge,
+arbitrated by the same time rule.
 
 ## What you see
 
@@ -26,6 +29,30 @@ against the loaded inventory by package URL.
 
 Statuses render exactly as OpenVEX defines them: `affected` (red),
 `under_investigation` (amber), `fixed` (emerald), `not_affected` (slate).
+Each loaded document is tagged **OpenVEX** or **CSAF** in the overview.
+
+## CSAF 2.0: product-tree resolution
+
+CSAF separates identity from assertion. A `product_tree` names products —
+through `full_product_names`, a recursive `branches` tree, and
+`relationships` — and hangs a `product_identification_helper` on each; the
+`vulnerabilities[].product_status` buckets then reference those products by
+id. SBOM Lens resolves that indirection before matching:
+
+- The four buckets map onto the VEX statuses: `known_affected` →
+  *affected*, `known_not_affected` → *not affected*, `fixed` → *fixed*,
+  `under_investigation` → *under investigation*.
+- A **relationship** product (e.g. *openssl as a component of api-server*)
+  resolves to the **component** it installs (`product_reference`) — that is
+  the package that appears in an SBOM — unless it carries its own
+  identifier.
+- `flags` become the justification (they share OpenVEX's vocabulary),
+  `remediations[].details` the action statement, `threats` of category
+  `impact` the impact statement, and the first description/summary note the
+  description. `document.tracking` supplies the id, timestamp, and version.
+- Products identified **only by CPE** (no purl) are reported as an
+  informational diagnostic rather than matched — purl is the join key today
+  (see Limits).
 
 ## Matching rules (deliberately conservative)
 
@@ -62,16 +89,22 @@ no statement), or unmatchable (no usable purl).
 
 ## Limits (deliberate)
 
-- **OpenVEX only** for now (JSON, current shape and the early spec's
-  string forms). CSAF 2.0 — the BSI exchange format — needs product-tree
-  resolution and is a planned follow-up, not a quick variant.
+- **Matching is by purl only.** CSAF products identified solely by CPE or
+  file hash are parsed and shown as diagnostics but not matched against the
+  inventory; CPE matching is a planned follow-up. OpenVEX and CSAF products
+  that carry a purl match identically.
+- CSAF `relationships` are resolved one level deep (to the component); a
+  relationship whose reference is itself another relationship is not
+  chased further.
 - Statements that name no products, carry an unknown status, or are
   malformed are skipped with a diagnostic — the overlay never guesses.
-- VEX documents are capped at 4 MB (real ones are kilobytes).
+- OpenVEX documents are capped at 4 MB; CSAF (larger product trees) at
+  8 MB.
 - The overlay lives outside the document model: exports of the SBOM itself
   are unaffected, and removing the VEX document removes every trace.
 
-The demo cascade ships a synthetic advisory
-(`examples/acme-advisories.openvex.json`, fictional CVE ids marked as
-demo data) — *Load example* in the SBOM flavor shows the whole overlay in
-one click.
+The demo cascade ships two synthetic advisories over the same packages —
+`examples/acme-advisories.openvex.json` and
+`examples/acme-advisories.csaf.json` (fictional CVE ids marked as demo
+data) — so *Load example* in the SBOM flavor shows both formats in one
+overlay with one click.

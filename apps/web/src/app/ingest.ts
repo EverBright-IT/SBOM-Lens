@@ -1,5 +1,14 @@
 import type { DocumentId, LoadedDocument } from '@sbomlens/core';
-import { MAX_VEX_BYTES, buildIndexes, parseOpenVex, sniffProfile, sniffVex } from '@sbomlens/core';
+import {
+  MAX_CSAF_BYTES,
+  MAX_VEX_BYTES,
+  buildIndexes,
+  parseCsaf,
+  parseOpenVex,
+  sniffCsaf,
+  sniffProfile,
+  sniffVex,
+} from '@sbomlens/core';
 import { host } from '../host/adapter';
 import type { ParseJobRequest, ParseJobResponse } from '../worker/protocol';
 import { HAS_DELIVERIES } from './brand';
@@ -132,10 +141,11 @@ async function parseEntry(
 function siftOverlays(entries: ReadonlyArray<IngestEntry>): IngestEntry[] {
   const sboms: IngestEntry[] = [];
   for (const entry of entries) {
-    if ('buffer' in entry && entry.buffer.byteLength <= MAX_VEX_BYTES) {
+    if ('buffer' in entry && entry.buffer.byteLength <= MAX_OVERLAY_BYTES) {
       const smallEnoughForProfile = withinProfileSizeCap(entry.buffer.byteLength);
       const vexCandidate = hasVexMarker(entry.buffer);
-      if (smallEnoughForProfile || vexCandidate) {
+      const csafCandidate = hasCsafMarker(entry.buffer);
+      if (smallEnoughForProfile || vexCandidate || csafCandidate) {
         const text = new TextDecoder().decode(entry.buffer);
         if (smallEnoughForProfile) {
           const sniff = sniffProfile(text);
@@ -151,6 +161,13 @@ function siftOverlays(entries: ReadonlyArray<IngestEntry>): IngestEntry[] {
             continue;
           }
         }
+        if (csafCandidate) {
+          const csafSniff = sniffCsaf(text);
+          if (csafSniff.isCsaf) {
+            importCsafRaw(entry.fileName, csafSniff.raw);
+            continue;
+          }
+        }
       }
     }
     sboms.push(entry);
@@ -158,19 +175,33 @@ function siftOverlays(entries: ReadonlyArray<IngestEntry>): IngestEntry[] {
   return sboms;
 }
 
-const VEX_MARKER = new TextEncoder().encode('openvex.dev');
+/** The overlay pre-filter accepts anything up to the largest overlay cap. */
+const MAX_OVERLAY_BYTES = Math.max(MAX_VEX_BYTES, MAX_CSAF_BYTES);
 
-/** Raw byte scan — cheap enough to run on every drop, no decode needed. */
+const VEX_MARKER = new TextEncoder().encode('openvex.dev');
+const CSAF_MARKER = new TextEncoder().encode('csaf_version');
+
+/** OpenVEX prescreen: raw byte scan, cheap enough to run on every drop. */
 function hasVexMarker(buffer: ArrayBuffer): boolean {
+  return bufferContains(buffer, VEX_MARKER);
+}
+
+/** CSAF prescreen: the mandatory `csaf_version` key, byte-scanned. */
+function hasCsafMarker(buffer: ArrayBuffer): boolean {
+  return bufferContains(buffer, CSAF_MARKER);
+}
+
+/** Boyer-Moore-free substring scan over raw bytes — no decode needed. */
+function bufferContains(buffer: ArrayBuffer, marker: Uint8Array): boolean {
   const bytes = new Uint8Array(buffer);
-  const first = VEX_MARKER[0]!;
+  const first = marker[0]!;
   let from = 0;
   while (true) {
     const i = bytes.indexOf(first, from);
-    if (i === -1 || i + VEX_MARKER.length > bytes.length) return false;
+    if (i === -1 || i + marker.length > bytes.length) return false;
     let match = true;
-    for (let j = 1; j < VEX_MARKER.length; j++) {
-      if (bytes[i + j] !== VEX_MARKER[j]) {
+    for (let j = 1; j < marker.length; j++) {
+      if (bytes[i + j] !== marker[j]) {
         match = false;
         break;
       }
@@ -182,15 +213,27 @@ function hasVexMarker(buffer: ArrayBuffer): boolean {
 
 /** Parse + commit one OpenVEX document; findings recompute in the store. */
 function importVexRaw(fileName: string, raw: unknown): void {
+  commitVexDoc(fileName, parseOpenVex(fileName, raw), 'VEX');
+}
+
+/** Parse + commit one CSAF document; it flows through the same overlay. */
+function importCsafRaw(fileName: string, raw: unknown): void {
+  commitVexDoc(fileName, parseCsaf(fileName, raw), 'CSAF');
+}
+
+function commitVexDoc(
+  fileName: string,
+  doc: ReturnType<typeof parseOpenVex>,
+  label: 'VEX' | 'CSAF',
+): void {
   const { actions } = useAppStore.getState();
-  const doc = parseOpenVex(fileName, raw);
   if (doc.diagnostics.length > 0) {
     actions.recordFailure({ fileName, diagnostics: doc.diagnostics });
   }
   const { matched } = actions.addVexDocument(doc);
   const n = doc.statements.length;
   actions.toast(
-    `VEX loaded: ${n} statement${n === 1 ? '' : 's'}, ${matched} package${matched === 1 ? '' : 's'} matched`,
+    `${label} loaded: ${n} statement${n === 1 ? '' : 's'}, ${matched} package${matched === 1 ? '' : 's'} matched`,
     matched > 0 ? 'success' : 'info',
   );
 }
@@ -327,7 +370,7 @@ export async function ingestUrl(url: string): Promise<UrlIngestResult> {
     };
   }
   const buffer = result.bytes;
-  if (buffer.byteLength <= MAX_VEX_BYTES) {
+  if (buffer.byteLength <= MAX_OVERLAY_BYTES) {
     const text = new TextDecoder().decode(buffer);
     if (withinProfileSizeCap(buffer.byteLength)) {
       const sniff = sniffProfile(text);
@@ -341,6 +384,11 @@ export async function ingestUrl(url: string): Promise<UrlIngestResult> {
     const vexSniff = sniffVex(text);
     if (vexSniff.isVex) {
       importVexRaw(url, vexSniff.raw);
+      return { ok: true };
+    }
+    const csafSniff = sniffCsaf(text);
+    if (csafSniff.isCsaf) {
+      importCsafRaw(url, csafSniff.raw);
       return { ok: true };
     }
   }
