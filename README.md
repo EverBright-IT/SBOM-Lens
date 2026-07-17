@@ -2,6 +2,10 @@
 
 # SBOM Lens
 
+[![Open VSX Version](https://img.shields.io/open-vsx/v/everbright-it/sbomlens?label=Open%20VSX)](https://open-vsx.org/extension/everbright-it/sbomlens)
+[![VS Marketplace](https://img.shields.io/visual-studio-marketplace/v/everbright-it.sbomlens?label=VS%20Marketplace)](https://marketplace.visualstudio.com/items?itemName=everbright-it.sbomlens)
+[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+
 Drop a release-level SPDX document plus its component SBOMs and navigate the whole
 supply chain as one tree: release → component → sub-component → container image →
 package. Everything runs in your browser; files never leave your machine.
@@ -323,6 +327,20 @@ real-world quirk the parser supports;
 validate against a private SBOM collection without committing it:
 `SBOM_CORPUS_DIR=~/my-sboms npm run check-corpus`.
 
+## How it compares
+
+Honest positioning, not a feature race:
+
+| If you need... | Use |
+| --- | --- |
+| Generate SBOMs from code or images | [syft](https://github.com/anchore/syft), [trivy](https://github.com/aquasecurity/trivy), [cdxgen](https://github.com/CycloneDX/cdxgen) — SBOM Lens reads what they produce |
+| A server platform with CVE tracking over time | [OWASP Dependency-Track](https://dependencytrack.org/) |
+| Read, link, and verify multi-document SPDX cascades locally | **SBOM Lens** — no server, no upload, cascade resolution, compliance profiles, VEX overlay |
+| Quality scoring in CI | [sbomqs](https://github.com/interlynk-io/sbomqs); SBOM Lens complements it with the human-readable view |
+
+SBOM Lens deliberately does **not** scan for CVEs, rate licenses legally, or
+host anything. It is the reading half of the SBOM workflow.
+
 ## Roadmap
 
 - **SPDX 3.x, deeper**: serializations beyond JSON-LD. Curated 3.0.1
@@ -352,6 +370,13 @@ repositories:
 
 Issues and contributions are welcome on either platform; maintainers sync them
 into the primary repository.
+
+## About EverBright IT
+
+SBOM Lens, OCM Lens, and AIBOM Lens are open-source projects by
+[EverBright IT GmbH](https://everbright-it.de) (Munich). We help teams with
+CRA/SBOM readiness and secure AI adoption —
+[get in touch](https://everbright-it.de/?ref=sbom-lens-repo).
 
 ## License
 

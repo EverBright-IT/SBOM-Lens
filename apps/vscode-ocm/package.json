@@ -22,9 +22,14 @@
   "keywords": [
     "ocm",
     "open-component-model",
+    "component descriptor",
+    "ctf",
+    "oci",
     "sbom",
     "delivery",
-    "supply-chain"
+    "supply-chain",
+    "signature verification",
+    "air-gapped"
   ],
   "main": "./out/extension.js",
   "activationEvents": [

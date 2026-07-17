@@ -1,6 +1,7 @@
 # SBOM Lens for VS Code
 
 [![Open VSX Version](https://img.shields.io/open-vsx/v/everbright-it/sbomlens?label=Open%20VSX)](https://open-vsx.org/extension/everbright-it/sbomlens)
+[![VS Marketplace](https://img.shields.io/visual-studio-marketplace/v/everbright-it.sbomlens?label=VS%20Marketplace)](https://marketplace.visualstudio.com/items?itemName=everbright-it.sbomlens)
 
 View SPDX SBOMs, including cascading document hierarchies, right in your
 editor. The full [SBOM Lens](https://sbom-lens.everbright-it.de/) viewer as a
@@ -68,10 +69,9 @@ release diff, and quality reports.
 - **Open VSX** (VSCodium, Cursor, Gitpod, Theia):
   [`everbright-it.sbomlens`](https://open-vsx.org/extension/everbright-it/sbomlens),
   or search "SBOM Lens".
-- **VS Code Marketplace**: listing in progress. Until then, download
-  `sbomlens.vsix` from a
-  [release pipeline](https://gitlab.com/everbrightit-group/sbom-lens/-/pipelines)
-  and use *Extensions*, *Install from VSIX...*.
+- **VS Code Marketplace**:
+  [`everbright-it.sbomlens`](https://marketplace.visualstudio.com/items?itemName=everbright-it.sbomlens),
+  or search "SBOM Lens" in the Extensions view.
 
 ## Links
 
@@ -83,4 +83,5 @@ release diff, and quality reports.
 - Building, testing, publishing this extension:
   [DEVELOPMENT.md](https://gitlab.com/everbrightit-group/sbom-lens/-/blob/main/apps/vscode/DEVELOPMENT.md)
 
-Apache-2.0 © [EverBright IT GmbH](https://everbright-it.de)
+Apache-2.0 © [EverBright IT GmbH](https://everbright-it.de) — we help teams
+with CRA/SBOM readiness and secure AI adoption.

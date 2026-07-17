@@ -1,6 +1,7 @@
 # OCM Lens for VS Code
 
 [![Open VSX Version](https://img.shields.io/open-vsx/v/everbright-it/ocmlens?label=Open%20VSX)](https://open-vsx.org/extension/everbright-it/ocmlens)
+[![VS Marketplace](https://img.shields.io/visual-studio-marketplace/v/everbright-it.ocmlens?label=VS%20Marketplace)](https://marketplace.visualstudio.com/items?itemName=everbright-it.ocmlens)
 
 View [Open Component Model](https://ocm.software/) component versions and
 deliveries right in your editor: component descriptors (YAML/JSON), CTF and
@@ -90,10 +91,9 @@ and SBOMs stored in a delivery are extracted and linked automatically.
 - **Open VSX** (VSCodium, Cursor, Gitpod, Theia):
   [`everbright-it.ocmlens`](https://open-vsx.org/extension/everbright-it/ocmlens),
   or search "OCM Lens".
-- **VS Code Marketplace**: listing in progress. Until then, download
-  `ocmlens.vsix` from a
-  [release pipeline](https://gitlab.com/everbrightit-group/sbom-lens/-/pipelines)
-  and use *Extensions*, *Install from VSIX...*.
+- **VS Code Marketplace**:
+  [`everbright-it.ocmlens`](https://marketplace.visualstudio.com/items?itemName=everbright-it.ocmlens),
+  or search "OCM Lens" in the Extensions view.
 
 ## Links
 
@@ -107,4 +107,5 @@ and SBOMs stored in a delivery are extracted and linked automatically.
 - Building, testing, publishing this extension:
   [DEVELOPMENT.md](https://gitlab.com/everbrightit-group/sbom-lens/-/blob/main/apps/vscode/DEVELOPMENT.md)
 
-Apache-2.0 © [EverBright IT GmbH](https://everbright-it.de)
+Apache-2.0 © [EverBright IT GmbH](https://everbright-it.de) — we help teams
+with CRA/SBOM readiness and secure AI adoption.

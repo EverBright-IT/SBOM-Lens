@@ -20,9 +20,17 @@
     "Other"
   ],
   "keywords": [
-    "spdx",
     "sbom",
-    "supply-chain"
+    "sbom viewer",
+    "software bill of materials",
+    "spdx",
+    "spdx 3.0",
+    "supply-chain",
+    "supply chain security",
+    "vex",
+    "openvex",
+    "ntia",
+    "compliance"
   ],
   "main": "./out/extension.js",
   "contributes": {
