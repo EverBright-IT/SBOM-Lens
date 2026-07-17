@@ -35,6 +35,26 @@ describe('readTarFrom — selective materialization', () => {
     expect(diagnostics.some((d) => d.code === 'ARCHIVE_BLOBS_INDEXED')).toBe(true);
   });
 
+  it('refuses to materialize an oversized longname/PAX header (name-bomb guard)', async () => {
+    // Hand-build an 'L' entry claiming a huge name payload; the walker must
+    // skip it instead of reading gigabytes for a "file name". The truncated
+    // data is fine: the guard fires on the declared size, before any read.
+    const base: Uint8Array = writeTar([{ name: 'victim.txt', bytes: 'X' }]);
+    const lHeader = new Uint8Array(base.slice(0, 512));
+    lHeader[156] = 'L'.charCodeAt(0);
+    const sizeField = new TextEncoder().encode((2 * 1024 * 1024).toString(8).padStart(11, '0') + '\0');
+    lHeader.fill(0, 124, 136);
+    lHeader.set(sizeField, 124);
+    rechecksum(lHeader);
+    const payload = new Uint8Array(2 * 1024 * 1024);
+    const tar = concatBytes(lHeader, payload, base);
+    const { entries, diagnostics } = await readTarFrom(bufferSource(tar), TINY);
+    expect(entries.map((e) => e.name)).toEqual(['victim.txt']); // header name, not the bomb
+    expect(diagnostics.some((d) => d.code === 'TAR_ENTRY_SKIPPED' && d.message.includes('oversized-longname'))).toBe(
+      true,
+    );
+  });
+
   it('stops materializing when the total budget is spent, but keeps indexing', async () => {
     const entriesIn = Array.from({ length: 5 }, (_, i) => ({
       name: `blobs/sha256.${'0'.repeat(63)}${i}`,
@@ -269,4 +289,21 @@ async function sha256HexOf(input: Uint8Array | string): Promise<string> {
 async function compress(bytes: Uint8Array): Promise<Uint8Array> {
   const stream = new Blob([new Uint8Array(bytes)]).stream().pipeThrough(new CompressionStream('gzip'));
   return new Uint8Array(await new Response(stream).arrayBuffer());
+}
+
+function rechecksum(block: Uint8Array): void {
+  block.fill(0x20, 148, 156);
+  let sum = 0;
+  for (const byte of block) sum += byte;
+  block.set(new TextEncoder().encode(sum.toString(8).padStart(6, '0') + '\0 '), 148);
+}
+
+function concatBytes(...parts: Uint8Array[]): Uint8Array {
+  const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
+  let offset = 0;
+  for (const part of parts) {
+    out.set(part, offset);
+    offset += part.length;
+  }
+  return out;
 }

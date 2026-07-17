@@ -136,6 +136,10 @@ export interface TarStreamOptions {
 
 export const MATERIALIZE_ENTRY_MAX = 64 * 1024 * 1024;
 export const MATERIALIZE_TOTAL_MAX = 512 * 1024 * 1024;
+// GNU longname / PAX headers hold a file NAME (kilobytes at most), but their
+// size field is attacker-controlled like any other. Without a cap a hostile
+// archive could make the walker materialize gigabytes for a "name".
+const META_HEADER_MAX = 1024 * 1024;
 
 /**
  * The streaming twin of readTar: walks a tar through a ByteSource without
@@ -191,10 +195,18 @@ export async function readTarFrom(source: ByteSource, options?: TarStreamOptions
     const typeflag = String.fromCharCode(header[156]!);
 
     if (typeflag === 'L') {
-      pendingLongName = decodeString(await source.read(dataStart, size)).replace(/\0+$/, '');
+      if (size > META_HEADER_MAX) {
+        countSkip(skippedTypes, 'oversized-longname');
+      } else {
+        pendingLongName = decodeString(await source.read(dataStart, size)).replace(/\0+$/, '');
+      }
     } else if (typeflag === 'x') {
-      const path = parsePaxPath(await source.read(dataStart, size));
-      if (path !== null) pendingPaxPath = path;
+      if (size > META_HEADER_MAX) {
+        countSkip(skippedTypes, 'oversized-pax');
+      } else {
+        const path = parsePaxPath(await source.read(dataStart, size));
+        if (path !== null) pendingPaxPath = path;
+      }
     } else if (typeflag === 'g') {
       countSkip(skippedTypes, 'pax-global');
     } else if (typeflag === '5') {

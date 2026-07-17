@@ -61,7 +61,15 @@ export async function gunzip(bytes: Uint8Array, maxBytes = GUNZIP_MAX_BYTES): Pr
     }
     chunks.push(value);
   }
-  const out = new Uint8Array(total);
+  // Near the cap the single output buffer can exceed what this engine will
+  // allocate; the user's remedy is the same as for the cap itself, so it
+  // reports as the same honest error instead of "not a valid gzip stream".
+  let out: Uint8Array;
+  try {
+    out = new Uint8Array(total);
+  } catch {
+    throw new GunzipLimitError(maxBytes);
+  }
   let offset = 0;
   for (const chunk of chunks) {
     out.set(chunk, offset);
