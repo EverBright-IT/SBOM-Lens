@@ -1,5 +1,5 @@
 import type { DocumentId, LoadedDocument } from '@sbomlens/core';
-import { buildIndexes, sniffProfile } from '@sbomlens/core';
+import { MAX_VEX_BYTES, buildIndexes, parseOpenVex, sniffProfile, sniffVex } from '@sbomlens/core';
 import { host } from '../host/adapter';
 import type { ParseJobRequest, ParseJobResponse } from '../worker/protocol';
 import { HAS_DELIVERIES } from './brand';
@@ -118,27 +118,49 @@ async function parseEntry(
 }
 
 /**
- * Content-sniff for compliance profiles BEFORE the worker: this is the one
- * funnel all byte paths share (file picker/drop via ingestFiles, the VS Code
- * push channel, and — via its own call — ingestUrl), so profiles import the
- * same way everywhere. Consumed entries never reach the parse worker or the
- * parsing counters. Decoding here is safe: buffers transfer only later, in
- * parseInWorker.
+ * Content-sniff for compliance profiles and OpenVEX documents BEFORE the
+ * worker: this is the one funnel all byte paths share (file picker/drop via
+ * ingestFiles, the VS Code push channel, and — via its own call —
+ * ingestUrl), so overlays import the same way everywhere. Consumed entries
+ * never reach the parse worker or the parsing counters. Decoding here is
+ * safe: buffers transfer only later, in parseInWorker.
  */
-function siftProfiles(entries: ReadonlyArray<IngestEntry>): IngestEntry[] {
+function siftOverlays(entries: ReadonlyArray<IngestEntry>): IngestEntry[] {
   const sboms: IngestEntry[] = [];
   for (const entry of entries) {
-    if ('buffer' in entry && withinProfileSizeCap(entry.buffer.byteLength)) {
+    if ('buffer' in entry && entry.buffer.byteLength <= MAX_VEX_BYTES) {
       const text = new TextDecoder().decode(entry.buffer);
-      const sniff = sniffProfile(text);
-      if (sniff.isProfile) {
-        importProfileText(entry.fileName, text, 'imported');
+      if (withinProfileSizeCap(entry.buffer.byteLength)) {
+        const sniff = sniffProfile(text);
+        if (sniff.isProfile) {
+          importProfileText(entry.fileName, text, 'imported');
+          continue;
+        }
+      }
+      const vexSniff = sniffVex(text);
+      if (vexSniff.isVex) {
+        importVexRaw(entry.fileName, vexSniff.raw);
         continue;
       }
     }
     sboms.push(entry);
   }
   return sboms;
+}
+
+/** Parse + commit one OpenVEX document; findings recompute in the store. */
+function importVexRaw(fileName: string, raw: unknown): void {
+  const { actions } = useAppStore.getState();
+  const doc = parseOpenVex(fileName, raw);
+  if (doc.diagnostics.length > 0) {
+    actions.recordFailure({ fileName, diagnostics: doc.diagnostics });
+  }
+  const { matched } = actions.addVexDocument(doc);
+  const n = doc.statements.length;
+  actions.toast(
+    `VEX loaded: ${n} statement${n === 1 ? '' : 's'}, ${matched} package${matched === 1 ? '' : 's'} matched`,
+    matched > 0 ? 'success' : 'info',
+  );
 }
 
 /**
@@ -151,7 +173,7 @@ export type IngestEntry =
   | { fileName: string; blob: Blob };
 
 export async function ingestBuffers(entries: ReadonlyArray<IngestEntry>): Promise<DocumentId[]> {
-  const sbomEntries = siftProfiles(entries);
+  const sbomEntries = siftOverlays(entries);
   if (sbomEntries.length === 0) return [];
   const { actions } = useAppStore.getState();
   actions.parsingBegin(sbomEntries.length);
@@ -273,14 +295,21 @@ export async function ingestUrl(url: string): Promise<UrlIngestResult> {
     };
   }
   const buffer = result.bytes;
-  if (withinProfileSizeCap(buffer.byteLength)) {
+  if (buffer.byteLength <= MAX_VEX_BYTES) {
     const text = new TextDecoder().decode(buffer);
-    const sniff = sniffProfile(text);
-    if (sniff.isProfile) {
-      const imported = importProfileText(url, text, 'imported');
-      return imported.ok
-        ? { ok: true }
-        : { ok: false, message: 'The fetched file is an invalid compliance profile.' };
+    if (withinProfileSizeCap(buffer.byteLength)) {
+      const sniff = sniffProfile(text);
+      if (sniff.isProfile) {
+        const imported = importProfileText(url, text, 'imported');
+        return imported.ok
+          ? { ok: true }
+          : { ok: false, message: 'The fetched file is an invalid compliance profile.' };
+      }
+    }
+    const vexSniff = sniffVex(text);
+    if (vexSniff.isVex) {
+      importVexRaw(url, vexSniff.raw);
+      return { ok: true };
     }
   }
   const pathName = (() => {

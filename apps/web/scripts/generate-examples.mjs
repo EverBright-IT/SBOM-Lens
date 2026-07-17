@@ -324,6 +324,54 @@ const acmeProfile = {
 };
 write('acme-profile.sbomlens-profile.json', JSON.stringify(acmeProfile, null, 2) + '\n');
 
+// Demo OpenVEX document: what the (fictional) supplier communicates about
+// known vulnerabilities in the cascade. CVE ids are synthetic, marked Demo.
+const acmeVex = {
+  '@context': 'https://openvex.dev/ns/v0.2.0',
+  '@id': 'https://acme.example/security/vex-2026-0042',
+  author: 'ACME Product Security',
+  timestamp: '2026-05-20T09:00:00Z',
+  version: 1,
+  statements: [
+    {
+      vulnerability: {
+        name: 'CVE-2026-24800',
+        description: 'Demo advisory: TLS renegotiation flaw in the bundled openssl.',
+      },
+      products: [{ '@id': 'pkg:apk/alpine/openssl@3.0.9' }],
+      status: 'affected',
+      action_statement: 'Upgrade the runtime image to an openssl 3.0.10 base.',
+      timestamp: '2026-05-20T09:00:00Z',
+    },
+    {
+      vulnerability: {
+        name: 'CVE-2026-13337',
+        description: 'Demo advisory: request-parsing flaw reachable through openssl.',
+      },
+      products: [
+        {
+          '@id': 'pkg:npm/%40acme/api-server@2.1.0',
+          subcomponents: [{ '@id': 'pkg:apk/alpine/openssl@3.0.9' }],
+        },
+      ],
+      status: 'not_affected',
+      justification: 'vulnerable_code_not_in_execute_path',
+      impact_statement: 'The affected parser is compiled out of the ACME build.',
+      timestamp: '2026-05-21T10:30:00Z',
+    },
+    {
+      vulnerability: {
+        name: 'CVE-2026-30112',
+        description: 'Demo advisory: heap overflow, fixed upstream.',
+      },
+      products: [{ '@id': 'pkg:apk/alpine/musl@1.0.0?distro=3.20' }],
+      status: 'fixed',
+      timestamp: '2026-04-02T12:00:00Z',
+    },
+  ],
+};
+write('acme-advisories.openvex.json', JSON.stringify(acmeVex, null, 2) + '\n');
+
 // --- OCM-flavor demo: the deterministic CTF fixture doubles as the example --
 // Bytes are owned by packages/core (generate-ocm-fixtures.mjs) — this script
 // only copies them, so both stay in lockstep and byte-identical.

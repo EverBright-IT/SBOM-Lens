@@ -34,6 +34,11 @@ release diff, and quality reports.
 - **Your own compliance rules.** Drop a `.sbomlens/profile.json` into the
   workspace and every panel picks it up as a quality profile: thresholds,
   field patterns, coverage gates. Reports export as Markdown.
+- **VEX overlay.** Open an OpenVEX document next to your SBOMs and see what
+  the supplier communicates about known vulnerabilities: per-package
+  statements with status and justification, a VEX column and status filter
+  in the inventory, findings in the exports. Matched by package URL, newest
+  statement wins. A communication channel, not a scanner.
 - **Private by design.** Documents are parsed locally inside the editor.
   Nothing is uploaded anywhere.
 - Field info tooltips carry the SPDX 2.3 spec docs and link into the exact

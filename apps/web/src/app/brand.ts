@@ -73,6 +73,7 @@ const SBOM: Branding = {
     'examples/acme-platform-1.0.spdx',
     'examples/acme-webstack-2.1.spdx.json',
     'examples/acme-runtime-image-3.0.spdx',
+    'examples/acme-advisories.openvex.json',
   ],
 };
 

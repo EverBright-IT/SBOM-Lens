@@ -2,8 +2,10 @@ import type { SearchFacets } from '../graph/search';
 import { searchWorkspace } from '../graph/search';
 import type { SbomElement } from '../model/document';
 import { effectiveLicense } from '../model/document';
-import type { DocumentId } from '../model/ids';
+import type { DocumentId, ElementId } from '../model/ids';
 import type { WorkspaceState } from '../workspace/workspace';
+import type { VexFinding } from './vex';
+import { worstVexStatus } from './vex';
 
 /**
  * The aggregated bill of materials across every loaded document — the
@@ -86,8 +88,20 @@ const CSV_COLUMNS = [
   'document',
 ] as const;
 
-export function inventoryToCsv(rows: readonly InventoryRow[]): string {
-  const lines = [CSV_COLUMNS.join(',')];
+/** The VEX overlay rides the exports only when one is loaded. */
+export type VexOverlay = ReadonlyMap<ElementId, VexFinding[]>;
+
+function vexCells(findings: readonly VexFinding[] | undefined): [status: string, vulns: string] {
+  if (!findings || findings.length === 0) return ['', ''];
+  return [
+    worstVexStatus(findings) ?? '',
+    findings.map((f) => `${f.vulnerability} (${f.status})`).join('; '),
+  ];
+}
+
+export function inventoryToCsv(rows: readonly InventoryRow[], vex?: VexOverlay): string {
+  const withVex = vex !== undefined && vex.size > 0;
+  const lines = [[...CSV_COLUMNS, ...(withVex ? ['vex_status', 'vex_vulnerabilities'] : [])].join(',')];
   for (const row of rows) {
     lines.push(
       [
@@ -100,6 +114,7 @@ export function inventoryToCsv(rows: readonly InventoryRow[]): string {
         row.element.spdxId,
         row.element.kind,
         row.docName,
+        ...(withVex ? vexCells(vex.get(row.element.id)) : []),
       ]
         .map(escapeCsv)
         .join(','),
@@ -112,21 +127,31 @@ function escapeCsv(value: string): string {
   return /[",\n\r;]/.test(value) ? `"${value.replaceAll('"', '""')}"` : value;
 }
 
-export function inventoryToJson(rows: readonly InventoryRow[]): string {
+export function inventoryToJson(rows: readonly InventoryRow[], vex?: VexOverlay): string {
+  const withVex = vex !== undefined && vex.size > 0;
   return (
     JSON.stringify(
-      rows.map((row) => ({
-        name: row.element.name,
-        version: row.element.version,
-        license: effectiveLicense(row.element),
-        supplier: row.element.supplier,
-        purpose: row.element.purpose,
-        purl: row.element.purl,
-        spdxId: row.element.spdxId,
-        kind: row.element.kind,
-        document: row.docName,
-        documentId: row.docId,
-      })),
+      rows.map((row) => {
+        const findings = withVex ? vex.get(row.element.id) : undefined;
+        return {
+          name: row.element.name,
+          version: row.element.version,
+          license: effectiveLicense(row.element),
+          supplier: row.element.supplier,
+          purpose: row.element.purpose,
+          purl: row.element.purl,
+          spdxId: row.element.spdxId,
+          kind: row.element.kind,
+          document: row.docName,
+          documentId: row.docId,
+          ...(findings && findings.length > 0
+            ? {
+                vexStatus: worstVexStatus(findings),
+                vexFindings: findings.map((f) => ({ vulnerability: f.vulnerability, status: f.status })),
+              }
+            : {}),
+        };
+      }),
       null,
       2,
     ) + '\n'

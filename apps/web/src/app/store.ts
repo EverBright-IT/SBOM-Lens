@@ -5,12 +5,15 @@ import type {
   ElementId,
   LoadedDocument,
   NodeTarget,
+  VexDocument,
+  VexFinding,
   WorkspaceState,
 } from '@sbomlens/core';
 import {
   addDocuments,
   bindRef,
   emptyWorkspace,
+  matchVex,
   pruneExpandedPaths,
   removalPlan,
   removeDocuments,
@@ -88,6 +91,8 @@ interface AppState {
   removalPrompt: { docIds: readonly DocumentId[] } | null;
   /** Manage-documents dialog visibility. */
   manageOpen: boolean;
+  /** OpenVEX overlay: supplier vulnerability communication, matched by purl. */
+  vex: { documents: VexDocument[]; findings: ReadonlyMap<ElementId, VexFinding[]> };
 
   actions: {
     /** Batch commit: one workspace swap, one resolution recompute, one toast. */
@@ -136,7 +141,19 @@ interface AppState {
     setCatalog(catalog: Catalog): void;
     setProfiles(profiles: StoredProfile[]): void;
     setActiveProfileId(id: string | null): void;
+
+    /** Add or update (same @id) a VEX document; returns matched element count. */
+    addVexDocument(doc: VexDocument): { matched: number };
+    removeVexDocument(id: string): void;
   };
+}
+
+/** Recompute the overlay; the empty case skips the walk entirely. */
+function vexFindingsFor(
+  ws: WorkspaceState,
+  docs: readonly VexDocument[],
+): ReadonlyMap<ElementId, VexFinding[]> {
+  return docs.length === 0 ? new Map() : matchVex(ws, docs);
 }
 
 let toastCounter = 0;
@@ -175,6 +192,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
   activeProfileId: null,
   removalPrompt: null,
   manageOpen: false,
+  vex: { documents: [], findings: new Map() },
 
   actions: {
     addLoadedBatch(loaded) {
@@ -185,7 +203,11 @@ export const useAppStore = create<AppState>()((set, get) => ({
         return { added: [], duplicates: result.duplicates };
       }
       const resolvedAfter = countResolved(result.workspace);
-      set((s) => ({ ws: result.workspace, wsVersion: s.wsVersion + 1 }));
+      set((s) => ({
+        ws: result.workspace,
+        wsVersion: s.wsVersion + 1,
+        vex: { ...s.vex, findings: vexFindingsFor(result.workspace, s.vex.documents) },
+      }));
       const gained = resolvedAfter - resolvedBefore;
       if (gained > 0) {
         get().actions.toast(
@@ -226,6 +248,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
           inventoryScope,
           diffA: s.diffA && removedSet.has(s.diffA) ? null : s.diffA,
           diffB: s.diffB && removedSet.has(s.diffB) ? null : s.diffB,
+          vex: { ...s.vex, findings: vexFindingsFor(ws, s.vex.documents) },
         };
       });
     },
@@ -273,6 +296,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
         inventoryScope: null,
         diffA: null,
         diffB: null,
+        vex: { documents: [], findings: new Map() },
       }));
     },
     bindManualRef(refKeyStr, target) {
@@ -389,6 +413,20 @@ export const useAppStore = create<AppState>()((set, get) => ({
     },
     setActiveProfileId(id) {
       set({ activeProfileId: id });
+    },
+
+    addVexDocument(doc) {
+      const { ws, vex } = get();
+      // Same @id replaces (a newer version of the same VEX document).
+      const documents = [...vex.documents.filter((d) => d.id !== doc.id), doc];
+      const findings = vexFindingsFor(ws, documents);
+      set({ vex: { documents, findings } });
+      return { matched: findings.size };
+    },
+    removeVexDocument(id) {
+      const { ws, vex } = get();
+      const documents = vex.documents.filter((d) => d.id !== id);
+      set({ vex: { documents, findings: vexFindingsFor(ws, documents) } });
     },
   },
 }));

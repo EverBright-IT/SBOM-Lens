@@ -18,6 +18,27 @@ All notable changes to SBOM Lens. The format follows
   equal option, because an Azure DevOps PAT now requires an organization and
   a new organization requires an active Azure subscription.
 
+## [0.19.0] - 2026-07-17
+
+### Added
+- **VEX overlay (OpenVEX), both products.** Load an OpenVEX document
+  next to your SBOMs (or deliveries) and the viewer shows what the
+  supplier communicates about known vulnerabilities. Statements match the inventory by
+  package URL (type/namespace case-folded, name and version exact,
+  qualifiers ignored; versionless purls cover every version;
+  subcomponent matches are labeled). Each matched package gets a
+  *Vulnerability communication* section with status, justification,
+  impact and action statements; the Inventory grows a VEX column with
+  status filter chips, and CSV/JSON exports carry the findings. Several
+  VEX documents merge by the OpenVEX time rule (newest statement per
+  vulnerability and package wins), re-loading the same `@id` replaces
+  it, and the overlay recomputes live as documents come and go. It is
+  a communication channel, not a scanner: no CVE-database lookup, no
+  version ranges, and malformed statements are skipped with
+  diagnostics instead of guessed. The demo cascade ships a synthetic
+  advisory so *Load example* shows the whole flow. CSAF 2.0 is a
+  planned follow-up. See docs/vex.md.
+
 ## [0.18.1] - 2026-07-17
 
 ### Fixed

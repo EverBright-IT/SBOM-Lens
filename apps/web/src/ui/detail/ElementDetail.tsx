@@ -7,6 +7,7 @@ import { RevealIcon } from '../icons';
 import { CopyButton, FieldRow, Section } from './FieldRow';
 import { OcmElementSections } from './OcmSections';
 import { RelationshipList } from './RelationshipList';
+import { VexElementSection } from './VexSection';
 import { docsFor } from './specDocs';
 
 const FILE_LIST_CAP = 200;
@@ -57,6 +58,8 @@ export function ElementDetail({
         <FieldRow label="SPDXID" value={element.spdxId} mono copyable info={P.SPDXID} />
         <FieldRow label="Document" value={loaded.document.name} />
       </Section>
+
+      <VexElementSection elementId={element.id} />
 
       {element.purl && (
         <Section title="Package URL">

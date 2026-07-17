@@ -115,6 +115,13 @@ per drag&drop, via the deployment catalog, or from `.sbomlens/profile.json`
 in a VS Code workspace. Reports export as Markdown. See
 [docs/compliance-profiles.md](docs/compliance-profiles.md).
 
+Drop an **OpenVEX document** next to your SBOMs and the viewer shows what the
+supplier communicates about known vulnerabilities: per-package statements with
+status, justification, and action, a VEX column + status filter in the
+Inventory, and findings riding the exports. Matched by package URL, newest
+statement wins; it is a communication channel, not a scanner. See
+[docs/vex.md](docs/vex.md).
+
 ## Keyboard
 
 | Key | Action |

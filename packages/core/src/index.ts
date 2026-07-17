@@ -94,6 +94,16 @@ export type { CascadeDiff, DiffChange, DiffEntry, DiffReason, DiffSide } from '.
 export { diffCascades, diffToMarkdown, reachableDocs } from './analysis/diff';
 export type { QualityReport } from './analysis/quality';
 export { documentIssues, documentQuality } from './analysis/quality';
+export type { VexDocument, VexFinding, VexProductRef, VexStatement, VexStatus } from './analysis/vex';
+export {
+  MAX_VEX_BYTES,
+  VEX_STATUS_ORDER,
+  matchVex,
+  parseOpenVex,
+  purlMatchKey,
+  sniffVex,
+  worstVexStatus,
+} from './analysis/vex';
 
 export type {
   ComplianceProfile,
