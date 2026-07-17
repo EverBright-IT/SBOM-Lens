@@ -1,6 +1,7 @@
+import { hasVerifiableFiles } from '@sbomlens/core';
 import { useRef, useState } from 'react';
 import { loadCatalogSource } from '../app/catalog';
-import { ingestFiles } from '../app/ingest';
+import { checkDeliveredFiles, ingestFiles } from '../app/ingest';
 import { useAppStore } from '../app/store';
 import { loadExample } from './examples';
 import { ChevronIcon } from './icons';
@@ -9,9 +10,11 @@ export function OpenMenu() {
   const [open, setOpen] = useState(false);
   const actions = useAppStore((s) => s.actions);
   const catalog = useAppStore((s) => s.catalog);
+  const canCheckDelivery = useAppStore((s) => hasVerifiableFiles(s.ws));
   const filesRef = useRef<HTMLInputElement>(null);
   const folderRef = useRef<HTMLInputElement>(null);
   const profileRef = useRef<HTMLInputElement>(null);
+  const deliveryRef = useRef<HTMLInputElement>(null);
 
   const item =
     'block w-full px-3 py-1.5 text-left text-[13px] hover:bg-slate-100 dark:hover:bg-slate-800';
@@ -47,6 +50,16 @@ export function OpenMenu() {
             >
               Compliance profile…
             </button>
+            {canCheckDelivery && (
+              <button
+                type="button"
+                className={item}
+                title="Pick the delivered files or folder; their digests are checked against the SBOM's file checksums"
+                onClick={() => { setOpen(false); deliveryRef.current?.click(); }}
+              >
+                Check delivery…
+              </button>
+            )}
             {catalog && (
               <>
                 <div className="my-1 border-t border-slate-100 dark:border-slate-800" />
@@ -78,6 +91,17 @@ export function OpenMenu() {
       )}
 
       <FilePickers filesRef={filesRef} folderRef={folderRef} profileRef={profileRef} />
+      <input
+        ref={deliveryRef}
+        type="file"
+        hidden
+        onChange={(e) => {
+          const files = [...(e.target.files ?? [])];
+          e.target.value = '';
+          void checkDeliveredFiles(files);
+        }}
+        {...({ webkitdirectory: '' } as object)}
+      />
     </div>
   );
 }

@@ -8,6 +8,7 @@ import { CopyButton, FieldRow, Section } from './FieldRow';
 import { OcmElementSections } from './OcmSections';
 import { RelationshipList } from './RelationshipList';
 import { VexElementSection } from './VexSection';
+import { AcceptanceElementSection } from './AcceptanceSection';
 import { docsFor } from './specDocs';
 
 const FILE_LIST_CAP = 200;
@@ -60,6 +61,7 @@ export function ElementDetail({
       </Section>
 
       <VexElementSection elementId={element.id} />
+      {isFile && <AcceptanceElementSection elementId={element.id} />}
 
       {element.purl && (
         <Section title="Package URL">

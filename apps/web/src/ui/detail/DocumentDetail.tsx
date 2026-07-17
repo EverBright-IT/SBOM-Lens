@@ -23,6 +23,7 @@ import { formatBytes, formatCount } from '../nodeInfo';
 import { Chip, FieldRow, Section } from './FieldRow';
 import { OcmDocumentSections } from './OcmSections';
 import { VexDocumentsSection } from './VexSection';
+import { AcceptanceReportSection } from './AcceptanceSection';
 import { docsFor } from './specDocs';
 
 export function DocumentDetail({ ws, loaded }: { ws: WorkspaceState; loaded: LoadedDocument }) {
@@ -95,6 +96,7 @@ export function DocumentDetail({ ws, loaded }: { ws: WorkspaceState; loaded: Loa
       <QualitySection ws={ws} loaded={loaded} />
 
       <VexDocumentsSection />
+      <AcceptanceReportSection />
 
       <div className="flex flex-wrap gap-2">
         <button

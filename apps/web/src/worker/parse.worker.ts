@@ -1,6 +1,6 @@
 import { parse as parseYaml } from 'yaml';
 import type { ContainerKind } from '@sbomlens/core';
-import { parseDocument, registerYamlParser, sha1Hex, sniffContainer } from '@sbomlens/core';
+import { hashHex, parseDocument, registerYamlParser, sha1Hex, sniffContainer } from '@sbomlens/core';
 import type { DeliveryResult } from '@sbomlens/core/ocm';
 import {
   blobSource,
@@ -83,9 +83,43 @@ function postExpanded(id: number, fileName: string, delivery: DeliveryResult): v
   );
 }
 
+/** Delivery-acceptance hash job: digest the bytes, return digests only. */
+const WEBCRYPTO_NAME: Record<string, 'SHA-1' | 'SHA-256' | 'SHA-384' | 'SHA-512'> = {
+  SHA1: 'SHA-1',
+  SHA256: 'SHA-256',
+  SHA384: 'SHA-384',
+  SHA512: 'SHA-512',
+};
+
+function canonicalAlgorithm(algorithm: string): string {
+  const upper = algorithm.toUpperCase();
+  return upper.startsWith('SHA3-') ? upper : upper.replace(/-/g, '');
+}
+
+async function handleHash(
+  id: number,
+  fileName: string,
+  buffer: ArrayBuffer,
+  algorithms: readonly string[],
+): Promise<void> {
+  const digests: Record<string, string> = {};
+  // De-dupe canonical names so "SHA-256" and "SHA256" hash once.
+  for (const canonical of new Set(algorithms.map(canonicalAlgorithm))) {
+    const webcrypto = WEBCRYPTO_NAME[canonical];
+    // Algorithms crypto.subtle cannot compute (MD5, SHA3) are left out; the
+    // acceptance report then reports those files as unverifiable, never wrong.
+    if (webcrypto) digests[canonical] = await hashHex(webcrypto, buffer);
+  }
+  scope.postMessage({ id, ok: true, kind: 'digest', fileName, byteSize: buffer.byteLength, digests });
+}
+
 scope.onmessage = async (event: MessageEvent) => {
-  const { id, fileName, buffer, blob } = event.data as ParseJobRequest;
+  const { id, fileName, buffer, blob, hashAlgorithms } = event.data as ParseJobRequest;
   try {
+    if (hashAlgorithms !== undefined) {
+      const bytes = blob !== undefined ? await blob.arrayBuffer() : buffer!;
+      return handleHash(id, fileName, bytes, hashAlgorithms);
+    }
     // Blob payload: a delivery-sized file handle. Sniff the head, then walk
     // the archive through the disk-backed Blob without buffering it whole.
     // Anything that is not an archive falls through to the buffer path.

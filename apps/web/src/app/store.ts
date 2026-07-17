@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type {
+  AcceptanceReport,
   Diagnostic,
   DocumentId,
   ElementId,
@@ -93,6 +94,8 @@ interface AppState {
   manageOpen: boolean;
   /** OpenVEX overlay: supplier vulnerability communication, matched by purl. */
   vex: { documents: VexDocument[]; findings: ReadonlyMap<ElementId, VexFinding[]> };
+  /** Delivery-acceptance overlay: the last check of delivered files vs the SBOM. */
+  acceptance: { report: AcceptanceReport | null };
 
   actions: {
     /** Batch commit: one workspace swap, one resolution recompute, one toast. */
@@ -145,6 +148,9 @@ interface AppState {
     /** Add or update (same @id) a VEX document; returns matched element count. */
     addVexDocument(doc: VexDocument): { matched: number };
     removeVexDocument(id: string): void;
+
+    /** Store (or clear with null) the latest delivery-acceptance report. */
+    setAcceptanceReport(report: AcceptanceReport | null): void;
   };
 }
 
@@ -193,6 +199,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
   removalPrompt: null,
   manageOpen: false,
   vex: { documents: [], findings: new Map() },
+  acceptance: { report: null },
 
   actions: {
     addLoadedBatch(loaded) {
@@ -297,6 +304,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
         diffA: null,
         diffB: null,
         vex: { documents: [], findings: new Map() },
+        acceptance: { report: null },
       }));
     },
     bindManualRef(refKeyStr, target) {
@@ -427,6 +435,10 @@ export const useAppStore = create<AppState>()((set, get) => ({
       const { ws, vex } = get();
       const documents = vex.documents.filter((d) => d.id !== id);
       set({ vex: { documents, findings: vexFindingsFor(ws, documents) } });
+    },
+
+    setAcceptanceReport(report) {
+      set({ acceptance: { report } });
     },
   },
 }));

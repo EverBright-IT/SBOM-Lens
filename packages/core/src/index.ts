@@ -29,7 +29,7 @@ export type { Detection } from './parse/detect';
 export { detect, registerYamlParser } from './parse/detect';
 export { parseElementRef, refToString } from './parse/spdx2/common';
 
-export { sha1Hex } from './util/sha1';
+export { hashHex, sha1Hex } from './util/sha1';
 
 export type { DocumentIndexes, EdgeRec } from './graph/indexes';
 export { buildIndexes } from './graph/indexes';
@@ -106,6 +106,14 @@ export {
   worstVexStatus,
 } from './analysis/vex';
 export { MAX_CSAF_BYTES, parseCsaf, sniffCsaf } from './analysis/csaf';
+export type {
+  AcceptanceReport,
+  AcceptanceVerdict,
+  DeliveredFile,
+  ExtraFile,
+  FileAcceptance,
+} from './analysis/acceptance';
+export { checkDelivery, deliveryAlgorithms, hasVerifiableFiles } from './analysis/acceptance';
 
 export type {
   ComplianceProfile,

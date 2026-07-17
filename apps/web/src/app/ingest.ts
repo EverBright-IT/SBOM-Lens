@@ -1,8 +1,10 @@
-import type { DocumentId, LoadedDocument } from '@sbomlens/core';
+import type { DeliveredFile, DocumentId, LoadedDocument } from '@sbomlens/core';
 import {
   MAX_CSAF_BYTES,
   MAX_VEX_BYTES,
   buildIndexes,
+  checkDelivery,
+  deliveryAlgorithms,
   parseCsaf,
   parseOpenVex,
   sniffCsaf,
@@ -59,6 +61,21 @@ function parseInWorker(fileName: string, payload: ArrayBuffer | Blob): Promise<P
 }
 
 /**
+ * Hash one delivered file off-thread for the acceptance check. The bytes go
+ * to the worker and only the digests come back — a delivery's contents never
+ * reach the UI thread, exactly like a parse job.
+ */
+function hashInWorker(fileName: string, buffer: ArrayBuffer, algorithms: string[]): Promise<ParseJobResponse> {
+  return new Promise((resolve) => {
+    const id = nextJobId++;
+    pending.set(id, { resolve });
+    getWorker().postMessage({ id, fileName, buffer, hashAlgorithms: algorithms } satisfies ParseJobRequest, [
+      buffer,
+    ]);
+  });
+}
+
+/**
  * Parse one entry off-thread; report failures; no workspace mutation yet.
  * Delivery archives come back pre-expanded: the contained component
  * descriptors are already mapped, the extracted SPDX blobs re-enter this
@@ -104,6 +121,10 @@ async function parseEntry(
     );
     return [...docs, ...nested.flat()];
   }
+
+  // Hash jobs never travel this path (they resolve through hashInWorker); the
+  // guard narrows the union so the document branch stays type-safe.
+  if (response.kind !== 'document') return [];
 
   if (!response.document) {
     actions.recordFailure({ fileName: response.fileName, diagnostics: response.diagnostics });
@@ -293,6 +314,58 @@ export async function ingestFiles(files: ReadonlyArray<File>): Promise<DocumentI
     ),
   );
   return ingestBuffers(entries);
+}
+
+/**
+ * Delivery acceptance: hash the delivered files and compare them, path by
+ * path, against the file checksums in the loaded SBOM(s). Files arrive from a
+ * folder or file picker; their webkitRelativePath (when a folder was chosen)
+ * carries a leading root segment that is stripped so paths line up with the
+ * SBOM's relative file names. The report lands in the store overlay.
+ */
+export async function checkDeliveredFiles(files: ReadonlyArray<File>): Promise<void> {
+  const { actions } = useAppStore.getState();
+  if (files.length === 0) return;
+  const ws = useAppStore.getState().ws;
+  const algorithms = deliveryAlgorithms(ws);
+  if (algorithms.length === 0) {
+    actions.toast('No file checksums in the loaded SBOM to check a delivery against.', 'info');
+    return;
+  }
+
+  const paths = deliveredPaths(files);
+  actions.parsingBegin(files.length);
+  const delivered: DeliveredFile[] = [];
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i]!;
+    const response = await hashInWorker(file.name, await file.arrayBuffer(), algorithms);
+    actions.parsingDone();
+    if (response.ok && response.kind === 'digest') {
+      delivered.push({ path: paths[i]!, size: file.size, digests: response.digests });
+    }
+  }
+
+  const report = checkDelivery(ws, delivered);
+  actions.setAcceptanceReport(report);
+  const { match, mismatch, missing, extra } = report.summary;
+  const problems = mismatch + missing;
+  actions.toast(
+    `Delivery checked: ${match} matched, ${mismatch} mismatched, ${missing} missing, ${extra} extra`,
+    problems > 0 ? 'error' : 'success',
+  );
+}
+
+/**
+ * Relative paths for a delivered file set. A folder pick fills
+ * webkitRelativePath as "<root>/a/b"; the shared root segment is dropped so
+ * the paths match the SBOM's relative file names. A plain file pick has no
+ * relative path, so the bare name is used.
+ */
+function deliveredPaths(files: ReadonlyArray<File>): string[] {
+  const raw = files.map((f) => f.webkitRelativePath || f.name);
+  const firstSegments = new Set(raw.map((p) => p.split('/')[0]));
+  const shareOneRoot = firstSegments.size === 1 && raw.some((p) => p.includes('/'));
+  return shareOneRoot ? raw.map((p) => p.slice(p.indexOf('/') + 1)) : raw;
 }
 
 /** Recursively collects files from a drop that may contain directories. */

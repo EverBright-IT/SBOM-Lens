@@ -11,6 +11,12 @@ export interface ParseJobRequest {
    * existing as one buffer. The worker reads it through slice().
    */
   blob?: Blob;
+  /**
+   * When set, this is a delivery-acceptance HASH job, not a parse: the worker
+   * digests the bytes for these algorithms and returns the digests only — the
+   * delivered bytes never cross back to the UI thread.
+   */
+  hashAlgorithms?: string[];
 }
 
 /** A component descriptor pre-parsed inside an archive expansion. */
@@ -45,5 +51,15 @@ export type ParseJobResponse =
       /** Transferred back; each entry re-enters the normal parse path. */
       extracted: { fileName: string; buffer: ArrayBuffer }[];
       diagnostics: Diagnostic[];
+    }
+  | {
+      id: number;
+      ok: true;
+      /** Delivery-acceptance hash job: digests of the delivered bytes only. */
+      kind: 'digest';
+      fileName: string;
+      byteSize: number;
+      /** Algorithm (uppercase) → lowercase hex; a subset of what was asked. */
+      digests: Record<string, string>;
     }
   | { id: number; ok: false; fileName: string; error: string };
