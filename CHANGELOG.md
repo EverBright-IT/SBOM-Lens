@@ -4,6 +4,26 @@ All notable changes to SBOM Lens. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [SemVer](https://semver.org) (0.x: the API surface is the app itself).
 
+## [Unreleased]
+
+### Added
+- **CSAF 2.0 as a second VEX source, both products.** Load a CSAF 2.0
+  advisory (the BSI exchange format) next to your SBOMs, alongside OpenVEX.
+  The product tree — full product names, a recursive branch tree, and
+  relationships — is resolved to package URLs, the four `product_status`
+  buckets map onto the VEX statuses, and `flags`/`remediations`/`threats`/
+  notes fill justification/action/impact/description. Both formats share one
+  overlay and the same time rule; each loaded document is tagged OpenVEX or
+  CSAF. Matching stays purl-based for now: CPE-only products are reported,
+  not matched. See [docs/vex.md](docs/vex.md).
+- **Delivery acceptance: verify delivered files against the SBOM.** *Open →
+  Check delivery…* hashes the files you were actually delivered and compares
+  them, path by path, to the SBOM's file checksums — match, mismatch
+  (tampered or corrupt), missing, or unverifiable, plus extras the SBOM
+  never mentioned. Hashing runs in the worker; the delivered bytes never
+  reach the UI thread. The SPDX-side counterpart to OCM Lens's blob-digest
+  check. See [docs/acceptance.md](docs/acceptance.md).
+
 ## [0.18.2] - 2026-07-17
 
 ### Added
