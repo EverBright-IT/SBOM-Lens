@@ -21,6 +21,12 @@ export interface BridgeContext {
   openExternal(url: string): void;
   /** Called when the webview reports ready — time to push initial documents. */
   onReady(): void;
+  /**
+   * Flavor-specific message extension (OCM Lens registers its registry
+   * handler here). Runs FIRST; returning true claims the message. The
+   * shared handlers below stay flavor-agnostic.
+   */
+  extraMessage?(message: WebviewToHostMessage): Promise<boolean>;
 }
 
 export function createBridgeHandler(
@@ -28,6 +34,7 @@ export function createBridgeHandler(
   ctx: BridgeContext,
 ): (message: WebviewToHostMessage) => Promise<void> {
   return async (message) => {
+    if (ctx.extraMessage && (await ctx.extraMessage(message))) return;
     switch (message.type) {
       case 'ready':
         ctx.onReady();

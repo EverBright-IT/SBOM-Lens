@@ -27,6 +27,9 @@ export default defineConfig({
           root: 'packages/vscode-shell',
           environment: 'node',
           include: ['src/**/*.test.ts'],
+          // The registry tests run packed CTFs through the real delivery
+          // walker, which needs the YAML parser registered.
+          setupFiles: ['../../packages/core/src/test-setup.ts'],
         },
       },
     ],

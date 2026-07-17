@@ -3,7 +3,7 @@
   "displayName": "OCM Lens",
   "icon": "icon.png",
   "description": "View Open Component Model component versions and deliveries right in your editor: CTF and component archives, with embedded SBOMs.",
-  "version": "0.17.0",
+  "version": "0.18.0",
   "publisher": "everbright-it",
   "license": "Apache-2.0",
   "private": true,
@@ -27,6 +27,9 @@
     "supply-chain"
   ],
   "main": "./out/extension.js",
+  "activationEvents": [
+    "onUri"
+  ],
   "contributes": {
     "customEditors": [
       {
@@ -74,6 +77,16 @@
       {
         "command": "ocmlens.scanWorkspace",
         "title": "OCM Lens: Scan workspace for component descriptors"
+      },
+      {
+        "command": "ocmlens.openFromRegistry",
+        "title": "Open component version from registry...",
+        "category": "OCM Lens"
+      },
+      {
+        "command": "ocmlens.setRegistryCredential",
+        "title": "Set registry credential...",
+        "category": "OCM Lens"
       }
     ],
     "menus": {
@@ -99,6 +112,19 @@
           "when": "false"
         }
       ]
+    },
+    "configuration": {
+      "title": "OCM Lens",
+      "properties": {
+        "ocmlens.registries": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "markdownDescription": "OCI registries offered by **OCM Lens: Open component version from registry** (e.g. `ghcr.io/open-component-model/ocm`). For private registries, store a per-host `user:token` credential via **OCM Lens: Set registry credential**."
+        }
+      }
     }
   },
   "scripts": {

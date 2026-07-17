@@ -116,3 +116,15 @@ describe('prefsSnapshot', () => {
     });
   });
 });
+
+describe('extraMessage seam', () => {
+  it('lets a flavor claim messages before the shared handlers run', async () => {
+    const { ctx, calls } = makeContext({
+      extraMessage: async (message) => message.type === 'ocmListVersions',
+    });
+    const handle = createBridgeHandler(() => {}, ctx);
+    await handle({ type: 'ocmListVersions', id: 1, registry: 'r', component: 'c' });
+    await handle({ type: 'ready' });
+    expect(calls).toEqual(['ready']); // the claimed message never hit the shared handlers
+  });
+});

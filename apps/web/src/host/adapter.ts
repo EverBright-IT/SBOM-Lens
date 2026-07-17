@@ -14,12 +14,29 @@ export interface IngestPush {
   buffer: ArrayBuffer;
 }
 
+export interface OcmRegistryPort {
+  listVersions(registry: string, component: string): Promise<{ ok: boolean; versions?: string[]; error?: string }>;
+  /** Resolves a component version; the fetched delivery arrives as an ingest push. */
+  resolve(
+    registry: string,
+    component: string,
+    version: string,
+  ): Promise<{ ok: boolean; skippedLayers?: number; error?: string }>;
+}
+
 export interface HostAdapter {
   kind: 'web' | 'vscode';
   caps: {
     /** Whether the deployment may ship a sbomlens.catalog.json. */
     catalog: boolean;
   };
+
+  /**
+   * Registry browsing, present only where a CORS-free fetch path exists
+   * (the OCM Lens extension host). Absent in the browser and in the SBOM
+   * flavor; UI gates on presence.
+   */
+  ocmRegistry?: OcmRegistryPort;
 
   /**
    * Fetch a document's bytes. `ok: false` without a status means the request

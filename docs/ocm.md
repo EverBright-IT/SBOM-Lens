@@ -25,8 +25,43 @@ are loaded as normal SPDX documents, linked automatically.
 | Component archive (tar with `component-descriptor.yaml` + `blobs/`) | drop / picker |
 | Plain tar of SPDX files | works too: every SPDX member is loaded |
 
-Remote OCI-registry access is out of scope for now (roadmap: via the VS Code
-extension host, which fetches without CORS limits).
+In the VS Code extension, component versions can also be pulled straight
+from an OCI registry (next section). The browser build stays local-only:
+registries do not answer cross-origin requests.
+
+## Fetching from a registry (VS Code extension)
+
+The OCM Lens extension pulls component versions straight from an OCI
+registry: the extension host fetches (no CORS), packs the version's OCI
+manifest and layers into an in-memory CTF, and the normal delivery pipeline
+does the rest, so descriptor mapping, SBOM extraction, digest verdicts, and
+signature verification work exactly as for a local file.
+
+- **Command**: *OCM Lens: Open component version from registry...* asks for
+  the registry (e.g. `ghcr.io/open-component-model/ocm`), the component name
+  (e.g. `ocm.software/ocmcli`), and the version, picked from the registry's
+  tags. Registries you use often go into the `ocmlens.registries` setting.
+- **Unresolved references**: when a loaded descriptor references a component
+  version that is not part of the delivery, the reference's detail pane
+  offers *Fetch from registry*, prefilled from the descriptor's repository
+  contexts. The fetched version links up like any loaded descriptor.
+- **Credentials**: public registries work anonymously (standard bearer-token
+  flow). For private ones, run *OCM Lens: Set registry credential...* and
+  store a `user:token` value for the host; it is kept in VS Code secret
+  storage and sent only to that registry's token endpoint.
+- **Caps**: layers over **50 MB** (or past a **256 MB** total per fetch) are
+  not downloaded; their resources show without content, and OCM Lens says how
+  many were skipped. The component descriptor itself is always fetched.
+- **Version mapping**: OCI tags cannot contain `+`, so build metadata appears
+  as `.build-` in tags (`1.0.0+7` ⇄ `1.0.0.build-7`); OCM Lens maps both ways
+  automatically.
+
+Handy recipe the other way around: `ocm transfer componentversion
+ghcr.io/acme/ocm//acme.org/app:1.0.0 ./delivery.ctf` writes a transport
+archive you can drop into OCM Lens (web or extension). External tools can
+also deep-link the extension:
+`vscode://everbright-it.ocmlens/open?path=/absolute/path/to/delivery.ctf`
+(VS Code asks before the link reaches the extension).
 
 ## How OCM maps onto the viewer
 
@@ -104,11 +139,11 @@ timestamping; and `jsonNormalisation/v1` (deprecated), which stays
 
 ## Limits (deliberate)
 
-- **Read-only**: no signing, no registry writes. Blob digests inside a loaded
-  delivery are checked against the actual bytes, and signatures are verifiable
-  against a public key you supply (above). Component/reference digests without
-  a signature are displayed as recorded. Remote OCI-registry browsing is on
-  the roadmap (via the VS Code extension host, which fetches without CORS).
+- **Read-only**: no signing, no registry writes. Registry access (VS Code
+  extension) is pull-only. Blob digests inside a loaded delivery are checked
+  against the actual bytes, and signatures are verifiable against a public
+  key you supply (above). Component/reference digests without a signature are
+  displayed as recorded.
 - **Sizes.** Plain `.tar`/`.ctf` deliveries stream from disk: a multi-GB
   release bundle opens without ever being held in memory. Blobs over
   **64 MB** (or past a **512 MB** total budget) are indexed instead of
@@ -120,10 +155,11 @@ timestamping; and `jsonNormalisation/v1` (deprecated), which stays
   ZIP is rejected with a repack hint, and links inside tars are never
   followed. Artifact-content previews are capped at **64 KB of text**,
   **500 files** listed, and a **256-byte** hex head for binaries; the raw
-  blob bytes are inspected in the worker and then dropped. The VS Code
-  extension buffers deliveries in memory for now (its streaming bridge is
-  planned with registry browsing); its workspace scan skips files over
-  **50 MB**.
+  blob bytes are inspected in the worker and then dropped. Registry fetches
+  cap layers at **50 MB** and **256 MB** per component version (skipped
+  layers are reported). The VS Code extension buffers locally opened
+  deliveries in memory for now (a chunked webview bridge is on the roadmap);
+  its workspace scan skips files over **50 MB**.
 - **Verification needs a secure context**: `crypto.subtle` drives both the
   cascade checksums and signature verification, so HTTPS or localhost is
   required (plain HTTP on a remote host disables them).

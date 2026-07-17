@@ -1,10 +1,11 @@
-import { useRef, useState } from 'react';
-import type { DocumentId, NodeTarget, WorkspaceState } from '@sbomlens/core';
+import { useEffect, useRef, useState } from 'react';
+import type { DocumentId, LoadedDocument, NodeTarget, WorkspaceState } from '@sbomlens/core';
 import { refKey, refToString } from '@sbomlens/core';
 import { makeElementId } from '@sbomlens/core';
 import { HAS_DELIVERIES } from '../../app/brand';
 import { ingestFiles, ingestUrl } from '../../app/ingest';
 import { useAppStore } from '../../app/store';
+import { host } from '../../host/adapter';
 import { revealElement, selectTarget } from '../navigate';
 import { LinkIcon, UploadIcon } from '../icons';
 import { CopyButton, FieldRow, Section } from './FieldRow';
@@ -15,6 +16,28 @@ type PlaceholderTarget = Extract<NodeTarget, { kind: 'placeholder' }>;
 function isFetchableUri(uri: string): boolean {
   const scheme = /^([a-zA-Z][a-zA-Z0-9+.-]*):/.exec(uri)?.[1];
   return scheme === undefined || scheme === 'http' || scheme === 'https';
+}
+
+/** `ocm://<component>/<version>` — the version is the last path segment. */
+function parseOcmUri(uri: string): { component: string; version: string } | undefined {
+  if (!uri.startsWith('ocm://')) return undefined;
+  const path = uri.slice('ocm://'.length);
+  const slash = path.lastIndexOf('/');
+  if (slash <= 0 || slash === path.length - 1) return undefined;
+  return { component: path.slice(0, slash), version: path.slice(slash + 1) };
+}
+
+/**
+ * Registry candidates for a reference: the owning descriptor's repository
+ * contexts, most recent transport target last (the OCM convention), so the
+ * last one is the best default.
+ */
+function registryCandidates(owning: LoadedDocument | undefined): string[] {
+  const contexts = owning?.document.ocm?.repositoryContexts ?? [];
+  const values = contexts
+    .map((c) => (c.baseUrl ? (c.subPath ? `${c.baseUrl}/${c.subPath}` : c.baseUrl) : undefined))
+    .filter((v): v is string => Boolean(v));
+  return [...new Set(values)];
 }
 
 /**
@@ -108,6 +131,9 @@ export function PlaceholderDetail({ ws, target }: { ws: WorkspaceState; target: 
             or the referenced component descriptor to resolve it.
           </p>
         )}
+        {HAS_DELIVERIES && ref?.uri.startsWith('ocm://') && (
+          <RegistryFetch owning={owning} uri={ref.uri} resolved={resolution?.status === 'resolved'} onResolved={revealResolved} />
+        )}
         <div className="flex flex-wrap items-center gap-2">
           {ref?.uri && isFetchableUri(ref.uri) && (
             <button
@@ -173,6 +199,101 @@ export function PlaceholderDetail({ ws, target }: { ws: WorkspaceState; target: 
       </Section>
 
       {owning && <IncomingRefRelationships ws={ws} owningDocId={target.owningDocId} docRef={target.docRef} />}
+    </div>
+  );
+}
+
+/**
+ * Fetch the referenced component version straight from an OCI registry.
+ * Rendered only where the host has a CORS-free fetch path (the OCM Lens
+ * extension); the fetched delivery arrives as a normal ingest and the
+ * placeholder resolves itself through the ocm:// namespace.
+ */
+function RegistryFetch({
+  owning,
+  uri,
+  resolved,
+  onResolved,
+}: {
+  owning: LoadedDocument | undefined;
+  uri: string;
+  resolved: boolean;
+  onResolved: () => void;
+}) {
+  const actions = useAppStore((s) => s.actions);
+  const registryPort = host().ocmRegistry;
+  const parsed = parseOcmUri(uri);
+  const candidates = registryCandidates(owning);
+  const [registry, setRegistry] = useState(candidates[candidates.length - 1] ?? '');
+  const [state, setState] = useState<'idle' | 'busy' | string>('idle');
+  const [awaitingResolve, setAwaitingResolve] = useState(false);
+
+  // The CTF lands via an async ingest push; reveal once the resolution flips.
+  useEffect(() => {
+    if (awaitingResolve && resolved) {
+      setAwaitingResolve(false);
+      onResolved();
+    }
+  }, [awaitingResolve, resolved, onResolved]);
+
+  if (!registryPort || !parsed) return null;
+
+  const fetchFromRegistry = async () => {
+    if (!registry.trim()) return;
+    setState('busy');
+    const result = await registryPort.resolve(registry.trim(), parsed.component, parsed.version);
+    if (!result.ok) {
+      setState(result.error ?? 'Registry fetch failed.');
+      return;
+    }
+    setState('idle');
+    setAwaitingResolve(true);
+    actions.toast(
+      result.skippedLayers
+        ? `Fetched ${parsed.component}@${parsed.version} (${result.skippedLayers} large layer(s) skipped)`
+        : `Fetched ${parsed.component}@${parsed.version}`,
+      'success',
+    );
+  };
+
+  return (
+    <div className="mb-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <input
+          type="text"
+          value={registry}
+          onChange={(e) => setRegistry(e.target.value)}
+          placeholder="ghcr.io/acme/ocm"
+          spellCheck={false}
+          list={candidates.length > 1 ? 'ocm-registry-candidates' : undefined}
+          className="min-w-0 flex-1 rounded border border-slate-300 bg-white px-2 py-1.5 font-mono text-xs text-slate-700 placeholder:text-slate-400 focus:border-accent-400 focus:outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+        />
+        {candidates.length > 1 && (
+          <datalist id="ocm-registry-candidates">
+            {candidates.map((c) => (
+              <option key={c} value={c} />
+            ))}
+          </datalist>
+        )}
+        <button
+          type="button"
+          disabled={state === 'busy' || !registry.trim()}
+          onClick={() => void fetchFromRegistry()}
+          className="inline-flex items-center gap-1.5 rounded border border-accent-300 bg-accent-50 px-2.5 py-1.5 text-xs font-medium text-accent-800 hover:bg-accent-100 disabled:opacity-50 dark:border-accent-800 dark:bg-accent-950/60 dark:text-accent-200 dark:hover:bg-accent-900/50"
+        >
+          <LinkIcon /> {state === 'busy' ? 'Fetching...' : 'Fetch from registry'}
+        </button>
+      </div>
+      <p className="mt-1 text-[11px] text-slate-400 dark:text-slate-500">
+        {candidates.length > 0
+          ? "Registry from the descriptor's repository contexts; edit if the component lives elsewhere."
+          : 'No repository context in the descriptor; enter the OCI registry holding the component.'}
+      </p>
+      {typeof state === 'string' && state !== 'idle' && state !== 'busy' && (
+        <div className="mt-2 rounded border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+          {state}
+        </div>
+      )}
     </div>
   );
 }

@@ -36,6 +36,22 @@ Then open the repo in VS Code and press **F5** ("Run SBOM Lens extension").
       (`retainContextWhenHidden`).
 - [ ] Remote/WSL window, if available: all of the above.
 
+OCM Lens on top ("Run OCM Lens extension" launch config):
+
+- [ ] "OCM Lens: Open component version from registry..." against
+      `ghcr.io/open-component-model/ocm` / `ocm.software/ocmcli`: tags list,
+      version opens as a delivery, SBOM linked underneath.
+- [ ] Load a descriptor with an unresolved `componentReferences` entry:
+      the placeholder detail offers *Fetch from registry* prefilled from
+      the repository context; fetching resolves and reveals the reference.
+- [ ] "OCM Lens: Set registry credential..." stores/clears a `user:token`
+      (verify a private registry, or at least that the flow round-trips).
+- [ ] Deep link: `open 'vscode://everbright-it.ocmlens/open?path=...'`
+      with an absolute `.ctf` path opens the delivery after the consent
+      prompt.
+- [ ] Drop a large (hundreds of MB) `.ctf` into the panel: loads without
+      freezing the extension host.
+
 ## Packaging
 
 ```sh

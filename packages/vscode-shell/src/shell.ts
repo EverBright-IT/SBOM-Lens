@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import * as vscode from 'vscode';
-import type { HostToWebviewMessage } from '@sbomlens/web/vscode-protocol';
+import type { HostToWebviewMessage, WebviewToHostMessage } from '@sbomlens/web/vscode-protocol';
 import type { BridgeContext } from './bridge';
 import { buildWebviewHtml, createBridgeHandler, nodeFetchBytes, prefsSnapshot } from './bridge';
 
@@ -25,12 +25,23 @@ export interface LensShellConfig {
   profileDir: string;
   /** Fallback file name for uris without a basename. */
   defaultFileName: string;
+  /**
+   * Flavor-specific bridge extension, created once per webview panel with
+   * that panel's post function (OCM Lens registers its registry handler).
+   */
+  extraBridge?: (post: (message: HostToWebviewMessage) => void) => (message: WebviewToHostMessage) => Promise<boolean>;
+}
+
+/** What activateLens hands back for flavor-specific commands. */
+export interface LensShellApi {
+  /** Open (or reuse) the shared panel and push in-memory files into it. */
+  openFiles(files: { fileName: string; bytes: Uint8Array }[], title: string): Promise<void>;
 }
 
 const MAX_SCAN_BYTES = 50 * 1024 * 1024;
 const MAX_PROFILE_BYTES = 65536;
 
-export function activateLens(context: vscode.ExtensionContext, config: LensShellConfig): void {
+export function activateLens(context: vscode.ExtensionContext, config: LensShellConfig): LensShellApi {
   /**
    * One shared panel for every multi-document surface (workspace scan,
    * folder, explorer multi-select); re-running replaces its content.
@@ -66,8 +77,24 @@ export function activateLens(context: vscode.ExtensionContext, config: LensShell
         location: vscode.ProgressLocation.Notification,
         title: `${config.displayName}: loading ${kept.length} file(s)...`,
       },
-      () => setupWebview(context, config, sharedPanel!, kept),
+      () => setupWebview(context, config, sharedPanel!, { uris: kept }),
     );
+  }
+
+  async function openFiles(
+    files: { fileName: string; bytes: Uint8Array }[],
+    title: string,
+  ): Promise<void> {
+    if (!sharedPanel) {
+      sharedPanel = vscode.window.createWebviewPanel(config.viewType, title, {
+        viewColumn: vscode.ViewColumn.Active,
+      });
+      sharedPanel.onDidDispose(() => (sharedPanel = null));
+    } else {
+      sharedPanel.title = title;
+      sharedPanel.reveal();
+    }
+    await setupWebview(context, config, sharedPanel, { files });
   }
 
   /** All matching files under one folder — between one file and the whole workspace. */
@@ -106,7 +133,7 @@ export function activateLens(context: vscode.ExtensionContext, config: LensShell
       document: vscode.CustomDocument,
       panel: vscode.WebviewPanel,
     ): Promise<void> {
-      await setupWebview(context, config, panel, [document.uri]);
+      await setupWebview(context, config, panel, { uris: [document.uri] });
     }
   }
 
@@ -139,6 +166,8 @@ export function activateLens(context: vscode.ExtensionContext, config: LensShell
       () => void scanWorkspace(),
     ),
   );
+
+  return { openFiles };
 }
 
 /**
@@ -166,11 +195,16 @@ async function workspaceProfiles(
   return found;
 }
 
+interface WebviewSource {
+  uris?: readonly vscode.Uri[];
+  files?: { fileName: string; bytes: Uint8Array }[];
+}
+
 async function setupWebview(
   context: vscode.ExtensionContext,
   config: LensShellConfig,
   panel: vscode.WebviewPanel,
-  uris: readonly vscode.Uri[],
+  source: WebviewSource,
 ): Promise<void> {
   const mediaRoot = vscode.Uri.joinPath(context.extensionUri, 'media');
   panel.webview.options = { enableScripts: true, localResourceRoots: [mediaRoot] };
@@ -208,16 +242,18 @@ async function setupWebview(
     openExternal: (url) => void vscode.env.openExternal(vscode.Uri.parse(url)),
     onReady: () => {
       void (async () => {
-        const files = await Promise.all(
-          uris.map(async (uri) => ({
+        const files: { fileName: string; bytes: Uint8Array }[] = await Promise.all(
+          (source.uris ?? []).map(async (uri) => ({
             fileName: uri.path.split('/').pop() ?? config.defaultFileName,
             bytes: new Uint8Array(await vscode.workspace.fs.readFile(uri)),
           })),
         );
+        files.push(...(source.files ?? []));
         files.push(...(await workspaceProfiles(config.profileDir)));
         if (files.length > 0) post({ type: 'ingestFiles', files });
       })();
     },
+    ...(config.extraBridge ? { extraMessage: config.extraBridge(post) } : {}),
   };
 
   const handle = createBridgeHandler(post, bridge);

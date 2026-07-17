@@ -4,6 +4,28 @@ All notable changes to SBOM Lens. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [SemVer](https://semver.org) (0.x: the API surface is the app itself).
 
+## [0.18.0] - 2026-07-17
+
+### Added
+- **[OCM Lens] Registry browsing in the VS Code extension.** Pull a
+  component version straight from an OCI registry and browse it like a
+  local delivery. *OCM Lens: Open component version from registry...*
+  asks for registry, component, and version (from the registry's tags);
+  unresolved component references gain a *Fetch from registry* button
+  prefilled from the descriptor's repository contexts. The extension
+  host runs the standard bearer-token flow (anonymous for public
+  registries; per-host `user:token` credentials via *OCM Lens: Set
+  registry credential*, kept in VS Code secret storage) and packs the
+  version's manifest and layers into the same CTF shape `ocm transfer`
+  writes, so SBOM extraction, digest verdicts, and signature
+  verification work unchanged. Layers over 50 MB (or past a 256 MB
+  total) are skipped and reported; the descriptor always arrives.
+  Version tags map OCM build metadata both ways (`1.0.0+7` as
+  `1.0.0.build-7`).
+- **[OCM Lens] Deep link.** External tools can open a delivery in the
+  extension via
+  `vscode://everbright-it.ocmlens/open?path=/absolute/path/to/delivery.ctf`.
+
 ## [0.17.0] - 2026-07-17
 
 ### Added

@@ -19,6 +19,13 @@ and SBOMs stored in a delivery are extracted and linked automatically.
   descriptor and CTF under it loads into one panel.
 - **OCM Lens: Scan workspace for component descriptors**: the
   command-palette way to load the whole workspace.
+- **OCM Lens: Open component version from registry...**: pull a component
+  version straight from an OCI registry (e.g.
+  `ghcr.io/open-component-model/ocm`) and browse it like a local delivery,
+  SBOMs, digest verdicts and signatures included. Unresolved component
+  references offer a *Fetch from registry* button prefilled from the
+  descriptor's repository contexts. Private registries: store a `user:token`
+  per host via *OCM Lens: Set registry credential*.
 
 ## What you get
 
@@ -56,8 +63,10 @@ and SBOMs stored in a delivery are extracted and linked automatically.
 
 ## Limits
 
-- **Read-only, local only.** No signing, no registry writes; remote
-  OCI-registry browsing is on the roadmap. Nothing is uploaded.
+- **Read-only.** No signing, no registry writes; registry access is
+  pull-only. Documents are parsed locally in the editor; nothing is
+  uploaded. Registry fetches skip layers over **50 MB** (256 MB total per
+  component version) and say so; the descriptor always arrives.
 - **Delivery archives** are capped at **10,000 entries**; blobs over
   **64 MB** are indexed without loading their content (the digest verdict
   still runs). Compressed `.tgz` deliveries are capped at **2 GiB**

@@ -1,5 +1,6 @@
 import workerUrl from '../worker/parse.worker.ts?worker&url';
-import type { HostAdapter, IngestPush } from './adapter';
+import { HAS_DELIVERIES } from '../app/brand';
+import type { HostAdapter, IngestPush, OcmRegistryPort } from './adapter';
 import type { HostToWebviewMessage, WebviewToHostMessage } from './vscode-protocol';
 import { PREFS_GLOBAL } from './vscode-protocol';
 
@@ -22,6 +23,8 @@ export function createVscodeHost(api: VsCodeApi = acquireVsCodeApi()): HostAdapt
     (r: { ok: boolean; status?: number; statusText?: string; bytes?: Uint8Array }) => void
   >();
   const pendingSecrets = new Map<number, (value: string | null) => void>();
+  const pendingOcmVersions = new Map<number, (r: { ok: boolean; versions?: string[]; error?: string }) => void>();
+  const pendingOcmResolves = new Map<number, (r: { ok: boolean; skippedLayers?: number; error?: string }) => void>();
   let ingestCallback: ((files: IngestPush[]) => void) | null = null;
 
   // Sync pref reads come from the snapshot the extension injects into the page.
@@ -51,12 +54,41 @@ export function createVscodeHost(api: VsCodeApi = acquireVsCodeApi()): HostAdapt
         pendingSecrets.get(message.id)?.(message.value);
         pendingSecrets.delete(message.id);
         break;
+      case 'ocmVersions':
+        pendingOcmVersions.get(message.id)?.(message);
+        pendingOcmVersions.delete(message.id);
+        break;
+      case 'ocmResolved':
+        pendingOcmResolves.get(message.id)?.(message);
+        pendingOcmResolves.delete(message.id);
+        break;
     }
   });
+
+  // Build-time constant: the SBOM flavor compiles the port away entirely.
+  const ocmRegistry: OcmRegistryPort | undefined = HAS_DELIVERIES
+    ? {
+        listVersions(registry, component) {
+          return new Promise((resolve) => {
+            const id = nextId++;
+            pendingOcmVersions.set(id, resolve);
+            api.postMessage({ type: 'ocmListVersions', id, registry, component });
+          });
+        },
+        resolve(registry, component, version) {
+          return new Promise((resolve) => {
+            const id = nextId++;
+            pendingOcmResolves.set(id, resolve);
+            api.postMessage({ type: 'ocmResolve', id, registry, component, version });
+          });
+        },
+      }
+    : undefined;
 
   return {
     kind: 'vscode',
     caps: { catalog: false },
+    ...(ocmRegistry ? { ocmRegistry } : {}),
 
     fetchDocument(url, headers = {}) {
       return new Promise((resolve) => {
