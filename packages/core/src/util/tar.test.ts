@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 // @ts-expect-error — plain-JS test/fixture helper without type declarations
 import { writeTar } from '../../scripts/tar-writer.mjs';
-import { gunzip, sniffContainer } from './binary';
+import { GunzipLimitError, gunzip, sniffContainer } from './binary';
 import { readTar } from './tar';
 
 const text = (s: string) => new TextEncoder().encode(s);
@@ -60,6 +60,32 @@ describe('readTar', () => {
     expect(diagnostics.some((d) => d.code === 'TAR_TRUNCATED')).toBe(true);
   });
 
+  it('reports each entry\'s data size and offset into the stream', () => {
+    const tar: Uint8Array = writeTar([
+      { name: 'blobs/sha256.abc', bytes: text('BLOB') },
+      { name: 'component-descriptor.yaml', bytes: 'meta: {}\n' },
+    ]);
+    const { entries } = readTar(tar);
+    for (const entry of entries) {
+      expect(entry.size).toBe(entry.bytes.byteLength);
+      // The offset must point at exactly the bytes the view exposes.
+      expect(tar.subarray(entry.offset, entry.offset + entry.size)).toEqual(entry.bytes);
+      expect(entry.offset % 512).toBe(0);
+    }
+  });
+
+  it('has no total-bytes cap: large payloads keep every entry', () => {
+    // Entries are zero-copy views, so "big" costs nothing here; what matters
+    // is that a descriptor BEHIND a large blob is never dropped again.
+    const tar: Uint8Array = writeTar([
+      { name: 'blobs/sha256.big', bytes: new Uint8Array(4 * 1024 * 1024) },
+      { name: 'component-descriptor.yaml', bytes: 'meta: {}\n' },
+    ]);
+    const { entries, diagnostics } = readTar(tar);
+    expect(diagnostics).toHaveLength(0);
+    expect(entries.map((e) => e.name)).toContain('component-descriptor.yaml');
+  });
+
   it('skips directories and link entries with an info diagnostic', () => {
     const base: Uint8Array = writeTar([{ name: 'kept.txt', bytes: 'K' }]);
     const link = base.slice(0, 512);
@@ -91,6 +117,14 @@ describe('sniffContainer + gunzip', () => {
     const back = await gunzip(await compress(tar));
     expect(back).toEqual(tar);
     expect(readTar(back).entries[0]!.name).toBe('x');
+  });
+
+  it('caps decompression output: a bomb throws instead of eating RAM', async () => {
+    // 1 MB of zeros compresses to ~1 KB; a 1000-byte ceiling must trip.
+    const bomb = await compress(new Uint8Array(1024 * 1024));
+    await expect(gunzip(bomb, 1000)).rejects.toBeInstanceOf(GunzipLimitError);
+    // The same stream passes with an adequate ceiling.
+    expect((await gunzip(bomb)).byteLength).toBe(1024 * 1024);
   });
 });
 

@@ -27,11 +27,45 @@ function looksLikeTar(bytes: Uint8Array): boolean {
   return magic === 'ustar';
 }
 
+/**
+ * Decompression bomb guard: a tiny gzip stream can expand without bound, and
+ * it does so HERE — the tar reader downstream only creates zero-copy views.
+ * The ceiling is sized to what a browser can hold as one buffer anyway; a
+ * delivery larger than this must ship as plain .tar (which streams).
+ */
+export const GUNZIP_MAX_BYTES = 2 * 1024 * 1024 * 1024;
+
+export class GunzipLimitError extends Error {
+  constructor(limit: number) {
+    super(`Decompressed size exceeds ${limit / (1024 * 1024 * 1024)} GiB.`);
+    this.name = 'GunzipLimitError';
+  }
+}
+
 /** Single-member gzip (what tgz tooling writes). Node ≥18 and all browsers. */
-export async function gunzip(bytes: Uint8Array): Promise<Uint8Array> {
+export async function gunzip(bytes: Uint8Array, maxBytes = GUNZIP_MAX_BYTES): Promise<Uint8Array> {
   // Fresh ArrayBuffer-backed copy: subarray views and SharedArrayBuffer-typed
   // inputs are not valid BlobParts under the DOM lib.
   const copy = new Uint8Array(bytes);
   const stream = new Blob([copy]).stream().pipeThrough(new DecompressionStream('gzip'));
-  return new Uint8Array(await new Response(stream).arrayBuffer());
+  const reader = stream.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > maxBytes) {
+      await reader.cancel();
+      throw new GunzipLimitError(maxBytes);
+    }
+    chunks.push(value);
+  }
+  const out = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    out.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return out;
 }

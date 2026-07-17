@@ -16,13 +16,13 @@ class FakeWorker {
   postMessage(request: ParseJobRequest): void {
     FakeWorker.jobs++;
     void (async () => {
-      const sha1 = await sha1Hex(request.buffer);
-      const text = new TextDecoder().decode(request.buffer);
+      const sha1 = await sha1Hex(request.buffer!);
+      const text = new TextDecoder().decode(request.buffer!);
       const { document, diagnostics } = parseDocument({
         fileName: request.fileName,
         text,
         sha1,
-        byteSize: request.buffer.byteLength,
+        byteSize: request.buffer!.byteLength,
       });
       this.onmessage?.({
         data: {
@@ -31,7 +31,7 @@ class FakeWorker {
           kind: 'document',
           fileName: request.fileName,
           sha1,
-          byteSize: request.buffer.byteLength,
+          byteSize: request.buffer!.byteLength,
           text,
           document,
           diagnostics,

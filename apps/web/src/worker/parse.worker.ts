@@ -1,7 +1,14 @@
 import { parse as parseYaml } from 'yaml';
 import type { ContainerKind } from '@sbomlens/core';
 import { parseDocument, registerYamlParser, sha1Hex, sniffContainer } from '@sbomlens/core';
-import { parseOcmComponentDescriptor, readOcmDelivery, registerOcmParser } from '@sbomlens/core/ocm';
+import type { DeliveryResult } from '@sbomlens/core/ocm';
+import {
+  blobSource,
+  parseOcmComponentDescriptor,
+  readOcmDelivery,
+  readOcmDeliveryFrom,
+  registerOcmParser,
+} from '@sbomlens/core/ocm';
 import { HAS_DELIVERIES } from '../app/brand';
 import type { ParseJobRequest, ParseJobResponse } from './protocol';
 
@@ -56,31 +63,54 @@ function rejectBinary(container: ContainerKind): { code: string; message: string
   return null;
 }
 
+function postExpanded(id: number, fileName: string, delivery: DeliveryResult): void {
+  const extracted = delivery.extracted.map((entry) => ({
+    fileName: entry.fileName,
+    // Copy out of the archive buffer so each entry transfers cleanly.
+    buffer: new Uint8Array(entry.bytes).buffer as ArrayBuffer,
+  }));
+  scope.postMessage(
+    {
+      id,
+      ok: true,
+      kind: 'expanded',
+      fileName,
+      documents: delivery.documents,
+      extracted,
+      diagnostics: delivery.diagnostics,
+    },
+    extracted.map((e) => e.buffer),
+  );
+}
+
 scope.onmessage = async (event: MessageEvent) => {
-  const { id, fileName, buffer } = event.data as ParseJobRequest;
+  const { id, fileName, buffer, blob } = event.data as ParseJobRequest;
+  try {
+    // Blob payload: a delivery-sized file handle. Sniff the head, then walk
+    // the archive through the disk-backed Blob without buffering it whole.
+    // Anything that is not an archive falls through to the buffer path.
+    if (blob !== undefined) {
+      const head = new Uint8Array(await blob.slice(0, 512).arrayBuffer());
+      const headKind = sniffContainer(head);
+      if (HAS_DELIVERIES && (headKind === 'gzip' || headKind === 'tar')) {
+        postExpanded(id, fileName, await readOcmDeliveryFrom(fileName, blobSource(blob)));
+        return;
+      }
+      return handleBuffer(id, fileName, await blob.arrayBuffer());
+    }
+    return handleBuffer(id, fileName, buffer!);
+  } catch (error) {
+    scope.postMessage({ id, ok: false, fileName, error: String(error) });
+  }
+};
+
+async function handleBuffer(id: number, fileName: string, buffer: ArrayBuffer): Promise<void> {
   try {
     const bytes = new Uint8Array(buffer);
     const container = sniffContainer(bytes);
 
     if (HAS_DELIVERIES && (container === 'gzip' || container === 'tar')) {
-      const delivery = await readOcmDelivery(fileName, bytes);
-      const extracted = delivery.extracted.map((entry) => ({
-        fileName: entry.fileName,
-        // Copy out of the archive buffer so each entry transfers cleanly.
-        buffer: new Uint8Array(entry.bytes).buffer as ArrayBuffer,
-      }));
-      scope.postMessage(
-        {
-          id,
-          ok: true,
-          kind: 'expanded',
-          fileName,
-          documents: delivery.documents,
-          extracted,
-          diagnostics: delivery.diagnostics,
-        },
-        extracted.map((e) => e.buffer),
-      );
+      postExpanded(id, fileName, await readOcmDelivery(fileName, bytes));
       return;
     }
 
@@ -122,4 +152,4 @@ scope.onmessage = async (event: MessageEvent) => {
   } catch (error) {
     scope.postMessage({ id, ok: false, fileName, error: String(error) });
   }
-};
+}

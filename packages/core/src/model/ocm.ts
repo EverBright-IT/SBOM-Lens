@@ -86,6 +86,12 @@ export interface OcmBlobInfo {
    * verdict. Absent when the resource declares no digest.
    */
   digestCheck?: 'match' | 'mismatch' | 'unchecked';
+  /**
+   * True when the blob exceeded the in-memory materialization cap and was
+   * indexed without loading its content: no previews or file lists, but the
+   * digest verdict is still real (hashed straight off the archive).
+   */
+  notInspected?: boolean;
   previews?: OcmBlobPreview[];
   files?: { name: string; size: number }[];
   filesTruncated?: boolean;

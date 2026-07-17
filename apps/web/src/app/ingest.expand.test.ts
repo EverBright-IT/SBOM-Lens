@@ -14,7 +14,7 @@ class ExpandingFakeWorker {
   onerror: ((event: unknown) => void) | null = null;
   postMessage(request: ParseJobRequest): void {
     void (async () => {
-      const bytes = new Uint8Array(request.buffer);
+      const bytes = new Uint8Array(request.buffer!);
       const container = sniffContainer(bytes);
       if (container === 'gzip' || container === 'tar') {
         const delivery = await readOcmDelivery(request.fileName, bytes);
@@ -34,13 +34,13 @@ class ExpandingFakeWorker {
         });
         return;
       }
-      const sha1 = await sha1Hex(request.buffer);
-      const text = new TextDecoder().decode(request.buffer);
+      const sha1 = await sha1Hex(request.buffer!);
+      const text = new TextDecoder().decode(request.buffer!);
       const { document, diagnostics } = parseDocument({
         fileName: request.fileName,
         text,
         sha1,
-        byteSize: request.buffer.byteLength,
+        byteSize: request.buffer!.byteLength,
       });
       this.onmessage?.({
         data: {
@@ -49,7 +49,7 @@ class ExpandingFakeWorker {
           kind: 'document',
           fileName: request.fileName,
           sha1,
-          byteSize: request.buffer.byteLength,
+          byteSize: request.buffer!.byteLength,
           text,
           document,
           diagnostics,

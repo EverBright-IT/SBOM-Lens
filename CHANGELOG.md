@@ -4,6 +4,32 @@ All notable changes to SBOM Lens. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [SemVer](https://semver.org) (0.x: the API surface is the app itself).
 
+## [0.16.0] - 2026-07-17
+
+### Added
+- **[OCM Lens] Multi-GB deliveries open.** Plain `.tar`/`.ctf` deliveries
+  now stream from disk instead of being buffered whole: the walker reads
+  the archive through the browser's file handle, materializes only the
+  small entries that matter (descriptors, indexes, SBOMs), and indexes
+  large artifact blobs by offset. A full release bundle with several
+  components and multi-GB images opens in seconds; nested artifact sets
+  stream through source windows the same way. Indexed blobs show
+  *not inspected* instead of a preview, but their declared
+  `genericBlobDigest/v1` sha256 is still verified for real, hashed
+  incrementally off the archive in constant memory (per-blob cached;
+  gzip-stored blobs keep the either-or rule and never produce a false
+  mismatch). SBOM resources past the cap are fetched in full regardless:
+  they are the point of this product.
+
+### Fixed
+- **[OCM Lens] Large bundles no longer lose components.** The old
+  512 MB expanded cap silently dropped every tar entry after the limit,
+  and in a multi-component CTF that tail is where the descriptors live.
+  The cap is gone (entries were zero-copy views; it saved no memory), and
+  the real decompression-bomb guard now sits where bytes actually
+  materialize: gzip decompression is capped at 2 GiB with an honest
+  "repack as plain .tar" error instead of an unbounded allocation.
+
 ## [0.15.0] - 2026-07-16
 
 ### Added

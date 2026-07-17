@@ -36,12 +36,16 @@ function getWorker(): Worker {
   return worker;
 }
 
-function parseInWorker(fileName: string, buffer: ArrayBuffer): Promise<ParseJobResponse> {
+function parseInWorker(fileName: string, payload: ArrayBuffer | Blob): Promise<ParseJobResponse> {
   return new Promise((resolve) => {
     const id = nextJobId++;
     pending.set(id, { resolve });
-    const request: ParseJobRequest = { id, fileName, buffer };
-    getWorker().postMessage(request, [buffer]);
+    // A Blob is a handle, not bytes: it clones structurally (cheap) while
+    // the worker reads it from disk-backed storage via slice(). Buffers
+    // keep transferring as before.
+    const request: ParseJobRequest =
+      payload instanceof Blob ? { id, fileName, blob: payload } : { id, fileName, buffer: payload };
+    getWorker().postMessage(request, payload instanceof Blob ? [] : [payload]);
   });
 }
 
@@ -54,11 +58,11 @@ function parseInWorker(fileName: string, buffer: ArrayBuffer): Promise<ParseJobR
  */
 async function parseEntry(
   fileName: string,
-  buffer: ArrayBuffer,
+  payload: ArrayBuffer | Blob,
   depth = 0,
 ): Promise<LoadedDocument[]> {
   const { actions } = useAppStore.getState();
-  const response = await parseInWorker(fileName, buffer);
+  const response = await parseInWorker(fileName, payload);
   actions.parsingDone();
 
   if (!response.ok) {
@@ -121,12 +125,10 @@ async function parseEntry(
  * parsing counters. Decoding here is safe: buffers transfer only later, in
  * parseInWorker.
  */
-function siftProfiles(
-  entries: ReadonlyArray<{ fileName: string; buffer: ArrayBuffer }>,
-): Array<{ fileName: string; buffer: ArrayBuffer }> {
-  const sboms: Array<{ fileName: string; buffer: ArrayBuffer }> = [];
+function siftProfiles(entries: ReadonlyArray<IngestEntry>): IngestEntry[] {
+  const sboms: IngestEntry[] = [];
   for (const entry of entries) {
-    if (withinProfileSizeCap(entry.buffer.byteLength)) {
+    if ('buffer' in entry && withinProfileSizeCap(entry.buffer.byteLength)) {
       const text = new TextDecoder().decode(entry.buffer);
       const sniff = sniffProfile(text);
       if (sniff.isProfile) {
@@ -144,14 +146,18 @@ function siftProfiles(
  * change — loading a 70-file cascade folder is a single resolution recompute
  * and a single render wave instead of 70.
  */
-export async function ingestBuffers(
-  entries: ReadonlyArray<{ fileName: string; buffer: ArrayBuffer }>,
-): Promise<DocumentId[]> {
+export type IngestEntry =
+  | { fileName: string; buffer: ArrayBuffer }
+  | { fileName: string; blob: Blob };
+
+export async function ingestBuffers(entries: ReadonlyArray<IngestEntry>): Promise<DocumentId[]> {
   const sbomEntries = siftProfiles(entries);
   if (sbomEntries.length === 0) return [];
   const { actions } = useAppStore.getState();
   actions.parsingBegin(sbomEntries.length);
-  const parsed = await Promise.all(sbomEntries.map((e) => parseEntry(e.fileName, e.buffer)));
+  const parsed = await Promise.all(
+    sbomEntries.map((e) => parseEntry(e.fileName, 'buffer' in e ? e.buffer : e.blob)),
+  );
   const loaded = parsed.flat();
   const { added, duplicates } = actions.addLoadedBatch(loaded);
   if (duplicates > 0) {
@@ -168,6 +174,8 @@ export async function ingestBuffers(
 const ACCEPTED_FILE = HAS_DELIVERIES
   ? /\.(spdx|json|yaml|yml|rdf|tar|tgz|gz|ctf)$/i
   : /\.(spdx|json|yaml|yml|rdf)$/i;
+// These never buffer up front: the worker streams them via Blob.slice().
+const DELIVERY_FILE = /\.(tar|tgz|gz|ctf)$/i;
 const SKIP_HINT = HAS_DELIVERIES
   ? 'not .spdx/.json/.yaml or a .tar/.tgz delivery'
   : 'not .spdx/.json/.yaml';
@@ -181,7 +189,11 @@ export async function ingestFiles(files: ReadonlyArray<File>): Promise<DocumentI
       .actions.toast(`Skipped ${skipped} file${skipped === 1 ? '' : 's'} (${SKIP_HINT})`, 'info');
   }
   const entries = await Promise.all(
-    accepted.map(async (f) => ({ fileName: f.name, buffer: await f.arrayBuffer() })),
+    accepted.map(async (f): Promise<IngestEntry> =>
+      HAS_DELIVERIES && DELIVERY_FILE.test(f.name)
+        ? { fileName: f.name, blob: f }
+        : { fileName: f.name, buffer: await f.arrayBuffer() },
+    ),
   );
   return ingestBuffers(entries);
 }

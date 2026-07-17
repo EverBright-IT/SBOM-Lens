@@ -3,8 +3,14 @@ import type { Diagnostic, SbomDocument } from '@sbomlens/core';
 export interface ParseJobRequest {
   id: number;
   fileName: string;
-  /** Transferred, not cloned. */
-  buffer: ArrayBuffer;
+  /** Transferred, not cloned. Exactly one of buffer/blob is set. */
+  buffer?: ArrayBuffer;
+  /**
+   * Delivery archives ride as a Blob/File handle instead: Blob storage is
+   * disk-backed, so a multi-GB delivery reaches the worker without ever
+   * existing as one buffer. The worker reads it through slice().
+   */
+  blob?: Blob;
 }
 
 /** A component descriptor pre-parsed inside an archive expansion. */

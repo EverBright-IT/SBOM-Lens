@@ -109,12 +109,21 @@ timestamping; and `jsonNormalisation/v1` (deprecated), which stays
   against a public key you supply (above). Component/reference digests without
   a signature are displayed as recorded. Remote OCI-registry browsing is on
   the roadmap (via the VS Code extension host, which fetches without CORS).
-- **Sizes.** Delivery archives are capped at **10,000 entries / 512 MB**
-  expanded (a zip-bomb guard); ZIP is rejected with a repack hint, and links
-  inside tars are never followed. Artifact-content previews are capped at
-  **64 KB of text**, **500 files** listed, and a **256-byte** hex head for
-  binaries; the raw blob bytes are inspected in the worker and then dropped.
-  The VS Code workspace scan skips files over **50 MB**.
+- **Sizes.** Plain `.tar`/`.ctf` deliveries stream from disk: a multi-GB
+  release bundle opens without ever being held in memory. Blobs over
+  **64 MB** (or past a **512 MB** total budget) are indexed instead of
+  loaded: no content preview, but their `genericBlobDigest/v1` sha256
+  verdict is still real, hashed incrementally off the archive. Compressed
+  `.tgz` deliveries must fit in memory and are capped at **2 GiB**
+  decompressed (decompression is where a zip bomb would detonate); past
+  that, repack as plain `.tar`. Archives are capped at **10,000 entries**;
+  ZIP is rejected with a repack hint, and links inside tars are never
+  followed. Artifact-content previews are capped at **64 KB of text**,
+  **500 files** listed, and a **256-byte** hex head for binaries; the raw
+  blob bytes are inspected in the worker and then dropped. The VS Code
+  extension buffers deliveries in memory for now (its streaming bridge is
+  planned with registry browsing); its workspace scan skips files over
+  **50 MB**.
 - **Verification needs a secure context**: `crypto.subtle` drives both the
   cascade checksums and signature verification, so HTTPS or localhost is
   required (plain HTTP on a remote host disables them).

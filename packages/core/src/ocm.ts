@@ -14,7 +14,9 @@ export { registerOcmParser } from './parse/parser';
 export type { OcmBlobContext } from './parse/ocm/cd';
 export { ocmNamespace, parseOcmComponentDescriptor } from './parse/ocm/cd';
 export type { DeliveryResult, PreparsedDoc } from './parse/ocm/archive';
-export { readOcmDelivery } from './parse/ocm/archive';
+export { readOcmDelivery, readOcmDeliveryFrom } from './parse/ocm/archive';
+export type { ByteSource } from './util/bytesource';
+export { blobSource } from './util/bytesource';
 
 export { gunzip } from './util/binary';
 export type { TarEntry, TarResult } from './util/tar';

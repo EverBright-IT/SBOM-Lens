@@ -58,9 +58,12 @@ and SBOMs stored in a delivery are extracted and linked automatically.
 
 - **Read-only, local only.** No signing, no registry writes; remote
   OCI-registry browsing is on the roadmap. Nothing is uploaded.
-- **Delivery archives** are capped at **10,000 entries / 512 MB** expanded
-  (a zip-bomb guard); ZIP is rejected with a repack hint, and links inside
-  tars are never followed. The workspace scan skips files over 50 MB.
+- **Delivery archives** are capped at **10,000 entries**; blobs over
+  **64 MB** are indexed without loading their content (the digest verdict
+  still runs). Compressed `.tgz` deliveries are capped at **2 GiB**
+  decompressed: repack larger ones as plain `.tar`. ZIP is rejected with a
+  repack hint, and links inside tars are never followed. The workspace scan
+  skips files over 50 MB.
 - **Artifact previews are capped**: 64 KB of text, 500 files listed, a 256-byte
   hex head for binaries. The raw bytes stay in the parse worker.
 - **Digest checks** cover `genericBlobDigest/v1` and `ociArtifactDigest/v1`;

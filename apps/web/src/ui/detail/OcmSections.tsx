@@ -97,6 +97,26 @@ function ArtifactContentSection({ blob, elementName }: { blob: OcmBlobInfo; elem
   const exportExtension = EXPORT_EXTENSION[blob.kind];
   const content = blob.previews?.[0];
 
+  if (blob.notInspected) {
+    return (
+      <Section title="Artifact content" actions={digestChip}>
+        <FieldRow label="Content" value={`${formatBytes(blob.size)}, not inspected`} />
+        <FieldRow label="Media type" value={blob.mediaType} mono />
+        <p className="py-1 text-xs text-slate-500 dark:text-slate-400">
+          This blob exceeds the in-browser inspection limit, so there is no content preview.
+          {blob.digestCheck === 'match' || blob.digestCheck === 'mismatch'
+            ? ' Its digest verdict is real: the bytes were hashed directly off the archive.'
+            : ''}
+        </p>
+        {blob.digestCheck === 'mismatch' && (
+          <p className="py-1 text-xs text-red-600 dark:text-red-400">
+            The blob bytes in this delivery do not match the digest declared in the component descriptor.
+          </p>
+        )}
+      </Section>
+    );
+  }
+
   return (
     <Section title="Artifact content" actions={digestChip}>
       <FieldRow
