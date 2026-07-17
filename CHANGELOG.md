@@ -4,6 +4,30 @@ All notable changes to SBOM Lens. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [SemVer](https://semver.org) (0.x: the API surface is the app itself).
 
+## [0.17.0] - 2026-07-17
+
+### Added
+- **[SBOM Lens] Profiles can require a format baseline.** Compliance
+  profile schema `sbomlens-profile/v3` adds a profile-level `requires`
+  precondition (`{ "spec": "spdx-3" }`) that evaluates as a leading
+  **gated** check. The builtin BSI TR-03183-2 preset uses it: the TR
+  accepts only SPDX 3.0.1+ (or CycloneDX 1.6+) as formats, and an SPDX
+  2.x document now visibly fails "Format baseline: SPDX 3.0.1 or later"
+  in the report and the export instead of rendering all-green with the
+  caveat buried in the description. Fail-closed like schema v2: an
+  older engine rejects a `requires` profile outright rather than
+  silently under-checking; v3 includes v2's `algorithms` modifier.
+
+### Fixed
+- **[OCM Lens] Streaming walker hardening.** GNU-longname/PAX header
+  payloads are capped at 1 MB: their size field is attacker-controlled,
+  and the streaming path would have materialized gigabytes for a "file
+  name". And near the 2 GiB gunzip cap a failed output allocation now
+  reports the honest "repack as plain .tar" error instead of "not a
+  valid gzip stream".
+- The GitHub link in the app footer and the docs now points at the
+  renamed `EverBright-IT` organization.
+
 ## [0.16.0] - 2026-07-17
 
 ### Added
