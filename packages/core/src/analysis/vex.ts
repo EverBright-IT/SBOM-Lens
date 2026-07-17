@@ -66,10 +66,18 @@ export interface VexFinding {
   description?: string;
   /** @id (or file name) of the VEX document that said it. */
   source: string;
+  /**
+   * File name of that document. Together with `source` this is a unique
+   * join key back to the VexDocument even when two loaded files share an
+   * @id — a report must never cite the wrong document.
+   */
+  sourceFile: string;
   /** The element matched a subcomponent entry, not the product itself. */
   viaSubcomponent: boolean;
   /** Timestamp that won the time rule (statement's, else document's). */
   timestamp?: string;
+  /** How many statements for this (element, vulnerability) the time rule discarded. */
+  supersededCount?: number;
 }
 
 /** Display/sort order: the alarming states first. */
@@ -270,6 +278,7 @@ function decodeSegment(segment: string): string {
 interface IndexedStatement {
   statement: VexStatement;
   source: string;
+  sourceFile: string;
   /** Effective timestamp for the time rule (statement's, else document's). */
   timestamp?: string;
   /** Position for deterministic tie-breaks: later loaded wins. */
@@ -283,8 +292,11 @@ interface IndexedStatement {
  * Match every loaded VEX statement against the workspace inventory.
  * Returns one finding per (element, vulnerability): when several statements
  * target the same pair, the one with the newest timestamp wins (the OpenVEX
- * time rule); ties fall to the later-loaded document. Findings are sorted
- * alarming-first (affected before not_affected).
+ * time rule); ties fall to the later-loaded document — the ORDER of vexDocs
+ * is part of the contract, so callers must hand documents over in a stable
+ * order (the app loads in ingest order; a CLI should sort by path).
+ * Findings are sorted alarming-first (affected before not_affected), and
+ * the whole result is deterministic for identical inputs.
  */
 export function matchVex(
   ws: WorkspaceState,
@@ -300,6 +312,7 @@ export function matchVex(
         addCandidate(index, product.id, {
           statement,
           source: doc.id,
+          sourceFile: doc.fileName,
           ...(timestamp !== undefined ? { timestamp } : {}),
           order: order++,
           viaSubcomponent: false,
@@ -308,6 +321,7 @@ export function matchVex(
           addCandidate(index, sub, {
             statement,
             source: doc.id,
+            sourceFile: doc.fileName,
             ...(timestamp !== undefined ? { timestamp } : {}),
             order: order++,
             viaSubcomponent: true,
@@ -334,15 +348,19 @@ export function matchVex(
       );
       if (applicable.length === 0) continue;
 
-      const byVuln = new Map<string, IndexedStatement>();
+      const byVuln = new Map<string, { winner: IndexedStatement; superseded: number }>();
       for (const candidate of applicable) {
         const existing = byVuln.get(candidate.statement.vulnerability);
-        if (!existing || newerThan(candidate, existing)) {
-          byVuln.set(candidate.statement.vulnerability, candidate);
+        if (!existing) {
+          byVuln.set(candidate.statement.vulnerability, { winner: candidate, superseded: 0 });
+        } else if (newerThan(candidate, existing.winner)) {
+          byVuln.set(candidate.statement.vulnerability, { winner: candidate, superseded: existing.superseded + 1 });
+        } else {
+          existing.superseded++;
         }
       }
       const list = [...byVuln.values()]
-        .map((c): VexFinding => ({
+        .map(({ winner: c, superseded }): VexFinding => ({
           vulnerability: c.statement.vulnerability,
           status: c.statement.status,
           ...(c.statement.justification !== undefined ? { justification: c.statement.justification } : {}),
@@ -350,8 +368,10 @@ export function matchVex(
           ...(c.statement.actionStatement !== undefined ? { actionStatement: c.statement.actionStatement } : {}),
           ...(c.statement.description !== undefined ? { description: c.statement.description } : {}),
           source: c.source,
+          sourceFile: c.sourceFile,
           viaSubcomponent: c.viaSubcomponent,
           ...(c.timestamp !== undefined ? { timestamp: c.timestamp } : {}),
+          ...(superseded > 0 ? { supersededCount: superseded } : {}),
         }))
         .sort(
           (a, b) =>
@@ -393,6 +413,41 @@ export function worstVexStatus(findings: readonly VexFinding[] | undefined): Vex
     if (findings.some((f) => f.status === status)) return status;
   }
   return undefined;
+}
+
+/** Coverage of the workspace's package inventory by VEX statements. */
+export interface VexCoverage {
+  /** Packages with at least one finding. */
+  covered: number;
+  /** Packages whose purl yields a match key but no statement matched. */
+  uncovered: number;
+  /** Packages without a usable purl — no statement can ever match them. */
+  unmatchable: number;
+  /** All package elements considered (files never count). */
+  total: number;
+}
+
+/**
+ * Quantifies what the loaded VEX statements do NOT say: the counterpart to
+ * matchVex for coverage reporting ("supplier communicated about N of M
+ * packages"). One shared classification for the UI facet and any report
+ * consumer, so the two can never drift.
+ */
+export function vexCoverage(
+  ws: WorkspaceState,
+  findings: ReadonlyMap<ElementId, VexFinding[]>,
+): VexCoverage {
+  const coverage: VexCoverage = { covered: 0, uncovered: 0, unmatchable: 0, total: 0 };
+  for (const loaded of ws.documents.values()) {
+    for (const element of loaded.document.elements) {
+      if (element.kind !== 'package') continue;
+      coverage.total++;
+      if ((findings.get(element.id)?.length ?? 0) > 0) coverage.covered++;
+      else if (element.purl !== undefined && purlMatchKey(element.purl) !== undefined) coverage.uncovered++;
+      else coverage.unmatchable++;
+    }
+  }
+  return coverage;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

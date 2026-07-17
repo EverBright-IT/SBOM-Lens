@@ -46,8 +46,15 @@ Statuses render exactly as OpenVEX defines them: `affected` (red),
 Load as many VEX documents as you like. When several statements target the
 same (vulnerability, package) pair, the one with the **newest timestamp**
 wins — the OpenVEX time rule; a statement's own timestamp beats the
-document's. Re-loading a document with the same `@id` replaces the earlier
-version.
+document's. Ties fall to the later-loaded document, so the hand-over
+**order is part of the contract**: the app matches in ingest order, and a
+programmatic consumer should sort its inputs stably (e.g. by path) before
+calling `matchVex`. Re-loading a document with the same `@id` replaces the
+earlier version. Each finding carries `source` (the document's @id) plus
+`sourceFile` as an unambiguous join key, and `supersededCount` says how
+many older statements the time rule discarded. `vexCoverage()` quantifies
+the counterpart: how many packages are covered, uncovered (matchable purl,
+no statement), or unmatchable (no usable purl).
 
 ## Limits (deliberate)
 

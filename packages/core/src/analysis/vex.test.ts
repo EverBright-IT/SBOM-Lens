@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { loadedFromText } from '../test-fixtures';
 import type { WorkspaceState } from '../workspace/workspace';
 import { addDocument, emptyWorkspace } from '../workspace/workspace';
-import { matchVex, parseOpenVex, purlMatchKey, sniffVex, worstVexStatus } from './vex';
+import { matchVex, parseOpenVex, purlMatchKey, sniffVex, vexCoverage, worstVexStatus } from './vex';
 
 /**
  * The VEX overlay end to end: sniff, tolerant parse (current and early
@@ -205,5 +205,60 @@ describe('matchVex', () => {
     expect(findings.map((f) => f.status)).toEqual(['affected', 'not_affected']);
     expect(worstVexStatus(findings)).toBe('affected');
     expect(worstVexStatus([])).toBeUndefined();
+  });
+});
+
+describe('verify-facing contract (Etappe K handover)', () => {
+  const ws = wsWith(
+    ['covered-pkg', '1.0.0', 'pkg:npm/covered@1.0.0'],
+    ['uncovered-pkg', '2.0.0', 'pkg:npm/uncovered@2.0.0'],
+    ['no-purl-pkg', '3.0.0'],
+  );
+  const docs = [
+    parseOpenVex('a.openvex.json', JSON.parse(vexJson(
+      [{ vulnerability: 'CVE-2026-0001', products: ['pkg:npm/covered@1.0.0'], status: 'under_investigation' }],
+      { '@id': 'vex-a', timestamp: '2026-01-01T00:00:00Z' },
+    )) as unknown),
+    parseOpenVex('b.openvex.json', JSON.parse(vexJson(
+      [
+        { vulnerability: 'CVE-2026-0001', products: ['pkg:npm/covered@1.0.0'], status: 'fixed', timestamp: '2026-06-01T00:00:00Z' },
+        { vulnerability: 'CVE-2026-0002', products: ['pkg:npm/covered@1.0.0'], status: 'affected' },
+      ],
+      { '@id': 'vex-b', timestamp: '2026-02-01T00:00:00Z' },
+    )) as unknown),
+  ];
+
+  it('is deterministic across runs: identical inputs, identical output', () => {
+    const first = matchVex(ws, docs);
+    const second = matchVex(ws, docs);
+    expect([...second.entries()]).toEqual([...first.entries()]);
+  });
+
+  it('carries the join key and the superseded count on findings', () => {
+    const findings = findingsFor(ws, 'covered-pkg', matchVex(ws, docs))!;
+    const winner = findings.find((f) => f.vulnerability === 'CVE-2026-0001')!;
+    expect(winner.status).toBe('fixed');
+    expect(winner.source).toBe('vex-b');
+    expect(winner.sourceFile).toBe('b.openvex.json');
+    expect(winner.supersededCount).toBe(1);
+    const single = findings.find((f) => f.vulnerability === 'CVE-2026-0002')!;
+    expect(single.supersededCount).toBeUndefined();
+  });
+
+  it('classifies coverage: covered / uncovered / unmatchable with exact counts', () => {
+    const findings = matchVex(ws, docs);
+    expect(vexCoverage(ws, findings)).toEqual({
+      covered: 1,
+      uncovered: 1,
+      unmatchable: 1,
+      total: 3,
+    });
+    // Without any VEX loaded, nothing is covered but the classification holds.
+    expect(vexCoverage(ws, new Map())).toEqual({
+      covered: 0,
+      uncovered: 2,
+      unmatchable: 1,
+      total: 3,
+    });
   });
 });
