@@ -77,6 +77,25 @@ evaluate the check as a plain presence check and report a false pass. The
 `v2` schema id makes them reject the profile outright instead. Everything
 else is unchanged between v1 and v2; v1 profiles keep working as-is.
 
+### Schema v3: format preconditions
+
+`sbomlens-profile/v3` adds one profile-level field: **`requires`**. It
+states a hard precondition of the requirement source itself and evaluates
+as a leading **gated** check, before any field check:
+
+```json
+{ "schema": "sbomlens-profile/v3", "name": "spdx3 policy",
+  "requires": { "spec": "spdx-3" },
+  "checks": [ { "type": "relationships" } ] }
+```
+
+With `{ "spec": "spdx-3" }`, an SPDX 2.x document fails a visible
+"Format baseline: SPDX 3.0.1 or later" check instead of rendering an
+all-green report for a format the requirement source does not accept.
+The same fail-closed reasoning applies as for v2: an older engine would
+ignore `requires` and silently under-check, so the field demands the `v3`
+schema id. v3 includes everything from v2.
+
 ### Validation is fail-closed
 
 An unknown check type or field rejects the **whole** profile with a list of
@@ -119,11 +138,14 @@ essentials for component descriptors), the dropdown offers:
   timestamp, per-component version, creator (via supplier), licence, and a
   **SHA-512** hash (the algorithm is enforced via the v2 `algorithms`
   modifier), plus dependency enumeration; unique IDs (purl/CPE) are reported
-  informationally. It is deliberately labelled an *approximation*: the TR
-  accepts only SPDX 3.0.1+ or CycloneDX 1.6+, so on an SPDX 2.x document
-  these checks measure data completeness, not TR conformance. SPDX 3.0.x
-  documents load since v0.15.0 and evaluate against the same checks; the
-  profile still verifies field coverage, not the full TR.
+  informationally. The TR accepts only SPDX 3.0.1+ or CycloneDX 1.6+ as
+  formats, and the profile enforces the SPDX side of that baseline as a
+  leading **gated check** (via the v3 `requires` precondition): an SPDX 2.x
+  document visibly fails "Format baseline: SPDX 3.0.1 or later" instead of
+  looking conformant, while its field checks still show what data is
+  present. SPDX 3.0.x documents load since v0.15.0 and pass the baseline.
+  It stays labelled an *approximation*: the profile verifies field
+  coverage, not the full TR.
   What the engine cannot check (component filenames, the
   executable/archive/structured properties, source URIs, the completeness
   indication) is listed in the profile's own description, so exported

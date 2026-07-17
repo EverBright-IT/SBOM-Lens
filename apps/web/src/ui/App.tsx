@@ -112,7 +112,7 @@ export function App() {
             <GitLabIcon />
           </a>
           <a
-            href="https://github.com/EverBright-IT/SBOM-Lens"
+            href="https://github.com/EverBrightIT/SBOM-Lens"
             target="_blank"
             rel="noreferrer"
             title="Mirror on GitHub"

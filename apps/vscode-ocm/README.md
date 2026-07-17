@@ -90,7 +90,7 @@ and SBOMs stored in a delivery are extracted and linked automatically.
 
 - [Source & issues](https://gitlab.com/everbrightit-group/sbom-lens)
   (GitLab, canonical: one monorepo for both products, label `ocm-lens`), or
-  the [GitHub mirror](https://github.com/EverBright-IT/SBOM-Lens)
+  the [GitHub mirror](https://github.com/EverBrightIT/SBOM-Lens)
 - [Changelog](https://gitlab.com/everbrightit-group/sbom-lens/-/blob/main/CHANGELOG.md)
 - [How OCM maps onto the viewer](https://gitlab.com/everbrightit-group/sbom-lens/-/blob/main/docs/ocm.md):
   the mapping table, supported archive layouts, and the limits

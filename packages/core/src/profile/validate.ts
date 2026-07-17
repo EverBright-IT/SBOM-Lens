@@ -1,6 +1,6 @@
 import { asArray, asString, isRecord } from '../util/narrow';
 import type { ComplianceProfile, DocumentField, PackageField, ProfileCheck } from './model';
-import { MAX_PROFILE_BYTES, PROFILE_SCHEMA_V1, PROFILE_SCHEMA_V2, STRING_PACKAGE_FIELDS } from './model';
+import { MAX_PROFILE_BYTES, PROFILE_SCHEMA_V1, PROFILE_SCHEMA_V2, PROFILE_SCHEMA_V3, STRING_PACKAGE_FIELDS } from './model';
 
 /**
  * Fail-closed validation — deliberately NOT the catalog's silent tolerance.
@@ -47,15 +47,34 @@ export function validateProfile(raw: unknown): ProfileValidation {
   if (!isRecord(raw)) return { ok: false, errors: ['profile must be a JSON object'] };
 
   const schema = raw.schema;
-  if (schema !== PROFILE_SCHEMA_V1 && schema !== PROFILE_SCHEMA_V2) {
+  if (schema !== PROFILE_SCHEMA_V1 && schema !== PROFILE_SCHEMA_V2 && schema !== PROFILE_SCHEMA_V3) {
     return {
       ok: false,
       errors: [
         typeof schema === 'string' && schema.startsWith('sbomlens-profile/')
-          ? `unsupported profile schema "${schema}": this build understands ${PROFILE_SCHEMA_V1} and ${PROFILE_SCHEMA_V2}`
-          : `missing or invalid "schema": expected "${PROFILE_SCHEMA_V1}" or "${PROFILE_SCHEMA_V2}"`,
+          ? `unsupported profile schema "${schema}": this build understands ${PROFILE_SCHEMA_V1}, ${PROFILE_SCHEMA_V2}, and ${PROFILE_SCHEMA_V3}`
+          : `missing or invalid "schema": expected "${PROFILE_SCHEMA_V1}", "${PROFILE_SCHEMA_V2}", or "${PROFILE_SCHEMA_V3}"`,
       ],
     };
+  }
+
+  // `requires` gates the whole profile, so it validates fail-closed: only
+  // the shapes this engine can enforce are accepted, and only under v3 (an
+  // older engine would ignore the field and silently under-check).
+  let requires: ComplianceProfile['requires'];
+  if (raw.requires !== undefined) {
+    if (schema !== PROFILE_SCHEMA_V3) {
+      errors.push(`"requires" needs schema "${PROFILE_SCHEMA_V3}"`);
+    } else if (!isRecord(raw.requires)) {
+      errors.push('"requires" must be an object');
+    } else {
+      const keys = Object.keys(raw.requires);
+      if (keys.length !== 1 || keys[0] !== 'spec' || raw.requires.spec !== 'spdx-3') {
+        errors.push('"requires" supports exactly { "spec": "spdx-3" }');
+      } else {
+        requires = { spec: 'spdx-3' };
+      }
+    }
   }
 
   const name = asString(raw.name)?.trim();
@@ -69,7 +88,7 @@ export function validateProfile(raw: unknown): ProfileValidation {
   const checks: ProfileCheck[] = [];
   const seenIds = new Set<string>();
   checksRaw.slice(0, MAX_CHECKS).forEach((entry, index) => {
-    const check = validateCheck(entry, index, errors, seenIds, schema === PROFILE_SCHEMA_V2);
+    const check = validateCheck(entry, index, errors, seenIds, schema !== PROFILE_SCHEMA_V1);
     if (check) checks.push(check);
   });
 
@@ -80,6 +99,7 @@ export function validateProfile(raw: unknown): ProfileValidation {
       schema,
       name: name!,
       description: asString(raw.description),
+      ...(requires ? { requires } : {}),
       checks,
     },
   };
@@ -209,7 +229,7 @@ function validateAlgorithms(
 ): string[] | undefined {
   if (raw === undefined) return undefined;
   if (!v2) {
-    errors.push(`${at}: "algorithms" requires schema "sbomlens-profile/v2"`);
+    errors.push(`${at}: "algorithms" requires schema "sbomlens-profile/v2" or later`);
     return undefined;
   }
   if (field !== 'checksum') {

@@ -173,7 +173,7 @@
         <mxCell id="r-glcom" value="&lt;b&gt;gitlab.com&lt;/b&gt; everbrightit-group/sbom-lens&lt;br&gt;kanonisch öffentlich · Issues/MRs&lt;br&gt;eigene CI: &lt;b&gt;Pages&lt;/b&gt; (Landing / + App /app/)&lt;br&gt;+ öffentliche Container-Registry" style="rounded=1;fillColor=#ffffff;strokeColor=#64748b;html=1;fontSize=11;align=left;spacing=10;" vertex="1" parent="1">
           <mxGeometry x="1230" y="200" width="240" height="120" as="geometry" />
         </mxCell>
-        <mxCell id="r-github" value="&lt;b&gt;github.com&lt;/b&gt; EverBright-IT/SBOM-Lens&lt;br&gt;read-only-Mirror · Mirror-CI (Gates + osv)&lt;br&gt;Issues → GitLab umgeleitet" style="rounded=1;fillColor=#ffffff;strokeColor=#64748b;html=1;fontSize=11;align=left;spacing=10;" vertex="1" parent="1">
+        <mxCell id="r-github" value="&lt;b&gt;github.com&lt;/b&gt; EverBrightIT/SBOM-Lens&lt;br&gt;read-only-Mirror · Mirror-CI (Gates + osv)&lt;br&gt;Issues → GitLab umgeleitet" style="rounded=1;fillColor=#ffffff;strokeColor=#64748b;html=1;fontSize=11;align=left;spacing=10;" vertex="1" parent="1">
           <mxGeometry x="1230" y="350" width="240" height="100" as="geometry" />
         </mxCell>
         <mxCell id="r-market" value="&lt;b&gt;Marketplace + Open VSX&lt;/b&gt;&lt;br&gt;manueller Publish der vsix&lt;br&gt;(Publisher everbright-it)" style="rounded=1;fillColor=#ede9fe;strokeColor=#7c3aed;html=1;fontSize=11;align=left;spacing=10;" vertex="1" parent="1">

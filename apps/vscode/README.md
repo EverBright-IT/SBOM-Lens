@@ -72,7 +72,7 @@ release diff, and quality reports.
 
 - [Source & issues](https://gitlab.com/everbrightit-group/sbom-lens)
   (GitLab, canonical), or the
-  [GitHub mirror](https://github.com/EverBright-IT/SBOM-Lens)
+  [GitHub mirror](https://github.com/EverBrightIT/SBOM-Lens)
 - [Changelog](https://gitlab.com/everbrightit-group/sbom-lens/-/blob/main/CHANGELOG.md)
 - Use it without VS Code: <https://sbom-lens.everbright-it.de/app/>
 - Building, testing, publishing this extension:

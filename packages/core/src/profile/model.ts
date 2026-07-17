@@ -14,6 +14,13 @@ export const PROFILE_SCHEMA_V1 = 'sbomlens-profile/v1';
  * rejection instead.
  */
 export const PROFILE_SCHEMA_V2 = 'sbomlens-profile/v2';
+/**
+ * v3 = v2 plus the profile-level `requires` precondition. Separate id for
+ * the same fail-closed reason: an older engine would silently ignore
+ * `requires` and evaluate a format-gated profile as if the format did not
+ * matter — exactly the overstatement the field exists to prevent.
+ */
+export const PROFILE_SCHEMA_V3 = 'sbomlens-profile/v3';
 
 /** Profiles larger than this are never sniffed or imported. */
 export const MAX_PROFILE_BYTES = 65536;
@@ -83,9 +90,22 @@ export type ProfileCheck =
       algorithms?: string[];
     });
 
+/**
+ * Hard preconditions of the requirement source itself, evaluated as a
+ * leading GATED check. A compliance text that only accepts a format is not
+ * approximated by field checks alone: without this, an SPDX 2.x document
+ * with complete fields would render an all-green report and quietly
+ * overstate conformance.
+ */
+export interface ProfileRequires {
+  /** The document model this profile's requirement source is defined against. */
+  spec: 'spdx-3';
+}
+
 export interface ComplianceProfile {
-  schema: typeof PROFILE_SCHEMA_V1 | typeof PROFILE_SCHEMA_V2;
+  schema: typeof PROFILE_SCHEMA_V1 | typeof PROFILE_SCHEMA_V2 | typeof PROFILE_SCHEMA_V3;
   name: string;
   description?: string;
+  requires?: ProfileRequires;
   checks: ProfileCheck[];
 }

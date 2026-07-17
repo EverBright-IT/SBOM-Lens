@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { emptyWorkspace } from '../workspace/workspace';
-import { loadedFromText } from '../test-fixtures';
+import { loadFixture, loadedFromText } from '../test-fixtures';
 import { BSI_TR_03183_PROFILE } from './bsi';
 import { evaluateProfile } from './evaluate';
 import { validateProfile } from './validate';
@@ -11,11 +11,24 @@ import { validateProfile } from './validate';
  */
 
 describe('BSI_TR_03183_PROFILE', () => {
-  it('is valid sbomlens-profile/v1 data and says what it cannot check', () => {
+  it('is valid profile data and says what it cannot check', () => {
     const result = validateProfile(BSI_TR_03183_PROFILE);
     expect(result.ok).toBe(true);
     expect(BSI_TR_03183_PROFILE.description).toContain('SPDX 3.0.1+');
-    expect(BSI_TR_03183_PROFILE.description).toContain('not');
+    expect(BSI_TR_03183_PROFILE.description).toContain('Not checkable');
+  });
+
+  it('fails the format baseline on SPDX 2.x, passes it on SPDX 3.x', () => {
+    const two = loadedFromText('two.spdx.json', loadFixture('minimal.spdx.json'));
+    const twoReport = evaluateProfile(emptyWorkspace, two, BSI_TR_03183_PROFILE);
+    const twoBaseline = twoReport.results.find((r) => r.id === 'format-baseline')!;
+    expect(twoBaseline.pass).toBe(false);
+    expect(twoBaseline.actual).toBe('SPDX-2.3');
+    expect(twoReport.results[0]!.id).toBe('format-baseline'); // leads the report
+
+    const three = loadedFromText('webstack.spdx3.json', loadFixture('spdx3/webstack.spdx3.json'));
+    const threeReport = evaluateProfile(emptyWorkspace, three, BSI_TR_03183_PROFILE);
+    expect(threeReport.results.find((r) => r.id === 'format-baseline')?.pass).toBe(true);
   });
 
   it('passes a document that carries every required field', () => {
@@ -43,7 +56,10 @@ describe('BSI_TR_03183_PROFILE', () => {
       ].join('\n') + '\n',
     );
     const report = evaluateProfile(emptyWorkspace, loaded, BSI_TR_03183_PROFILE);
-    expect(report.gatedFailed).toBe(0);
+    // Every FIELD check passes; the only gated failure is the format
+    // baseline, because complete 2.x data is still not the TR's format.
+    expect(report.gatedFailed).toBe(1);
+    expect(report.results.find((r) => r.id === 'format-baseline')?.pass).toBe(false);
     expect(report.results.find((r) => r.id === 'creators')?.pass).toBe(true);
   });
 
@@ -123,6 +139,6 @@ describe('BSI_TR_03183_PROFILE', () => {
     expect(report.results.find((r) => r.id === 'pkg-version')?.pass).toBe(true);
     // uniqueId carries no threshold: informational, never gates.
     expect(report.results.find((r) => r.id === 'pkg-unique-id')?.coverage?.threshold).toBeUndefined();
-    expect(report.gatedFailed).toBe(4);
+    expect(report.gatedFailed).toBe(5); // 4 field checks + the format baseline
   });
 });

@@ -55,7 +55,21 @@ export function evaluateProfile(
   const now = opts?.now ?? Date.now();
   const packages = doc.elements.filter((el) => el.kind === 'package');
 
-  const results = profile.checks.map((check, index): ProfileCheckResult => {
+  // Preconditions gate FIRST: a requirement source that only accepts a
+  // format must show that mismatch as a failing check, not bury it in the
+  // profile description. Boolean kind = gated by the tally below.
+  const preconditions: ProfileCheckResult[] = [];
+  if (profile.requires?.spec === 'spdx-3') {
+    preconditions.push({
+      id: 'format-baseline',
+      label: 'Format baseline: SPDX 3.0.1 or later',
+      kind: 'boolean',
+      pass: doc.spec.model === 'spdx-3',
+      actual: doc.spec.version,
+    });
+  }
+
+  const checkResults = profile.checks.map((check, index): ProfileCheckResult => {
     const id = check.id ?? `${check.type}-${index}`;
     const label = check.label ?? defaultLabel(check);
 
@@ -105,6 +119,8 @@ export function evaluateProfile(
       }
     }
   });
+
+  const results = [...preconditions, ...checkResults];
 
   let gatedPassed = 0;
   let gatedFailed = 0;

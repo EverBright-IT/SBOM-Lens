@@ -1,27 +1,31 @@
 import type { ComplianceProfile } from './model';
-import { PROFILE_SCHEMA_V2 } from './model';
+import { PROFILE_SCHEMA_V3 } from './model';
 
 /**
  * Field-level approximation of BSI TR-03183-2 v2.1.0, expressed as profile
- * data (schema v2 for the SHA-512 algorithm gate). Deliberately honest
- * about its limits: the TR accepts only SPDX >= 3.0.1 or CycloneDX >= 1.6,
- * so an SPDX 2.x document can never be TR-conformant; this profile measures
- * whether the REQUIRED DATA is present in the fields SPDX 2.x has.
- * Requirements the engine cannot check ride in the description so the
- * report never overstates itself.
+ * data (schema v3: the `requires` precondition plus v2's SHA-512 algorithm
+ * gate). The TR accepts only SPDX >= 3.0.1 or CycloneDX >= 1.6 as formats,
+ * and that is not description prose here: `requires` turns it into a
+ * leading GATED check, so an SPDX 2.x document visibly fails the format
+ * baseline instead of rendering an all-green report that overstates
+ * conformance. The field checks still measure whether the required data is
+ * present on either SPDX line; what the engine cannot check rides in the
+ * description.
  */
 export const BSI_TR_03183_PROFILE: ComplianceProfile = {
-  schema: PROFILE_SCHEMA_V2,
+  schema: PROFILE_SCHEMA_V3,
   name: 'BSI TR-03183-2 field coverage (approximation)',
   description:
-    'Approximates BSI TR-03183-2 v2.1.0 on SPDX 2.x fields. Note: the TR itself ' +
-    'accepts only SPDX 3.0.1+ or CycloneDX 1.6+, so passing these checks does not ' +
-    'make an SPDX 2.x document TR-conformant; they measure whether the required ' +
-    'data is present. The component creator is approximated via the SPDX supplier ' +
-    'field. Not checkable by this engine and reviewed manually: the SBOM format ' +
-    'baseline, component filenames, the executable/archive/structured properties, ' +
-    'source-code and deployable-form URIs, and the explicit completeness ' +
-    'indication for dependencies.',
+    'Approximates BSI TR-03183-2 v2.1.0. The TR accepts only SPDX 3.0.1+ or ' +
+    'CycloneDX 1.6+ as formats; this profile enforces the SPDX side of that ' +
+    'baseline as a gated check, so an SPDX 2.x document reports the format ' +
+    'mismatch instead of looking conformant. The remaining checks measure ' +
+    'whether the required data is present; the component creator is ' +
+    'approximated via the SPDX supplier field. Not checkable by this engine ' +
+    'and reviewed manually: component filenames, the executable/archive/' +
+    'structured properties, source-code and deployable-form URIs, and the ' +
+    'explicit completeness indication for dependencies.',
+  requires: { spec: 'spdx-3' },
   checks: [
     {
       id: 'creators',

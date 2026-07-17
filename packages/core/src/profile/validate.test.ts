@@ -41,7 +41,7 @@ describe('validateProfile', () => {
   });
 
   it('rejects wrong or newer schemas with a precise message', () => {
-    expect(errorsOf({ ...minimal, schema: 'sbomlens-profile/v3' })[0]).toContain('unsupported profile schema');
+    expect(errorsOf({ ...minimal, schema: 'sbomlens-profile/v4' })[0]).toContain('unsupported profile schema');
     expect(errorsOf({ ...minimal, schema: undefined })[0]).toContain('missing or invalid "schema"');
     expect(errorsOf('nope')[0]).toContain('must be a JSON object');
     // v2 is understood since the algorithms modifier landed.
@@ -174,5 +174,37 @@ describe('sniffProfile', () => {
     ).toBe(false);
     expect(sniffProfile('SPDXVersion: SPDX-2.3').isProfile).toBe(false);
     expect(sniffProfile('not json but "sbomlens-profile/ marker {').isProfile).toBe(false);
+  });
+});
+
+describe('schema v3: requires', () => {
+  const base = { name: 'x', checks: [{ type: 'relationships' }] };
+
+  it('accepts requires under v3 and carries it into the profile', () => {
+    const result = validateProfile({ ...base, schema: 'sbomlens-profile/v3', requires: { spec: 'spdx-3' } });
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.profile.requires).toEqual({ spec: 'spdx-3' });
+  });
+
+  it('rejects requires under v2 (an older engine would silently under-check)', () => {
+    const result = validateProfile({ ...base, schema: 'sbomlens-profile/v2', requires: { spec: 'spdx-3' } });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.errors.join()).toContain('sbomlens-profile/v3');
+  });
+
+  it('rejects unknown requires shapes fail-closed', () => {
+    for (const bad of [{ spec: 'spdx-9' }, { spec: 'spdx-3', extra: true }, 'spdx-3', {}]) {
+      const result = validateProfile({ ...base, schema: 'sbomlens-profile/v3', requires: bad });
+      expect(result.ok, JSON.stringify(bad)).toBe(false);
+    }
+  });
+
+  it('v3 still accepts the v2 algorithms modifier', () => {
+    const result = validateProfile({
+      schema: 'sbomlens-profile/v3',
+      name: 'x',
+      checks: [{ type: 'package-coverage', field: 'checksum', threshold: 100, algorithms: ['SHA512'] }],
+    });
+    expect(result.ok).toBe(true);
   });
 });
