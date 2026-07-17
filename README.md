@@ -265,7 +265,8 @@ notes are that version's CHANGELOG section, the assets are both vsix files
 and the self-SBOM (served from the package registry, so the links do not
 expire). Pushing the same tag in the
 [OCM Lens product home](https://gitlab.com/everbrightit-group/ocm-lens)
-creates the matching release there.
+creates the matching release there; push it after this repo's tag pipeline
+finished, so its vsix asset link finds the published package.
 
 Supply-chain hygiene: every push runs an osv-scanner CVE gate, SAST, and
 secret detection; releases additionally get a Trivy image scan and ship
