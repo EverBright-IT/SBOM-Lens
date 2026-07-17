@@ -185,8 +185,7 @@ vsix-ocm:
 # job. ovsx picks it up as OVSX_PAT from the environment, so the token never
 # appears in a command line, a process list, or the job log.
 #
-# The VS Code Marketplace can extend the same shape (`vsce publish`) once its
-# publisher exists; see apps/vscode/DEVELOPMENT.md.
+# The VS Code Marketplace jobs below extend the same shape with `vsce publish`.
 .ovsx-publish:
   stage: publish
   image: node:22-alpine
@@ -219,6 +218,62 @@ publish-ocmlens:
     - npx --yes ovsx@$OVSX_VERSION verify-pat everbright-it
     - node -e "const v=require('./apps/vscode-ocm/package.json').version; if ('v'+v !== process.env.CI_COMMIT_TAG) { console.error(`vsix is ${v}, tag is ${process.env.CI_COMMIT_TAG}`); process.exit(1); }"
     - npx --yes ovsx@$OVSX_VERSION publish ocmlens.vsix
+
+# VS Code Marketplace publishing, one job per product. Same shape, same manual
+# reasoning, and the same immutability as Open VSX above: the two registries
+# are deliberately separate jobs so one can be published without the other.
+#
+# Setup, once: create the publisher `everbright-it` at
+# <https://marketplace.visualstudio.com/manage>, then add VSCE_TOKEN as a
+# masked, protected CI variable. The token is an Azure DevOps personal access
+# token with Organization = "All accessible organizations" and Scope =
+# Marketplace → Manage; anything narrower fails at verify-pat. Protected tags
+# matter here exactly as above: on an unprotected tag the token arrives empty.
+# vsce reads it as VSCE_PAT from the environment, so it never appears in a
+# command line, a process list, or the job log.
+#
+# Be aware the token is not always obtainable: an Azure DevOps PAT requires an
+# organization, and creating a NEW organization now requires an active Azure
+# subscription. Without one there is no token page at all. The manage portal
+# accepts a .vsix by web upload and needs no token; that is the documented way
+# around it, and it is why these jobs may sit unused for a while. See
+# apps/vscode/DEVELOPMENT.md.
+.vsce-publish:
+  stage: publish
+  image: node:22-alpine
+  cache: []
+  before_script: []
+  variables:
+    VSCE_VERSION: '3.9.2'
+    VSCE_PAT: $VSCE_TOKEN
+  rules:
+    - if: $CI_COMMIT_TAG
+      when: manual
+
+publish-vsce-sbomlens:
+  extends: .vsce-publish
+  needs: [vsix]
+  script:
+    - test -n "$VSCE_TOKEN" || { echo "VSCE_TOKEN is not set. Add it as a masked, protected CI variable, and protect the release tags."; exit 1; }
+    # Fail on a bad, expired or too-narrowly-scoped token before touching the
+    # Marketplace.
+    - npx --yes @vscode/vsce@$VSCE_VERSION verify-pat everbright-it
+    # A tag that disagrees with the manifest would publish a mislabelled
+    # extension under a version number nobody can correct afterwards.
+    - node -e "const v=require('./apps/vscode/package.json').version; if ('v'+v !== process.env.CI_COMMIT_TAG) { console.error(`vsix is ${v}, tag is ${process.env.CI_COMMIT_TAG}`); process.exit(1); }"
+    # --packagePath reads the manifest out of the vsix, so this needs no cwd
+    # inside the extension. No --skip-duplicate: a republished version must
+    # fail loudly rather than look like a success that did nothing.
+    - npx --yes @vscode/vsce@$VSCE_VERSION publish --packagePath sbomlens.vsix
+
+publish-vsce-ocmlens:
+  extends: .vsce-publish
+  needs: [vsix-ocm]
+  script:
+    - test -n "$VSCE_TOKEN" || { echo "VSCE_TOKEN is not set. Add it as a masked, protected CI variable, and protect the release tags."; exit 1; }
+    - npx --yes @vscode/vsce@$VSCE_VERSION verify-pat everbright-it
+    - node -e "const v=require('./apps/vscode-ocm/package.json').version; if ('v'+v !== process.env.CI_COMMIT_TAG) { console.error(`vsix is ${v}, tag is ${process.env.CI_COMMIT_TAG}`); process.exit(1); }"
+    - npx --yes @vscode/vsce@$VSCE_VERSION publish --packagePath ocmlens.vsix
 
 # GitLab releases for the tag, on BOTH instances. Releases are project
 # metadata, not git data: the push mirror forwards the tag but never the

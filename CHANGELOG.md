@@ -4,6 +4,20 @@ All notable changes to SBOM Lens. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [SemVer](https://semver.org) (0.x: the API surface is the app itself).
 
+## [Unreleased]
+
+### Added
+- **VS Code Marketplace publishing in CI.** `publish-vsce-sbomlens` and
+  `publish-vsce-ocmlens` mirror the Open VSX jobs: manual, on a tag, token
+  from the masked and protected `VSCE_TOKEN` variable which vsce reads as
+  `VSCE_PAT` from the environment, plus a pre-flight `verify-pat` and the
+  same tag-versus-manifest guard. No `--skip-duplicate`: a republished
+  version fails loudly rather than looking like a success that did nothing.
+  The jobs cannot run until the `everbright-it` publisher exists; the manage
+  portal's web upload publishes without any token and stays documented as an
+  equal option, because an Azure DevOps PAT now requires an organization and
+  a new organization requires an active Azure subscription.
+
 ## [0.18.1] - 2026-07-17
 
 ### Fixed

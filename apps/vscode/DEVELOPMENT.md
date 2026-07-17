@@ -110,23 +110,39 @@ npx ovsx publish ocmlens.vsix -p <TOKEN>
 
 1. Sign in at <https://marketplace.visualstudio.com/manage> with a Microsoft
    account and **create the publisher `everbright-it`** (display name free).
-2. Create an Azure DevOps **Personal Access Token** at
-   <https://dev.azure.com> → User settings → Personal access tokens:
-   Organization = *All accessible organizations*, Scope = **Marketplace →
-   Manage**. Note: brand-new Azure DevOps orgs may require an Azure
-   subscription: the web upload in the manage portal bypasses the PAT
-   entirely.
-3. Build fresh and publish:
+2. Publish. Two ways, and the second is not a consolation prize: for a fresh
+   Microsoft account it is often the only one that works at all.
+
+   - **Web upload**: *New extension → Visual Studio Code* in the manage
+     portal, hand it `sbomlens.vsix` / `ocmlens.vsix`. No token anywhere.
+   - **CI**: the manual `publish-vsce-sbomlens` / `publish-vsce-ocmlens` jobs
+     on a tag. They need `VSCE_TOKEN` as a masked, protected variable: an
+     Azure DevOps **Personal Access Token** from <https://dev.azure.com> →
+     User settings → Personal access tokens, Organization = *All accessible
+     organizations*, Scope = **Marketplace → Manage** (`Show all scopes`
+     first, or Marketplace is not offered).
+
+   The PAT is not always obtainable, and the failure is structural rather
+   than a mistake to debug: a PAT needs an Azure DevOps organization, and
+   creating a *new* organization now requires an active Azure subscription.
+   Without an organization <https://dev.azure.com/_usersSettings/tokens> is a
+   plain 404 — there is no token page to find. The Azure *portal*
+   (portal.azure.com) is a different product and never has one. So the web
+   upload is the way in until someone decides an Azure subscription is worth
+   it; the CI jobs exist and sit unused until then.
+
+3. Build fresh, then publish:
 
    ```sh
    npm run build:vscode -w @sbomlens/web
    npm run compile -w sbomlens
    npm run package -w sbomlens
-   cd apps/vscode && npx @vscode/vsce publish --no-dependencies --packagePath ../../sbomlens.vsix -p <PAT>
+   npx @vscode/vsce publish --packagePath sbomlens.vsix
    ```
 
-   Alternatively upload `sbomlens.vsix` by hand in the manage portal: no
-   token handling in the terminal.
+   `--packagePath` reads the manifest out of the vsix, so this runs from the
+   repo root and needs no `cd`. Leave `-p` off: vsce takes the token from
+   `VSCE_PAT` in the environment, which keeps it out of the shell history.
 
 ### Notes
 
@@ -136,6 +152,6 @@ npx ovsx publish ocmlens.vsix -p <TOKEN>
 - Versions are immutable per registry: bump before re-publishing. Publishing
   the same version twice fails loudly rather than silently doing nothing,
   which is the point: a no-op that looks like success is worse than an error.
-- Store the PATs outside the repo. Open VSX publishing runs in CI (see
-  above); the Marketplace stays manual until its publisher exists, then it
-  can extend the same job shape with `vsce publish`.
+- Store the PATs outside the repo. Both registries publish from manual CI
+  jobs on a tag; both read their token from the environment rather than a
+  command line.
