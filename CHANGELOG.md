@@ -4,7 +4,13 @@ All notable changes to SBOM Lens. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [SemVer](https://semver.org) (0.x: the API surface is the app itself).
 
-## [0.18.0] - 2026-07-17
+## [0.18.1] - 2026-07-17
+
+### Fixed
+- **Release hygiene.** The v0.18.0 tag never produced release artifacts:
+  its commit accidentally included unrelated work-in-progress files that
+  failed CI everywhere. This release supersedes it with an identical
+  feature set; the dead tag remains without a release.
 
 ### Added
 - **[OCM Lens] Registry browsing in the VS Code extension.** Pull a
