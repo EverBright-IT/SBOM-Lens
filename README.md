@@ -140,29 +140,33 @@ statement wins; it is a communication channel, not a scanner. See
 - **SPDX 2.x tag-value** (`.spdx`), **JSON**, and **YAML**: fully supported.
   Detection is content-based, never by file extension.
 - **SPDX 3.0.x JSON-LD**: loads. Packages, files, relationships, hashes,
-  external identifiers (purl, CPE), and license relationships map onto the
-  same views as 2.x; elements from profiles outside core/software (AI,
-  dataset, build) are counted in a notice rather than shown. Tag-value has
-  no 3.x serialization; other 3.x serializations are not parsed.
+  external identifiers (purl, CPE), license relationships, and
+  cross-document **imports** (ExternalMap) map onto the same views as 2.x:
+  import entries become external document references that resolve through
+  the same cascade machinery, so a 3.x document referencing elements of
+  another 3.x document links up the moment both are loaded. Elements from
+  profiles outside core/software (AI, dataset, build) are counted in a
+  notice rather than shown. Tag-value has no 3.x serialization; other 3.x
+  serializations are not parsed.
 - **CycloneDX** and **Trivy-native JSON**: recognized with a pointer to the
   right conversion (`trivy --format spdx-json`, `cyclonedx convert`).
 
 The detail views carry the spec with them: hover the info icon next to a field
-to read the SPDX 2.3 specification's own documentation for it, distilled at
-build time from the official JSON schema (`npm run generate:spec-docs`). Click
-the icon to open that field's section in the rendered specification. SPDX 3.x
-documents render without these tooltips for now: the 2.3 texts would be wrong
-for 3.0 fields, and curated 3.0.1 texts are a follow-up.
+to read the specification's own documentation for it. SPDX 2.x documents get
+the 2.3 texts, distilled at build time from the official JSON schema
+(`npm run generate:spec-docs`); SPDX 3.x documents get a hand-curated 3.0.1
+set that speaks the 3.x vocabulary (packageVersion, suppliedBy,
+verifiedUsing, ...) and links into the 3.0.1 model pages. Click the icon to
+open that field's section in the rendered specification.
 
 ## Limits
 
 Known boundaries, stated plainly so nothing surprises you:
 
 - **Format scope.** SPDX 2.x in full; SPDX 3.0.x as JSON-LD with the
-  core/software profiles mapped (other profiles are counted, not rendered,
-  and external document maps are not followed). CycloneDX and Trivy-native
-  JSON are recognized with a conversion hint, not parsed. Detection is
-  content-based.
+  core/software profiles mapped (other profiles are counted, not rendered).
+  CycloneDX and Trivy-native JSON are recognized with a conversion hint,
+  not parsed. Detection is content-based.
 - **HTTPS or localhost required.** Cascade resolution hashes file bytes with
   `crypto.subtle`, which browsers expose only in secure contexts. Over plain
   HTTP on a non-localhost host, hashing (and therefore checksum-based
@@ -321,9 +325,10 @@ validate against a private SBOM collection without committing it:
 
 ## Roadmap
 
-- **SPDX 3.x, deeper**: curated 3.0.1 field tooltips, external document
-  maps, and serializations beyond JSON-LD. Loading 3.0.x JSON works today
-  (see [Supported formats](#supported-formats)).
+- **SPDX 3.x, deeper**: serializations beyond JSON-LD. Curated 3.0.1
+  field tooltips and external document maps (imports) landed in v0.20.0;
+  loading 3.0.x JSON works since v0.15.0 (see
+  [Supported formats](#supported-formats)).
 - **Chromium extension** ("Open in SBOM Lens" for raw SBOMs in the browser):
   a thin shell around the same codebase, like the VS Code extension that now
   lives in [apps/vscode](apps/vscode/README.md) ("Open with SBOM Lens",
@@ -334,7 +339,8 @@ validate against a private SBOM collection without committing it:
 - **CycloneDX** read support via the same adapter seam
 - Workspace persistence (File System Access API), shareable deep links
   (deep links require addressable sources: catalog or URL-loaded documents)
-- Optional overlays (vulnerabilities), kept out of the core model
+- CSAF 2.0 as the next vulnerability-communication format (the OpenVEX
+  overlay landed in v0.19.0, kept out of the core model as designed)
 
 ## Repository & mirrors
 

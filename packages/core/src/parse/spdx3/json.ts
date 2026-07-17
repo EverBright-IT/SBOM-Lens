@@ -1,5 +1,7 @@
 import type {
   Checksum,
+  ElementRef,
+  ExternalDocumentRef,
   ExternalRef,
   Relationship,
   SbomElement,
@@ -18,13 +20,16 @@ import { dedupeBySpdxId } from '../spdx2/common';
  * both. Same tolerance rules as the 2.x parsers: missing pieces degrade to
  * diagnostics, never to a refusal.
  *
- * Scope (v1, stated in README/docs): packages, files, relationships
+ * Scope (stated in README/docs): packages, files, relationships
  * (including multi-target `to` lists), creation info and agents, hashes,
- * purl/CPE external identifiers, and licenses expressed through
- * hasDeclaredLicense / hasConcludedLicense relationships. Cross-document
- * imports (ExternalMap) and the non-software profiles (AI, dataset, build,
- * security) are not mapped yet; their elements are counted, not dropped
- * silently.
+ * purl/CPE external identifiers, licenses expressed through
+ * hasDeclaredLicense / hasConcludedLicense relationships, and
+ * cross-document imports (ExternalMap): import entries become external
+ * document references (grouped by the defining document's IRI), and
+ * relationship ends pointing at imported IRIs become external element
+ * refs, so the existing cascade resolution links 3.x documents exactly
+ * like 2.x ones. The non-software profiles (AI, dataset, build, security)
+ * are not mapped yet; their elements are counted, not dropped silently.
  */
 export function parseSpdx3Json(input: SourceInput, root: Record<string, unknown>): ParseResult {
   const diagnostics: Diagnostic[] = [];
@@ -96,6 +101,47 @@ export function parseSpdx3Json(input: SourceInput, root: Record<string, unknown>
     const name = agentName(ref);
     if (name) creators.push(name);
   }
+
+  // --- imports (ExternalMap) --------------------------------------------------
+  // Import entries name elements DEFINED in other documents by IRI. We group
+  // them by the defining document: the IRI part before the fragment doubles
+  // as that document's namespace (its SpdxDocument @id), which is exactly
+  // what the namespace resolution matches once both files are loaded.
+  // verifiedUsing hashes ride along (SHA1 feeds the checksum resolver;
+  // anything else still renders as the expected hash).
+  const externalDocumentRefs: ExternalDocumentRef[] = [];
+  const refByDocKey = new Map<string, ExternalDocumentRef>();
+  /** imported element IRI -> docRef of its defining document's reference. */
+  const importedElements = new Map<string, string>();
+  for (const entry of [...asRecordArray(docNode?.import), ...asRecordArray(sbomNode?.import)]) {
+    const externalSpdxId = asString(entry.externalSpdxId);
+    if (!externalSpdxId) continue;
+    const hash = externalSpdxId.indexOf('#');
+    const docIri = hash > 0 ? externalSpdxId.slice(0, hash) : undefined;
+    const locationHint = asString(entry.locationHint);
+    const docKey = docIri ?? locationHint ?? externalSpdxId;
+    let ref = refByDocKey.get(docKey);
+    if (!ref) {
+      const hashes = readHashes(entry.verifiedUsing);
+      const checksum = hashes?.find((h) => h.algorithm === 'SHA1') ?? hashes?.[0];
+      ref = {
+        docRef: docKey,
+        uri: docIri ?? locationHint ?? externalSpdxId,
+        ...(checksum ? { checksum } : {}),
+      };
+      refByDocKey.set(docKey, ref);
+      externalDocumentRefs.push(ref);
+    }
+    importedElements.set(externalSpdxId, ref.docRef);
+  }
+
+  /** Relationship ends resolve against imports first, local otherwise. */
+  const elementRef = (iri: string): ElementRef => {
+    const docRef = importedElements.get(iri);
+    return docRef !== undefined
+      ? { kind: 'external', docRef, spdxId: iri }
+      : { kind: 'local', spdxId: iri };
+  };
 
   // --- elements ---------------------------------------------------------------
   const elements: SbomElement[] = [];
@@ -185,11 +231,11 @@ export function parseSpdx3Json(input: SourceInput, root: Record<string, unknown>
       continue;
     }
     for (const to of targets) {
-      if (relType === 'describes') describes.add(to);
+      if (relType === 'describes' && !importedElements.has(to)) describes.add(to);
       relationships.push({
-        from: { kind: 'local', spdxId: from },
+        from: elementRef(from),
         type: camelToScreamingSnake(relType),
-        to: { kind: 'local', spdxId: to },
+        to: elementRef(to),
         comment: asString(node.comment),
       });
     }
@@ -224,7 +270,7 @@ export function parseSpdx3Json(input: SourceInput, root: Record<string, unknown>
     comment: asString(docNode?.comment),
     dataLicense: licenseText(asString(docNode?.dataLicense)) ?? asString(docNode?.dataLicense),
     describes: [...describes],
-    externalDocumentRefs: [],
+    externalDocumentRefs,
     elements: dedupeBySpdxId(elements, diagnostics),
     relationships,
     diagnostics,

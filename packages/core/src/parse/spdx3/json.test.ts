@@ -118,3 +118,122 @@ describe('SPDX 3 mapping', () => {
     expect(two.document.spec.model).toBe('spdx-2');
   });
 });
+
+describe('SPDX 3 imports (ExternalMap)', () => {
+  const AUTH_DOC = 'https://acme.example/doc/auth-1.4.2';
+  const AUTH_PKG = `${AUTH_DOC}#pkg-auth-service`;
+
+  function importingDoc(importEntry: Record<string, unknown>): string {
+    return JSON.stringify({
+      '@context': 'https://spdx.org/rdf/3.0.1/spdx-context.jsonld',
+      '@graph': [
+        {
+          type: 'SpdxDocument',
+          spdxId: 'https://acme.example/doc/platform-1.0',
+          name: 'acme-platform-3x',
+          creationInfo: '_:ci',
+          rootElement: ['https://acme.example/doc/platform-1.0#pkg-platform'],
+          import: [importEntry],
+        },
+        { type: 'CreationInfo', '@id': '_:ci', specVersion: '3.0.1', created: '2026-07-01T00:00:00Z', createdBy: [] },
+        {
+          type: 'software_Package',
+          spdxId: 'https://acme.example/doc/platform-1.0#pkg-platform',
+          name: 'acme-platform',
+          software_packageVersion: '1.0.0',
+        },
+        {
+          type: 'Relationship',
+          spdxId: 'https://acme.example/doc/platform-1.0#rel-1',
+          from: 'https://acme.example/doc/platform-1.0#pkg-platform',
+          relationshipType: 'dependsOn',
+          to: [AUTH_PKG],
+        },
+      ],
+    });
+  }
+
+  function parseImporting(importEntry: Record<string, unknown>) {
+    const source = importingDoc(importEntry);
+    const result = parseDocument({ fileName: 'platform.spdx3.json', text: source, sha1: 'b'.repeat(40), byteSize: source.length });
+    expect(result.document).not.toBeNull();
+    return result.document!;
+  }
+
+  it('maps import entries to external document refs grouped by the defining document IRI', () => {
+    const doc = parseImporting({
+      externalSpdxId: AUTH_PKG,
+      locationHint: 'https://downloads.acme.example/auth-1.4.2.spdx3.json',
+      verifiedUsing: [{ type: 'Hash', algorithm: 'sha256', hashValue: 'CC'.repeat(32) }],
+    });
+    expect(doc.externalDocumentRefs).toEqual([
+      {
+        docRef: AUTH_DOC,
+        uri: AUTH_DOC,
+        checksum: { algorithm: 'SHA256', value: 'cc'.repeat(32) },
+      },
+    ]);
+    const rel = doc.relationships.find((r) => r.type === 'DEPENDS_ON')!;
+    expect(rel.to).toEqual({ kind: 'external', docRef: AUTH_DOC, spdxId: AUTH_PKG });
+    expect(rel.from.kind).toBe('local');
+  });
+
+  it('falls back to the locationHint when the IRI carries no fragment', () => {
+    const doc = parseImporting({
+      externalSpdxId: 'urn:acme:auth-service',
+      locationHint: 'https://downloads.acme.example/auth-1.4.2.spdx3.json',
+    });
+    expect(doc.externalDocumentRefs).toEqual([
+      { docRef: 'https://downloads.acme.example/auth-1.4.2.spdx3.json', uri: 'https://downloads.acme.example/auth-1.4.2.spdx3.json' },
+    ]);
+  });
+
+  it('resolves an imported reference through the existing namespace resolution', async () => {
+    const { addDocument } = await import('../../workspace/workspace');
+    const { refKey } = await import('../../workspace/resolve');
+    const authText = JSON.stringify({
+      '@context': 'https://spdx.org/rdf/3.0.1/spdx-context.jsonld',
+      '@graph': [
+        {
+          type: 'SpdxDocument',
+          spdxId: AUTH_DOC,
+          name: 'acme-auth-3x',
+          creationInfo: '_:ci',
+        },
+        { type: 'CreationInfo', '@id': '_:ci', specVersion: '3.0.1', created: '2026-07-01T00:00:00Z', createdBy: [] },
+        { type: 'software_Package', spdxId: AUTH_PKG, name: 'auth-service', software_packageVersion: '1.4.2' },
+      ],
+    });
+    let ws = addDocument(
+      emptyWorkspace,
+      loadedFromText('platform.spdx3.json', importingDoc({ externalSpdxId: AUTH_PKG })),
+    ).workspace;
+    const owningId = [...ws.documents.keys()][0]!;
+    expect(ws.resolutions.get(refKey(owningId, AUTH_DOC))?.status).toBe('unresolved');
+
+    ws = addDocument(ws, loadedFromText('auth.spdx3.json', authText)).workspace;
+    const resolution = ws.resolutions.get(refKey(owningId, AUTH_DOC));
+    expect(resolution).toMatchObject({ status: 'resolved', method: 'namespace' });
+  });
+});
+
+describe('SPDX 3 cascade fixtures', () => {
+  it('links the committed fixture pair through namespace resolution', async () => {
+    const { addDocument } = await import('../../workspace/workspace');
+    const { refKey } = await import('../../workspace/resolve');
+    let ws = addDocument(
+      emptyWorkspace,
+      loadedFromText('cascade-platform.spdx3.json', loadFixture('spdx3/cascade-platform.spdx3.json')),
+    ).workspace;
+    const owningId = [...ws.documents.keys()][0]!;
+    ws = addDocument(
+      ws,
+      loadedFromText('cascade-auth.spdx3.json', loadFixture('spdx3/cascade-auth.spdx3.json')),
+    ).workspace;
+    const resolution = ws.resolutions.get(refKey(owningId, 'https://acme.example/doc/auth3-1.4.2'));
+    expect(resolution).toMatchObject({ status: 'resolved', method: 'namespace' });
+    // The imported IRI is the auth document's package spdxId: reveal works.
+    const auth = [...ws.documents.values()].find((d) => d.document.name === 'acme-auth3-1.4.2')!;
+    expect(auth.indexes.elementBySpdxId.has('https://acme.example/doc/auth3-1.4.2#pkg-auth-service')).toBe(true);
+  });
+});

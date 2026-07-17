@@ -122,6 +122,8 @@ export { profileReportToMarkdown } from './profile/markdown';
 
 export type { SpecFieldDoc } from './spec/spdx23-field-docs';
 export { SPDX23_DOCS } from './spec/spdx23-field-docs';
+export type { Spdx3FieldDoc } from './spec/spdx3-field-docs';
+export { SPDX3_DOCS } from './spec/spdx3-field-docs';
 
 export type {
   DocGraphEdge,

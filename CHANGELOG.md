@@ -18,6 +18,28 @@ All notable changes to SBOM Lens. The format follows
   equal option, because an Azure DevOps PAT now requires an organization and
   a new organization requires an active Azure subscription.
 
+## [0.20.0] - 2026-07-17
+
+### Added
+- **[SBOM Lens] SPDX 3.x cascades: imports resolve.** A 3.x document's
+  `import` entries (ExternalMap) now become external document
+  references, grouped by the defining document's IRI, and relationship
+  ends pointing at imported element IRIs become external references.
+  The existing cascade resolution takes it from there: load both
+  documents and they link up (the IRI before the fragment doubles as
+  the target document's namespace), with SHA1 `verifiedUsing` hashes
+  feeding the checksum resolver and other hash algorithms displayed as
+  the expected value. Unresolved imports appear as the same actionable
+  placeholders 2.x references get.
+- **[SBOM Lens] Curated SPDX 3.0.1 field tooltips.** 3.x documents no
+  longer render without field info: a hand-curated documentation set
+  speaks the 3.0.1 vocabulary (packageVersion, suppliedBy,
+  verifiedUsing, primaryPurpose, ...) and deep-links every field into
+  the 3.0.1 model specification pages. Where the viewer folds 3.x
+  structure into a 2.x-shaped field (license relationships, creators),
+  the tooltip says so. The 2.3 texts stay exactly as they were for 2.x
+  documents.
+
 ## [0.19.0] - 2026-07-17
 
 ### Added

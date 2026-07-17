@@ -38,6 +38,48 @@ describe('SPDX 2.3 field docs (generated)', () => {
   });
 });
 
+describe('SPDX 3.0.1 field docs (hand-curated)', () => {
+  it('links every entry into the 3.0.1 model pages and carries the spec name', async () => {
+    const { SPDX3_DOCS } = await import('./spdx3-field-docs');
+    const all = [
+      ...Object.values(SPDX3_DOCS.document),
+      ...Object.values(SPDX3_DOCS.package),
+      ...Object.values(SPDX3_DOCS.file),
+      SPDX3_DOCS.relationshipType,
+    ];
+    expect(all.length).toBeGreaterThanOrEqual(20);
+    for (const doc of all) {
+      expect(doc.specName).toBe('SPDX 3.0.1');
+      expect(doc.description.length).toBeGreaterThan(20);
+      // Only the 3.0.1 model pages — a v2.3 link here would be the exact
+      // mistake this set exists to prevent.
+      expect(doc.specUrl).toMatch(/^https:\/\/spdx\.github\.io\/spdx-spec\/v3\.0\.1\/model\//);
+    }
+  });
+
+  it('covers the field keys the detail views look up', async () => {
+    const { SPDX3_DOCS } = await import('./spdx3-field-docs');
+    for (const key of ['documentNamespace', 'spdxVersion', 'created', 'creators', 'dataLicense', 'externalDocumentRefs']) {
+      expect(SPDX3_DOCS.document[key], `document.${key}`).toBeDefined();
+    }
+    for (const key of [
+      'versionInfo',
+      'primaryPackagePurpose',
+      'supplier',
+      'originator',
+      'downloadLocation',
+      'licenseConcluded',
+      'licenseDeclared',
+      'externalRefs',
+      'checksums',
+      'SPDXID',
+    ]) {
+      expect(SPDX3_DOCS.package[key], `package.${key}`).toBeDefined();
+    }
+    expect(SPDX3_DOCS.file.checksums).toBeDefined();
+  });
+});
+
 describe('OCM field docs (hand-curated)', () => {
   it('links every entry into the ocm-spec repo and carries the OCM spec name', async () => {
     const { OCM_DOCS } = await import('./ocm-field-docs');

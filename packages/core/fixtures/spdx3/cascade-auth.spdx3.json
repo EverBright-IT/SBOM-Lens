@@ -1,0 +1,73 @@
+{
+  "@context": "https://spdx.org/rdf/3.0.1/spdx-context.jsonld",
+  "@graph": [
+    {
+      "type": "CreationInfo",
+      "@id": "_:creationinfo",
+      "specVersion": "3.0.1",
+      "created": "2026-07-01T08:30:00Z",
+      "createdBy": ["https://acme.example/agent/acme"]
+    },
+    {
+      "type": "Organization",
+      "spdxId": "https://acme.example/agent/acme",
+      "creationInfo": "_:creationinfo",
+      "name": "ACME Corp"
+    },
+    {
+      "type": "SpdxDocument",
+      "spdxId": "https://acme.example/doc/auth3-1.4.2",
+      "creationInfo": "_:creationinfo",
+      "name": "acme-auth3-1.4.2",
+      "profileConformance": ["core", "software"],
+      "rootElement": ["https://acme.example/doc/auth3-1.4.2#pkg-auth-service"]
+    },
+    {
+      "type": "software_Package",
+      "spdxId": "https://acme.example/doc/auth3-1.4.2#pkg-auth-service",
+      "creationInfo": "_:creationinfo",
+      "name": "auth-service",
+      "software_packageVersion": "1.4.2",
+      "suppliedBy": "https://acme.example/agent/acme",
+      "software_primaryPurpose": "application",
+      "externalIdentifier": [
+        {
+          "type": "ExternalIdentifier",
+          "externalIdentifierType": "packageUrl",
+          "identifier": "pkg:npm/%40acme/auth-service@1.4.2"
+        }
+      ]
+    },
+    {
+      "type": "software_Package",
+      "spdxId": "https://acme.example/doc/auth3-1.4.2#pkg-jsonwebtoken",
+      "creationInfo": "_:creationinfo",
+      "name": "jsonwebtoken",
+      "software_packageVersion": "9.0.2",
+      "software_primaryPurpose": "library",
+      "externalIdentifier": [
+        {
+          "type": "ExternalIdentifier",
+          "externalIdentifierType": "packageUrl",
+          "identifier": "pkg:npm/jsonwebtoken@9.0.2"
+        }
+      ]
+    },
+    {
+      "type": "Relationship",
+      "spdxId": "https://acme.example/doc/auth3-1.4.2#rel-describes",
+      "creationInfo": "_:creationinfo",
+      "from": "https://acme.example/doc/auth3-1.4.2",
+      "relationshipType": "describes",
+      "to": ["https://acme.example/doc/auth3-1.4.2#pkg-auth-service"]
+    },
+    {
+      "type": "Relationship",
+      "spdxId": "https://acme.example/doc/auth3-1.4.2#rel-dep-jwt",
+      "creationInfo": "_:creationinfo",
+      "from": "https://acme.example/doc/auth3-1.4.2#pkg-auth-service",
+      "relationshipType": "dependsOn",
+      "to": ["https://acme.example/doc/auth3-1.4.2#pkg-jsonwebtoken"]
+    }
+  ]
+}

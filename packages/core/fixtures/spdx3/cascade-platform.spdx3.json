@@ -1,0 +1,65 @@
+{
+  "@context": "https://spdx.org/rdf/3.0.1/spdx-context.jsonld",
+  "@graph": [
+    {
+      "type": "CreationInfo",
+      "@id": "_:creationinfo",
+      "specVersion": "3.0.1",
+      "created": "2026-07-01T09:00:00Z",
+      "createdBy": ["https://acme.example/agent/acme"]
+    },
+    {
+      "type": "Organization",
+      "spdxId": "https://acme.example/agent/acme",
+      "creationInfo": "_:creationinfo",
+      "name": "ACME Corp"
+    },
+    {
+      "type": "SpdxDocument",
+      "spdxId": "https://acme.example/doc/platform3-1.0.0",
+      "creationInfo": "_:creationinfo",
+      "name": "acme-platform3-1.0.0",
+      "profileConformance": ["core", "software"],
+      "rootElement": ["https://acme.example/doc/platform3-1.0.0#pkg-platform"],
+      "import": [
+        {
+          "type": "ExternalMap",
+          "externalSpdxId": "https://acme.example/doc/auth3-1.4.2#pkg-auth-service",
+          "locationHint": "https://downloads.acme.example/sboms/cascade-auth.spdx3.json",
+          "verifiedUsing": [
+            {
+              "type": "Hash",
+              "algorithm": "sha256",
+              "hashValue": "5d41402abc4b2a76b9719d911017c592aabbccddeeff00112233445566778899"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "software_Package",
+      "spdxId": "https://acme.example/doc/platform3-1.0.0#pkg-platform",
+      "creationInfo": "_:creationinfo",
+      "name": "acme-platform3",
+      "software_packageVersion": "1.0.0",
+      "suppliedBy": "https://acme.example/agent/acme",
+      "software_primaryPurpose": "application"
+    },
+    {
+      "type": "Relationship",
+      "spdxId": "https://acme.example/doc/platform3-1.0.0#rel-describes",
+      "creationInfo": "_:creationinfo",
+      "from": "https://acme.example/doc/platform3-1.0.0",
+      "relationshipType": "describes",
+      "to": ["https://acme.example/doc/platform3-1.0.0#pkg-platform"]
+    },
+    {
+      "type": "Relationship",
+      "spdxId": "https://acme.example/doc/platform3-1.0.0#rel-dep-auth",
+      "creationInfo": "_:creationinfo",
+      "from": "https://acme.example/doc/platform3-1.0.0#pkg-platform",
+      "relationshipType": "dependsOn",
+      "to": ["https://acme.example/doc/auth3-1.4.2#pkg-auth-service"]
+    }
+  ]
+}
