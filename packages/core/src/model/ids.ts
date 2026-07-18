@@ -20,7 +20,10 @@ export function makeElementId(documentId: DocumentId, spdxId: string): ElementId
 }
 
 export function splitElementId(id: ElementId): { documentId: DocumentId; spdxId: string } {
-  // documentNamespace is a URI without fragment, so the last '#' is ours.
-  const i = id.lastIndexOf('#');
+  // The documentId is a namespace URI (or urn:) and never carries a fragment,
+  // so the FIRST '#' is our separator. The spdxId itself may be a full IRI
+  // with its own '#fragment' (SPDX 3.x elements are IRIs), which is exactly
+  // why lastIndexOf would split in the wrong place and lose the element.
+  const i = id.indexOf('#');
   return { documentId: id.slice(0, i) as DocumentId, spdxId: id.slice(i + 1) };
 }
