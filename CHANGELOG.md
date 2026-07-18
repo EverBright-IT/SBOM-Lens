@@ -4,7 +4,7 @@ All notable changes to SBOM Lens. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [SemVer](https://semver.org) (0.x: the API surface is the app itself).
 
-## [Unreleased]
+## [0.21.0] - 2026-07-18
 
 ### Added
 - **CSAF 2.0 as a second VEX source, both products.** Load a CSAF 2.0
@@ -23,6 +23,11 @@ All notable changes to SBOM Lens. The format follows
   never mentioned. Hashing runs in the worker; the delivered bytes never
   reach the UI thread. The SPDX-side counterpart to OCM Lens's blob-digest
   check. See [docs/acceptance.md](docs/acceptance.md).
+- **One-click demos for every feature.** The demo catalog gained a delivery
+  acceptance run (a file-level SBOM plus a delivery that hits all four
+  verdicts), an SPDX 3.0.1 cascade, and — in OCM Lens — a signed component
+  descriptor with its public key. A catalog source can now carry an optional
+  `delivery` list of files to check against the SBOM it loads.
 
 ## [0.18.2] - 2026-07-17
 

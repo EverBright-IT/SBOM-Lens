@@ -3,7 +3,7 @@
   "displayName": "SBOM Lens",
   "icon": "icon.png",
   "description": "View SPDX SBOMs, including cascading document hierarchies, right in your editor.",
-  "version": "0.20.1",
+  "version": "0.21.0",
   "publisher": "everbright-it",
   "license": "Apache-2.0",
   "private": true,
