@@ -4,6 +4,16 @@ All notable changes to SBOM Lens. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [SemVer](https://semver.org) (0.x: the API surface is the app itself).
 
+## [0.21.1] - 2026-07-18
+
+### Fixed
+- **SPDX 3.x cascades no longer show "(missing element)".** An element's
+  global id is `documentId#spdxId`, decoded on the last `#` — which broke for
+  SPDX 3.x, whose element ids are full IRIs carrying their own `#fragment`.
+  The described root of a 3.x document then resolved to nothing and rendered
+  as a missing element. Decoding now splits on the first `#` (a document
+  namespace never carries a fragment), so 3.x roots resolve correctly.
+
 ## [0.21.0] - 2026-07-18
 
 ### Added
