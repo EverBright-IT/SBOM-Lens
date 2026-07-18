@@ -13,6 +13,11 @@ or folder. Everything is hashed **locally, in a worker** — the delivered
 bytes never leave your machine and never reach the UI thread; only the
 digests do.
 
+> **Try it in one click:** *Open → ACME web delivery — acceptance check* in
+> the demo catalog loads a file-level SBOM and a bundled delivery that
+> exercises all four verdicts (one match, one tampered, one missing, one
+> extra).
+
 ## Verdicts
 
 Per file, matched by relative path:

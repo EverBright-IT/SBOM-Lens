@@ -19,6 +19,25 @@
         "examples/acme-runtime-image-3.0.spdx"
       ],
       "resolveRefs": true
+    },
+    {
+      "label": "ACME Platform (SPDX 3.0.1)",
+      "description": "The same platform as an SPDX 3.0.1 JSON-LD cascade — the BSI-baseline format.",
+      "urls": [
+        "examples/spdx3/acme-platform.spdx3.json",
+        "examples/spdx3/acme-auth.spdx3.json"
+      ]
+    },
+    {
+      "label": "ACME web delivery — acceptance check",
+      "description": "A file-level SBOM plus the delivered files: one matches, one is tampered, one is missing, one is an extra the SBOM never listed.",
+      "urls": ["examples/acme-web-delivery-1.0.spdx"],
+      "delivery": [
+        "examples/delivery/src/app.js",
+        "examples/delivery/src/config.yaml",
+        "examples/delivery/LICENSE",
+        "examples/delivery/README.md"
+      ]
     }
   ],
   "profiles": [

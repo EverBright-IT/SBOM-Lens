@@ -1,0 +1,34 @@
+SPDXVersion: SPDX-2.3
+DataLicense: CC0-1.0
+SPDXID: SPDXRef-DOCUMENT
+DocumentName: acme-web-delivery-1.0
+DocumentNamespace: https://acme.example/spdxdocs/acme-web-delivery-1.0
+Creator: Organization: ACME Corp
+Created: 2026-05-01T00:00:00Z
+
+PackageName: acme-web-delivery
+SPDXID: SPDXRef-Package
+PackageVersion: 1.0.0
+PackageDownloadLocation: NOASSERTION
+PackageLicenseConcluded: Apache-2.0
+Relationship: SPDXRef-DOCUMENT DESCRIBES SPDXRef-Package
+
+FileName: ./src/app.js
+SPDXID: SPDXRef-File-app
+FileChecksum: SHA256: d93ba2d5e1ad3dc0e161e8aaa1869df3576d5fa9068f46a8e4ea465e8ad762d6
+Relationship: SPDXRef-Package CONTAINS SPDXRef-File-app
+
+FileName: ./src/config.yaml
+SPDXID: SPDXRef-File-config
+FileChecksum: SHA256: f68abb3f6ece1fed4d91897ad650f42655457c278aa43312b7840b9bc2bd5abd
+Relationship: SPDXRef-Package CONTAINS SPDXRef-File-config
+
+FileName: ./LICENSE
+SPDXID: SPDXRef-File-license
+FileChecksum: SHA256: fde9d0b9de846a98456aa0aaeb42121781fd9940b7ecf91b8d55603e6d3f40a3
+Relationship: SPDXRef-Package CONTAINS SPDXRef-File-license
+
+FileName: ./src/legacy.js
+SPDXID: SPDXRef-File-legacy
+FileChecksum: SHA256: e5bbab75abb95b69192d5d5516210c5e3f0b3c4f01726c2c4680fc519bde43d7
+Relationship: SPDXRef-Package CONTAINS SPDXRef-File-legacy

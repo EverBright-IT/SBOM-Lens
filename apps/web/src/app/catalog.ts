@@ -2,7 +2,7 @@ import { MAX_PROFILE_BYTES } from '@sbomlens/core';
 import { BRAND } from './brand';
 import { host } from '../host/adapter';
 import { fetchAllReferences } from './autofetch';
-import { ingestUrl } from './ingest';
+import { checkDeliveredFiles, ingestUrl } from './ingest';
 import { importProfileText } from './profiles';
 import { useAppStore } from './store';
 
@@ -27,6 +27,12 @@ export interface CatalogSource {
   loadOnStart?: boolean;
   /** After loading, recursively fetch every referenced document. */
   resolveRefs?: boolean;
+  /**
+   * Delivered files to check against the loaded SBOM's file checksums after
+   * ingesting `urls`. Their common directory prefix is stripped so the paths
+   * line up with the SBOM's relative file names. Used for the acceptance demo.
+   */
+  delivery?: string[];
 }
 
 export interface CatalogProfileRef {
@@ -98,6 +104,32 @@ export async function loadCatalogSource(source: CatalogSource): Promise<void> {
     }
   }
   if (source.resolveRefs) await fetchAllReferences();
+  if (source.delivery && source.delivery.length > 0) await runDeliveryCheck(source.delivery);
+}
+
+/**
+ * Fetch a bundled delivered-file set and check it against the just-loaded
+ * SBOM. The common directory prefix is stripped from each URL so the File
+ * names match the SBOM's relative paths; the bytes go straight to the worker
+ * for hashing via checkDeliveredFiles.
+ */
+async function runDeliveryCheck(urls: string[]): Promise<void> {
+  const prefix = commonDirPrefix(urls);
+  const files: File[] = [];
+  for (const url of urls) {
+    const result = await host().fetchDocument(url);
+    if (result.ok) files.push(new File([result.bytes], url.slice(prefix.length)));
+  }
+  if (files.length > 0) await checkDeliveredFiles(files);
+}
+
+/** Longest shared directory prefix (ending at a slash) across the URLs. */
+function commonDirPrefix(urls: readonly string[]): string {
+  if (urls.length === 0) return '';
+  let prefix = urls[0]!;
+  for (const url of urls) while (!url.startsWith(prefix)) prefix = prefix.slice(0, -1);
+  const slash = prefix.lastIndexOf('/');
+  return slash === -1 ? '' : prefix.slice(0, slash + 1);
 }
 
 function validateCatalog(raw: unknown): Catalog | null {
@@ -114,12 +146,16 @@ function validateCatalog(raw: unknown): Catalog | null {
       ? e.urls.filter((u): u is string => typeof u === 'string' && isAllowedUrl(u)).slice(0, MAX_URLS)
       : [];
     if (!label || urls.length === 0) continue;
+    const delivery = Array.isArray(e.delivery)
+      ? e.delivery.filter((u): u is string => typeof u === 'string' && isAllowedUrl(u)).slice(0, MAX_URLS)
+      : [];
     sources.push({
       label,
       description: typeof e.description === 'string' ? e.description : undefined,
       urls,
       loadOnStart: e.loadOnStart === true,
       resolveRefs: e.resolveRefs === true,
+      ...(delivery.length > 0 ? { delivery } : {}),
     });
   }
   const profiles: CatalogProfileRef[] = [];

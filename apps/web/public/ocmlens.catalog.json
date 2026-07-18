@@ -1,0 +1,10 @@
+{
+  "title": "Demo catalog",
+  "sources": [
+    {
+      "label": "ACME signed component (demo)",
+      "description": "A signed OCM component descriptor. Open its Signatures section and paste examples/ocm/acme-public-key.pem to verify it client-side.",
+      "urls": ["examples/ocm/acme-signed-component.json"]
+    }
+  ]
+}
