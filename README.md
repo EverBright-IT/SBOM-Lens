@@ -152,8 +152,12 @@ statement wins; it is a communication channel, not a scanner. See
   profiles outside core/software (AI, dataset, build) are counted in a
   notice rather than shown. Tag-value has no 3.x serialization; other 3.x
   serializations are not parsed.
-- **CycloneDX** and **Trivy-native JSON**: recognized with a pointer to the
-  right conversion (`trivy --format spdx-json`, `cyclonedx convert`).
+- **CycloneDX 1.x** as JSON: components (including nested assemblies),
+  dependencies, purl and CPE identity, hashes, licenses, and BOM-Links —
+  a reference of type `bom` (`urn:cdx:...`) resolves across loaded BOMs
+  through the same cascade machinery. Read-only viewing, no conversion.
+- **Trivy-native JSON**: recognized with a pointer to the right conversion
+  (`trivy --format spdx-json`).
 
 The detail views carry the spec with them: hover the info icon next to a field
 to read the specification's own documentation for it. SPDX 2.x documents get
@@ -168,9 +172,10 @@ open that field's section in the rendered specification.
 Known boundaries, stated plainly so nothing surprises you:
 
 - **Format scope.** SPDX 2.x in full; SPDX 3.0.x as JSON-LD with the
-  core/software profiles mapped (other profiles are counted, not rendered).
-  CycloneDX and Trivy-native JSON are recognized with a conversion hint,
-  not parsed. Detection is content-based.
+  core/software profiles mapped (other profiles are counted, not rendered);
+  CycloneDX 1.x as JSON (services, compositions, embedded VEX data, and XML
+  are out of scope). Trivy-native JSON is recognized with a conversion
+  hint, not parsed. Detection is content-based.
 - **HTTPS or localhost required.** Cascade resolution hashes file bytes with
   `crypto.subtle`, which browsers expose only in secure contexts. Over plain
   HTTP on a non-localhost host, hashing (and therefore checksum-based
@@ -354,7 +359,6 @@ host anything. It is the reading half of the SBOM workflow.
   [Open VSX](https://open-vsx.org/extension/everbright-it/sbomlens)).
   Architecture:
   [docs/extension-architecture.md](docs/extension-architecture.md).
-- **CycloneDX** read support via the same adapter seam
 - Workspace persistence (File System Access API), shareable deep links
   (deep links require addressable sources: catalog or URL-loaded documents)
 - CSAF 2.0 as the next vulnerability-communication format (the OpenVEX

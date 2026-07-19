@@ -1,7 +1,7 @@
-import type { SbomElement } from '../model/document';
+import type { SbomDocument, SbomElement } from '../model/document';
 import { effectiveLicense } from '../model/document';
 import type { LoadedDocument, WorkspaceState } from '../workspace/workspace';
-import type { ComplianceProfile, DocumentField, PackageField, ProfileCheck } from './model';
+import type { ComplianceProfile, DocumentField, PackageField, ProfileCheck, ProfileSpecBaseline } from './model';
 
 /**
  * Profile evaluation. Field semantics live in the two extractors below and
@@ -59,12 +59,13 @@ export function evaluateProfile(
   // format must show that mismatch as a failing check, not bury it in the
   // profile description. Boolean kind = gated by the tally below.
   const preconditions: ProfileCheckResult[] = [];
-  if (profile.requires?.spec === 'spdx-3') {
+  if (profile.requires?.spec !== undefined) {
+    const accepted = Array.isArray(profile.requires.spec) ? profile.requires.spec : [profile.requires.spec];
     preconditions.push({
       id: 'format-baseline',
-      label: 'Format baseline: SPDX 3.0.1 or later',
+      label: `Format baseline: ${accepted.map((t) => BASELINE_LABEL[t]).join(' or ')}`,
       kind: 'boolean',
-      pass: doc.spec.model === 'spdx-3',
+      pass: accepted.some((t) => baselineSatisfied(t, doc)),
       actual: doc.spec.version,
     });
   }
@@ -257,4 +258,20 @@ function defaultLabel(check: ProfileCheck): string {
     case 'package-coverage':
       return `Packages with ${check.field}`;
   }
+}
+
+const BASELINE_LABEL: Record<ProfileSpecBaseline, string> = {
+  'spdx-3': 'SPDX 3.0.1 or later',
+  'cdx-1.6': 'CycloneDX 1.6 or later',
+};
+
+/** cdx-1.6 means CycloneDX with specVersion >= 1.6 (major.minor compare). */
+function baselineSatisfied(token: ProfileSpecBaseline, doc: SbomDocument): boolean {
+  if (token === 'spdx-3') return doc.spec.model === 'spdx-3';
+  if (doc.spec.model !== 'cyclonedx') return false;
+  const match = /^CycloneDX-(\d+)\.(\d+)/.exec(doc.spec.version);
+  if (!match) return false;
+  const major = Number(match[1]);
+  const minor = Number(match[2]);
+  return major > 1 || (major === 1 && minor >= 6);
 }

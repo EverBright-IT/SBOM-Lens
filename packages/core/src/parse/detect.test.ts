@@ -28,9 +28,9 @@ describe('detect', () => {
     expect(detection).toMatchObject({ format: 'unsupported', code: 'SBOMLENS_PROFILE' });
   });
 
-  it('recognizes CycloneDX with a helpful message', () => {
-    const result = detect(loadFixture('negative/cyclonedx.json'));
-    expect(result).toMatchObject({ format: 'unsupported', code: 'CYCLONEDX_NOT_SUPPORTED' });
+  it('routes CycloneDX JSON to the cdx parser', () => {
+    const result = detect(loadFixture('cdx/minimal.cdx.json'));
+    expect(result).toMatchObject({ format: 'cdx-json', serialization: 'json' });
   });
 
   it('recognizes Trivy-native JSON (even when named *.spdx.json)', () => {

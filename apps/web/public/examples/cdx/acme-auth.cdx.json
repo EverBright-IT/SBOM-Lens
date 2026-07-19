@@ -1,0 +1,33 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.6",
+  "serialNumber": "urn:uuid:7a1b2c3d-4e5f-6071-8293-a4b5c6d7e8f9",
+  "version": 1,
+  "metadata": {
+    "timestamp": "2026-05-20T14:30:00Z",
+    "authors": [{ "name": "ACME Product Security" }],
+    "component": {
+      "type": "application",
+      "bom-ref": "acme-auth",
+      "name": "acme-auth",
+      "version": "1.4.2",
+      "supplier": { "name": "ACME Corp" },
+      "purl": "pkg:npm/%40acme/auth@1.4.2",
+      "licenses": [{ "expression": "Apache-2.0" }]
+    }
+  },
+  "components": [
+    {
+      "type": "library",
+      "bom-ref": "jwt-lib",
+      "name": "jwt-lib",
+      "version": "9.2.1",
+      "purl": "pkg:npm/jwt-lib@9.2.1",
+      "licenses": [{ "license": { "id": "MIT" } }],
+      "hashes": [
+        { "alg": "SHA-256", "content": "9e107d9d372bb6826bd81d3542a419d6f4b327e8a9b0c1d2e3f4a5b6c7d8e9f0" }
+      ]
+    }
+  ],
+  "dependencies": [{ "ref": "acme-auth", "dependsOn": ["jwt-lib"] }]
+}

@@ -1,5 +1,5 @@
 import { asArray, asString, isRecord } from '../util/narrow';
-import type { ComplianceProfile, DocumentField, PackageField, ProfileCheck } from './model';
+import type { ComplianceProfile, ProfileSpecBaseline, DocumentField, PackageField, ProfileCheck } from './model';
 import { MAX_PROFILE_BYTES, PROFILE_SCHEMA_V1, PROFILE_SCHEMA_V2, PROFILE_SCHEMA_V3, STRING_PACKAGE_FIELDS } from './model';
 
 /**
@@ -69,10 +69,19 @@ export function validateProfile(raw: unknown): ProfileValidation {
       errors.push('"requires" must be an object');
     } else {
       const keys = Object.keys(raw.requires);
-      if (keys.length !== 1 || keys[0] !== 'spec' || raw.requires.spec !== 'spdx-3') {
-        errors.push('"requires" supports exactly { "spec": "spdx-3" }');
+      const value: unknown = raw.requires.spec;
+      const tokens = Array.isArray(value) ? value : [value];
+      const isBaseline = (t: unknown): t is ProfileSpecBaseline => t === 'spdx-3' || t === 'cdx-1.6';
+      const valid =
+        keys.length === 1 &&
+        keys[0] === 'spec' &&
+        tokens.length > 0 &&
+        tokens.every(isBaseline) &&
+        new Set(tokens).size === tokens.length;
+      if (!valid) {
+        errors.push('"requires" supports exactly { "spec": "spdx-3" | "cdx-1.6" | [<those>] }');
       } else {
-        requires = { spec: 'spdx-3' };
+        requires = { spec: Array.isArray(value) ? (value as ProfileSpecBaseline[]) : (value as ProfileSpecBaseline) };
       }
     }
   }

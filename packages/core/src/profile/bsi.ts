@@ -17,15 +17,15 @@ export const BSI_TR_03183_PROFILE: ComplianceProfile = {
   name: 'BSI TR-03183-2 field coverage (approximation)',
   description:
     'Approximates BSI TR-03183-2 v2.1.0. The TR accepts only SPDX 3.0.1+ or ' +
-    'CycloneDX 1.6+ as formats; this profile enforces the SPDX side of that ' +
-    'baseline as a gated check, so an SPDX 2.x document reports the format ' +
-    'mismatch instead of looking conformant. The remaining checks measure ' +
+    'CycloneDX 1.6+ as formats; this profile enforces that baseline as a ' +
+    'gated check on both lines, so an SPDX 2.x or CycloneDX 1.5 document ' +
+    'reports the format mismatch instead of looking conformant. The remaining checks measure ' +
     'whether the required data is present; the component creator is ' +
     'approximated via the SPDX supplier field. Not checkable by this engine ' +
     'and reviewed manually: component filenames, the executable/archive/' +
     'structured properties, source-code and deployable-form URIs, and the ' +
     'explicit completeness indication for dependencies.',
-  requires: { spec: 'spdx-3' },
+  requires: { spec: ['spdx-3', 'cdx-1.6'] },
   checks: [
     {
       id: 'creators',

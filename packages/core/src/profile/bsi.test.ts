@@ -18,6 +18,29 @@ describe('BSI_TR_03183_PROFILE', () => {
     expect(BSI_TR_03183_PROFILE.description).toContain('Not checkable');
   });
 
+  it('passes the format baseline on CycloneDX 1.6 and fails it on 1.5', () => {
+    const cdx = (specVersion: string) =>
+      JSON.stringify({
+        bomFormat: 'CycloneDX',
+        specVersion,
+        version: 1,
+        metadata: { component: { type: 'application', 'bom-ref': 'r', name: 'app' } },
+      });
+    const sixteen = loadedFromText('app16.cdx.json', cdx('1.6'));
+    const baseline16 = evaluateProfile(emptyWorkspace, sixteen, BSI_TR_03183_PROFILE).results.find(
+      (r) => r.id === 'format-baseline',
+    )!;
+    expect(baseline16.pass).toBe(true);
+    expect(baseline16.label).toContain('CycloneDX 1.6');
+
+    const fifteen = loadedFromText('app15.cdx.json', cdx('1.5'));
+    expect(
+      evaluateProfile(emptyWorkspace, fifteen, BSI_TR_03183_PROFILE).results.find(
+        (r) => r.id === 'format-baseline',
+      )?.pass,
+    ).toBe(false);
+  });
+
   it('fails the format baseline on SPDX 2.x, passes it on SPDX 3.x', () => {
     const two = loadedFromText('two.spdx.json', loadFixture('minimal.spdx.json'));
     const twoReport = evaluateProfile(emptyWorkspace, two, BSI_TR_03183_PROFILE);

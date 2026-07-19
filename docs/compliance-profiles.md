@@ -139,11 +139,12 @@ essentials for component descriptors), the dropdown offers:
   **SHA-512** hash (the algorithm is enforced via the v2 `algorithms`
   modifier), plus dependency enumeration; unique IDs (purl/CPE) are reported
   informationally. The TR accepts only SPDX 3.0.1+ or CycloneDX 1.6+ as
-  formats, and the profile enforces the SPDX side of that baseline as a
-  leading **gated check** (via the v3 `requires` precondition): an SPDX 2.x
-  document visibly fails "Format baseline: SPDX 3.0.1 or later" instead of
-  looking conformant, while its field checks still show what data is
-  present. SPDX 3.0.x documents load since v0.15.0 and pass the baseline.
+  formats, and the profile enforces that baseline as a leading **gated
+  check** (via the v3 `requires` precondition, which accepts a list of
+  baselines): an SPDX 2.x or CycloneDX 1.5 document visibly fails the
+  format-baseline check instead of looking conformant, while its field
+  checks still show what data is present. SPDX 3.0.x and CycloneDX 1.6+
+  documents pass the baseline.
   It stays labelled an *approximation*: the profile verifies field
   coverage, not the full TR.
   What the engine cannot check (component filenames, the

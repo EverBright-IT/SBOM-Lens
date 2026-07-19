@@ -5,6 +5,7 @@ export type Detection =
   | { format: 'spdx2-tag-value' }
   | { format: 'spdx3-json'; parsed: Record<string, unknown>; serialization: 'json' | 'yaml' }
   | { format: 'ocm-cd'; parsed: Record<string, unknown>; serialization: 'json' | 'yaml' }
+  | { format: 'cdx-json'; parsed: Record<string, unknown>; serialization: 'json' | 'yaml' }
   | { format: 'unsupported'; code: string; reason: string };
 
 /**
@@ -111,10 +112,7 @@ function classifyObject(parsed: unknown, serialization: 'json' | 'yaml'): Detect
   }
 
   if (parsed.bomFormat === 'CycloneDX') {
-    return unsupported(
-      'CYCLONEDX_NOT_SUPPORTED',
-      'This is a CycloneDX BOM. This viewer reads SPDX: convert it (e.g. `cyclonedx convert`) or export SPDX from your tool.',
-    );
+    return { format: 'cdx-json', parsed, serialization };
   }
 
   if ('SchemaVersion' in parsed && ('Results' in parsed || 'ArtifactName' in parsed)) {

@@ -37,9 +37,8 @@ describe('OCM detection', () => {
       format: 'unsupported',
       code: 'TRIVY_NATIVE_NOT_SUPPORTED',
     });
-    expect(detect(loadFixture('negative/cyclonedx.json'))).toMatchObject({
-      format: 'unsupported',
-      code: 'CYCLONEDX_NOT_SUPPORTED',
+    expect(detect(loadFixture('cdx/minimal.cdx.json'))).toMatchObject({
+      format: 'cdx-json',
     });
   });
 });

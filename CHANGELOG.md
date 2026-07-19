@@ -4,6 +4,28 @@ All notable changes to SBOM Lens. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [SemVer](https://semver.org) (0.x: the API surface is the app itself).
 
+## [0.23.0] - 2026-07-19
+
+### Added
+- **[SBOM Lens] CycloneDX 1.x documents load.** JSON BOMs open next to
+  SPDX: components (including nested assemblies) with purl and CPE
+  identity, suppliers, hashes, licenses (declared/concluded via
+  acknowledgment), dependencies as DEPENDS_ON, and the full component node
+  in the source view. **BOM-Links cascade**: a reference of type `bom`
+  (`urn:cdx:<serial>/<version>#<bom-ref>`) becomes an external document
+  reference and resolves through the same namespace matcher SPDX cascades
+  use, with actionable placeholders for unresolved links (BOM-Links carry
+  no document hash, so checksum resolution honestly does not apply). The
+  CPE lands as a SECURITY reference, so VEX/CSAF statements match CDX
+  inventories immediately. Out of scope, stated plainly: services,
+  compositions, embedded VEX data, XML. The demo catalog gained a
+  CycloneDX pair wired by BOM-Link.
+- **BSI profile covers both format lines.** The v3 `requires` precondition
+  accepts a list of baselines (`spdx-3`, `cdx-1.6`); the BSI preset now
+  passes CycloneDX 1.6+ and fails 1.5, exactly as it already did for SPDX
+  3.x versus 2.x. Fail-closed as before: older engines reject the list
+  outright instead of under-checking.
+
 ## [0.22.0] - 2026-07-19
 
 ### Added

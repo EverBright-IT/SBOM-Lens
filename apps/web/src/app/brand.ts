@@ -62,7 +62,7 @@ const SBOM: Branding = {
   emptyStateHint:
     'Drop SPDX files or folders anywhere in this window: cascading documents ' +
     'link up automatically.',
-  formatsNote: 'Supports SPDX 2.x as tag-value (.spdx), JSON, and YAML.',
+  formatsNote: 'Supports SPDX 2.x (tag-value, JSON, YAML), SPDX 3.0.x and CycloneDX 1.x as JSON.',
   catalogHeading: 'Preconfigured SBOMs',
   dropHint: 'Drop SPDX files or folders',
   urlDialogLabel: 'URL of an SPDX document',

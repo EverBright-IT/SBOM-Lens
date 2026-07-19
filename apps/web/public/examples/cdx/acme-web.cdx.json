@@ -1,0 +1,61 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.6",
+  "serialNumber": "urn:uuid:0f8c2a44-1d2e-4b3a-9c5d-6e7f8a9b0c1d",
+  "version": 1,
+  "metadata": {
+    "timestamp": "2026-05-22T09:00:00Z",
+    "authors": [{ "name": "ACME Product Security" }],
+    "tools": { "components": [{ "type": "application", "name": "acme-bom-gen", "version": "3.1.0" }] },
+    "component": {
+      "type": "application",
+      "bom-ref": "acme-web",
+      "name": "acme-web",
+      "version": "2.1.0",
+      "supplier": { "name": "ACME Corp" },
+      "purl": "pkg:npm/%40acme/web@2.1.0",
+      "licenses": [{ "expression": "Apache-2.0" }]
+    }
+  },
+  "components": [
+    {
+      "type": "library",
+      "bom-ref": "left-pad",
+      "name": "left-pad",
+      "version": "1.3.0",
+      "purl": "pkg:npm/left-pad@1.3.0",
+      "supplier": { "name": "npm community" },
+      "licenses": [{ "license": { "id": "MIT" } }],
+      "hashes": [
+        { "alg": "SHA-256", "content": "47b7d9f9c0e6d81fa8f2a3f5be320d5b45b0e0e5b8f2a3f5be320d5b45b0e0e5" }
+      ]
+    },
+    {
+      "type": "application",
+      "bom-ref": "acme-thing",
+      "name": "acme-thing",
+      "version": "1.0",
+      "cpe": "cpe:2.3:a:acme:thing:1.0:*:*:*:*:*:*:*",
+      "supplier": { "name": "ACME Corp" },
+      "licenses": [{ "expression": "Apache-2.0" }],
+      "description": "Demo component identified only by CPE. Load the CSAF demo advisory next to this BOM and its statement matches this component through the CPE."
+    },
+    {
+      "type": "library",
+      "bom-ref": "acme-auth-subsystem",
+      "name": "acme-auth (subsystem)",
+      "version": "1.4.2",
+      "supplier": { "name": "ACME Corp" },
+      "externalReferences": [
+        {
+          "type": "bom",
+          "url": "urn:cdx:7a1b2c3d-4e5f-6071-8293-a4b5c6d7e8f9/1#acme-auth",
+          "comment": "The subsystem's own BOM: load acme-auth.cdx.json and the cascade links up."
+        }
+      ]
+    }
+  ],
+  "dependencies": [
+    { "ref": "acme-web", "dependsOn": ["left-pad", "acme-thing", "acme-auth-subsystem"] }
+  ]
+}

@@ -208,3 +208,28 @@ describe('schema v3: requires', () => {
     expect(result.ok).toBe(true);
   });
 });
+
+describe('schema v3: requires with format-baseline lists', () => {
+  const base = { name: 'x', checks: [{ type: 'relationships' }] };
+
+  it('accepts cdx-1.6 and a list of baselines', () => {
+    const single = validateProfile({ ...base, schema: 'sbomlens-profile/v3', requires: { spec: 'cdx-1.6' } });
+    expect(single.ok).toBe(true);
+    if (single.ok) expect(single.profile.requires).toEqual({ spec: 'cdx-1.6' });
+
+    const list = validateProfile({
+      ...base,
+      schema: 'sbomlens-profile/v3',
+      requires: { spec: ['spdx-3', 'cdx-1.6'] },
+    });
+    expect(list.ok).toBe(true);
+    if (list.ok) expect(list.profile.requires).toEqual({ spec: ['spdx-3', 'cdx-1.6'] });
+  });
+
+  it('rejects unknown tokens, duplicates, and empty lists fail-closed', () => {
+    for (const spec of ['cdx-1.5', [], ['spdx-3', 'spdx-3'], ['spdx-3', 'nope']]) {
+      const result = validateProfile({ ...base, schema: 'sbomlens-profile/v3', requires: { spec } });
+      expect(result.ok).toBe(false);
+    }
+  });
+});

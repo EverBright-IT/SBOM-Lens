@@ -97,9 +97,17 @@ export type ProfileCheck =
  * with complete fields would render an all-green report and quietly
  * overstate conformance.
  */
+/** A format baseline a requirement source accepts. */
+export type ProfileSpecBaseline = 'spdx-3' | 'cdx-1.6';
+
 export interface ProfileRequires {
-  /** The document model this profile's requirement source is defined against. */
-  spec: 'spdx-3';
+  /**
+   * The document model(s) this profile's requirement source is defined
+   * against; a list means any of them satisfies the baseline. Values are a
+   * strict whitelist on purpose: an older engine rejects unknown tokens
+   * outright (fail-closed) instead of silently under-checking.
+   */
+  spec: ProfileSpecBaseline | ProfileSpecBaseline[];
 }
 
 export interface ComplianceProfile {

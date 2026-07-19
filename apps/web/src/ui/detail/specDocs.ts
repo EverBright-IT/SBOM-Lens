@@ -18,10 +18,14 @@ export interface SpecDocs {
   relationshipType?: SpecFieldDoc;
 }
 
+/** No curated CycloneDX texts yet: better no ⓘ than an SPDX link on a CDX field. */
+const CDX_DOCS_NONE: SpecDocs = { document: {}, package: {}, file: {} };
+
 export function docsFor(doc: SbomDocument): SpecDocs {
   if (HAS_DELIVERIES && doc.spec.model === 'ocm') return OCM_DOCS;
   // Curated 3.0.1 texts with links into the 3.0.1 model pages — a 2.3
   // chapter link on a 3.x document would be confidently wrong.
   if (doc.spec.model === 'spdx-3') return SPDX3_DOCS;
+  if (doc.spec.model === 'cyclonedx') return CDX_DOCS_NONE;
   return SPDX23_DOCS;
 }

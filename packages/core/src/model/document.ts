@@ -5,7 +5,7 @@ import type { OcmDocumentExt, OcmElementExt, OcmReferenceExt } from './ocm';
 export type Serialization = 'json' | 'yaml' | 'tag-value';
 
 export interface SpecInfo {
-  model: 'spdx-2' | 'spdx-3' | 'ocm';
+  model: 'spdx-2' | 'spdx-3' | 'cyclonedx' | 'ocm';
   /** Raw version string, e.g. "SPDX-2.3". */
   version: string;
   serialization: Serialization;

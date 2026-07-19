@@ -31,12 +31,22 @@
     {
       "label": "ACME web delivery — acceptance check",
       "description": "A file-level SBOM plus the delivered files: one matches, one is tampered, one is missing, one is an extra the SBOM never listed.",
-      "urls": ["examples/acme-web-delivery-1.0.spdx"],
+      "urls": [
+        "examples/acme-web-delivery-1.0.spdx"
+      ],
       "delivery": [
         "examples/delivery/src/app.js",
         "examples/delivery/src/config.yaml",
         "examples/delivery/LICENSE",
         "examples/delivery/README.md"
+      ]
+    },
+    {
+      "label": "ACME web (CycloneDX 1.6)",
+      "description": "A CycloneDX pair: the web BOM links its auth subsystem's BOM by BOM-Link (urn:cdx), and the cascade resolves. One component is identified only by CPE - load the CSAF demo advisory to see it matched.",
+      "urls": [
+        "examples/cdx/acme-web.cdx.json",
+        "examples/cdx/acme-auth.cdx.json"
       ]
     }
   ],
