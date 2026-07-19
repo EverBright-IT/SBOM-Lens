@@ -4,6 +4,25 @@ All notable changes to SBOM Lens. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [SemVer](https://semver.org) (0.x: the API surface is the app itself).
 
+## [0.22.0] - 2026-07-19
+
+### Added
+- **CPE matching for the VEX overlay, both products.** Statements that
+  identify a product by CPE — the common case in BSI-CERT advisories — now
+  match the inventory through the SECURITY `cpe22Type`/`cpe23Type` external
+  references, alongside purl. CPE 2.3 formatted strings and 2.2 URIs
+  normalise onto one key (case-folded, unescaped); the purl version rule
+  carries over (exact version or versionless wildcard), and a wildcarded
+  vendor/product never matches. CSAF CPE-only products and OpenVEX
+  `identifiers.cpe23`/`.cpe22` become matchable; coverage counts CPE-only
+  packages as matchable. See [docs/vex.md](docs/vex.md).
+
+### Changed
+- **Norm scoring points at sbomqs.** The BSI preset deliberately stays a
+  viewer-side approximation; the compliance docs now recommend sbomqs for
+  standards scores in CI and position profiles as the custom-rules,
+  cascade-aware complement.
+
 ## [0.21.1] - 2026-07-18
 
 ### Fixed

@@ -50,21 +50,27 @@ id. SBOM Lens resolves that indirection before matching:
   `remediations[].details` the action statement, `threats` of category
   `impact` the impact statement, and the first description/summary note the
   description. `document.tracking` supplies the id, timestamp, and version.
-- Products identified **only by CPE** (no purl) are reported as an
-  informational diagnostic rather than matched — purl is the join key today
-  (see Limits).
+- Products identified **only by CPE** (no purl) match through the CPE key —
+  the common case in BSI-CERT advisories. purl stays preferred when both are
+  present.
 
 ## Matching rules (deliberately conservative)
 
-- Matching happens on **package URLs** (purl): the statement's `products`
-  (their `@id` or `identifiers.purl`) and `subcomponents` against each
-  element's purl. Elements without a purl never match.
+- Matching happens on **package URLs** (purl) and **CPEs**: the statement's
+  `products` (their `@id` or `identifiers.purl`/`.cpe23`/`.cpe22`) and
+  `subcomponents` against each element's purl and its SECURITY `cpe22Type`/
+  `cpe23Type` external references. Elements with neither never match.
 - Normalisation: the purl **type and namespace are case-folded**, the name
   and version compare **exactly** (after percent-decoding); **qualifiers
   and subpath are ignored** on both sides.
 - A **versioned** VEX purl matches only that exact version. A
   **versionless** VEX purl covers every version of the package. There is
   no version-range interpretation.
+- **CPEs** (2.3 formatted strings and 2.2 URIs) normalise onto
+  `part:vendor:product`, case-folded and unescaped — both forms match each
+  other. The same version rule applies (`*`, `-`, or absent = every
+  version); update/edition/target attributes are ignored, and a wildcarded
+  vendor or product never matches (that would be a guess, not a statement).
 - A `subcomponents` match marks the inner package and is labeled *via
   subcomponent*.
 
@@ -89,10 +95,11 @@ no statement), or unmatchable (no usable purl).
 
 ## Limits (deliberate)
 
-- **Matching is by purl only.** CSAF products identified solely by CPE or
-  file hash are parsed and shown as diagnostics but not matched against the
-  inventory; CPE matching is a planned follow-up. OpenVEX and CSAF products
-  that carry a purl match identically.
+- **Matching is by purl and CPE.** CSAF products identified only by a file
+  hash are parsed but not matched. CPE matching is name-exact: no NIST-style
+  wildcard evaluation, no version ranges, no update/edition comparison — a
+  CPE the normalisation cannot pin to a concrete vendor+product stays
+  unmatched rather than guessed.
 - CSAF `relationships` are resolved one level deep (to the component); a
   relationship whose reference is itself another relationship is not
   chased further.

@@ -106,6 +106,8 @@ export {
   worstVexStatus,
 } from './analysis/vex';
 export { MAX_CSAF_BYTES, parseCsaf, sniffCsaf } from './analysis/csaf';
+export type { CpeMatchKey } from './analysis/cpe';
+export { cpeMatchKey } from './analysis/cpe';
 export type {
   AcceptanceReport,
   AcceptanceVerdict,

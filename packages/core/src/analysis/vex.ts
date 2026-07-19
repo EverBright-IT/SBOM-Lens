@@ -1,7 +1,9 @@
 import type { Diagnostic } from '../model/diagnostics';
 import { diag } from '../model/diagnostics';
+import type { SbomElement } from '../model/document';
 import type { ElementId } from '../model/ids';
 import type { WorkspaceState } from '../workspace/workspace';
+import { cpeMatchKey } from './cpe';
 
 /**
  * OpenVEX overlay: what the supplier COMMUNICATES about known
@@ -24,9 +26,9 @@ const VEX_STATUSES: ReadonlySet<string> = new Set([
 ]);
 
 export interface VexProductRef {
-  /** purl of the product itself ("pkg:..." @id or identifiers.purl). */
+  /** purl or CPE of the product itself ("pkg:..."/"cpe:..." @id or identifiers). */
   id: string;
-  /** purls of affected subcomponents inside that product. */
+  /** purls/CPEs of affected subcomponents inside that product. */
   subcomponents: string[];
 }
 
@@ -197,7 +199,10 @@ function vulnName(node: unknown): string | undefined {
   return undefined;
 }
 
-/** Products: strings (early spec) or { "@id", identifiers: { purl }, subcomponents }. */
+/**
+ * Products: strings (early spec) or { "@id", identifiers, subcomponents }.
+ * identifiers may carry purl, cpe23, or cpe22 — purl preferred, CPE accepted.
+ */
 function parseProducts(node: unknown): VexProductRef[] {
   if (!Array.isArray(node)) return [];
   const products: VexProductRef[] = [];
@@ -207,25 +212,25 @@ function parseProducts(node: unknown): VexProductRef[] {
       continue;
     }
     if (!isRecord(entry)) continue;
-    const id =
-      firstPurlish(entry['@id']) ??
-      (isRecord(entry.identifiers) ? firstPurlish(entry.identifiers.purl) : undefined);
+    const id = firstPurlish(entry['@id']) ?? identifierOf(entry.identifiers);
     if (!id) continue;
     const subcomponents: string[] = [];
     if (Array.isArray(entry.subcomponents)) {
       for (const sub of entry.subcomponents) {
         const subId =
           firstPurlish(sub) ??
-          (isRecord(sub)
-            ? (firstPurlish(sub['@id']) ??
-              (isRecord(sub.identifiers) ? firstPurlish(sub.identifiers.purl) : undefined))
-            : undefined);
+          (isRecord(sub) ? (firstPurlish(sub['@id']) ?? identifierOf(sub.identifiers)) : undefined);
         if (subId) subcomponents.push(subId);
       }
     }
     products.push({ id, subcomponents });
   }
   return products;
+}
+
+function identifierOf(identifiers: unknown): string | undefined {
+  if (!isRecord(identifiers)) return undefined;
+  return firstPurlish(identifiers.purl) ?? firstPurlish(identifiers.cpe23) ?? firstPurlish(identifiers.cpe22);
 }
 
 function firstPurlish(value: unknown): string | undefined {
@@ -342,18 +347,22 @@ export function matchVex(
   const findings = new Map<ElementId, VexFinding[]>();
   for (const loaded of ws.documents.values()) {
     for (const element of loaded.document.elements) {
-      if (!element.purl) continue;
-      const key = purlMatchKey(element.purl);
-      if (!key) continue;
-      const candidates = index.get(key.pkg);
-      if (!candidates) continue;
+      const keys = elementMatchKeys(element);
+      if (keys.length === 0) continue;
 
-      // A versioned VEX purl must match the element's version exactly;
-      // a versionless one covers every version of the package.
-      const applicable = candidates.filter(
-        (c) => c.version === undefined || (key.version !== undefined && c.version === key.version),
-      );
-      if (applicable.length === 0) continue;
+      // A versioned VEX identifier must match the element's version exactly;
+      // a versionless one covers every version. An element reachable through
+      // both its purl and a CPE must not double-count one statement — the
+      // Set collapses candidates that arrive via more than one key.
+      const applicable = new Set<IndexedStatement>();
+      for (const key of keys) {
+        for (const c of index.get(key.id) ?? []) {
+          if (c.version === undefined || (key.version !== undefined && c.version === key.version)) {
+            applicable.add(c);
+          }
+        }
+      }
+      if (applicable.size === 0) continue;
 
       const byVuln = new Map<string, { winner: IndexedStatement; superseded: number }>();
       for (const candidate of applicable) {
@@ -393,14 +402,50 @@ export function matchVex(
 
 function addCandidate(
   index: Map<string, IndexedStatement[]>,
-  purl: string,
+  ref: string,
   candidate: Omit<IndexedStatement, 'version'>,
 ): void {
-  const key = purlMatchKey(purl);
+  const key = refMatchKey(ref);
   if (!key) return;
-  const list = index.get(key.pkg) ?? [];
+  const list = index.get(key.id) ?? [];
   list.push(key.version !== undefined ? { ...candidate, version: key.version } : candidate);
-  index.set(key.pkg, list);
+  index.set(key.id, list);
+}
+
+interface MatchKey {
+  /** Index key: a purl package key, or a CPE key behind the `cpe|` prefix. */
+  id: string;
+  version?: string;
+}
+
+/**
+ * One namespace for both identifier schemes. purl keys are
+ * `type/namespace/name` (always contain a slash), CPE keys get a `cpe|`
+ * prefix — the two can never collide.
+ */
+function refMatchKey(ref: string): MatchKey | undefined {
+  const purl = purlMatchKey(ref);
+  if (purl) return purl.version !== undefined ? { id: purl.pkg, version: purl.version } : { id: purl.pkg };
+  const cpe = cpeMatchKey(ref);
+  if (cpe) return cpe.version !== undefined ? { id: `cpe|${cpe.key}`, version: cpe.version } : { id: `cpe|${cpe.key}` };
+  return undefined;
+}
+
+/** Every key an inventory element can be matched by: its purl and its CPEs. */
+function elementMatchKeys(element: SbomElement): MatchKey[] {
+  const keys: MatchKey[] = [];
+  if (element.purl) {
+    const purl = purlMatchKey(element.purl);
+    if (purl) keys.push(purl.version !== undefined ? { id: purl.pkg, version: purl.version } : { id: purl.pkg });
+  }
+  for (const ref of element.externalRefs ?? []) {
+    if (!ref.locator.toLowerCase().startsWith('cpe:')) continue;
+    const cpe = cpeMatchKey(ref.locator);
+    if (cpe) {
+      keys.push(cpe.version !== undefined ? { id: `cpe|${cpe.key}`, version: cpe.version } : { id: `cpe|${cpe.key}` });
+    }
+  }
+  return keys;
 }
 
 /** OpenVEX time rule; unparseable/missing timestamps lose to real ones. */
@@ -426,9 +471,9 @@ export function worstVexStatus(findings: readonly VexFinding[] | undefined): Vex
 export interface VexCoverage {
   /** Packages with at least one finding. */
   covered: number;
-  /** Packages whose purl yields a match key but no statement matched. */
+  /** Packages whose purl/CPE yields a match key but no statement matched. */
   uncovered: number;
-  /** Packages without a usable purl — no statement can ever match them. */
+  /** Packages without a usable purl or CPE — no statement can ever match them. */
   unmatchable: number;
   /** All package elements considered (files never count). */
   total: number;
@@ -450,7 +495,7 @@ export function vexCoverage(
       if (element.kind !== 'package') continue;
       coverage.total++;
       if ((findings.get(element.id)?.length ?? 0) > 0) coverage.covered++;
-      else if (element.purl !== undefined && purlMatchKey(element.purl) !== undefined) coverage.uncovered++;
+      else if (elementMatchKeys(element).length > 0) coverage.uncovered++;
       else coverage.unmatchable++;
     }
   }

@@ -170,11 +170,34 @@ describe('parseCsaf', () => {
     expect(fixed.products).toEqual([{ id: OPENSSL, subcomponents: [] }]);
   });
 
-  it('reports a CPE-only product as informational, never a false match', () => {
+  it('emits a CPE-only product as a matchable statement', () => {
     const doc = parseCsaf('acme.csaf.json', csafDoc());
-    // The under_investigation product is CPE-only → no statement, one info.
-    expect(doc.statements.some((s) => s.status === 'under_investigation')).toBe(false);
-    expect(doc.diagnostics.some((d) => d.code === 'CSAF_PRODUCT_CPE_ONLY')).toBe(true);
+    const underInvestigation = doc.statements.find((s) => s.status === 'under_investigation')!;
+    expect(underInvestigation.products).toEqual([
+      { id: 'cpe:2.3:a:acme:thing:1.0:*:*:*:*:*:*:*', subcomponents: [] },
+    ]);
+    expect(doc.diagnostics.some((d) => d.code === 'CSAF_PRODUCT_CPE_ONLY')).toBe(false);
+  });
+
+  it('matches a CPE-only product against an element carrying that CPE', () => {
+    const lines = [
+      'SPDXVersion: SPDX-2.3',
+      'SPDXID: SPDXRef-DOCUMENT',
+      'DocumentName: cpe-inv',
+      'DocumentNamespace: https://example.org/spdxdocs/cpe-inv',
+      'PackageName: thing',
+      'SPDXID: SPDXRef-P0',
+      'PackageVersion: 1.0',
+      'PackageDownloadLocation: NOASSERTION',
+      'ExternalRef: SECURITY cpe23Type cpe:2.3:a:acme:thing:1.0:*:*:*:*:*:*:*',
+    ];
+    const loaded = loadedFromText('cpe-inv.spdx', lines.join('\n') + '\n');
+    const ws = addDocument(emptyWorkspace, loaded).workspace;
+    const map = matchVex(ws, [parseCsaf('acme.csaf.json', csafDoc())]);
+    const findings = [...map.values()].flat();
+    expect(findings.map((f) => `${f.vulnerability}:${f.status}`)).toEqual([
+      'CVE-2026-3333:under_investigation',
+    ]);
   });
 
   it('skips a vulnerability with no CVE or tracking id', () => {

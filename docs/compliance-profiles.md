@@ -153,3 +153,18 @@ essentials for component descriptors), the dropdown offers:
 
 Builtin presets are code, not stored data: they cannot be removed, and the
 selection persists per product.
+
+## Norm scores in CI
+
+For scoring SBOMs against the published standards themselves, use
+[sbomqs](https://github.com/interlynk-io/sbomqs): it implements BSI
+TR-03183-2 (v1.1, v2.0, v2.1), the NTIA minimum elements, FSCT v3, and
+OpenChain Telco, reads both SPDX and CycloneDX, and is actively
+maintained. SBOM Lens deliberately does not compete on standards breadth;
+the BSI preset above stays a viewer-side approximation.
+
+Profiles cover what a standards scorer cannot: checks you define yourself
+(field patterns, thresholds, format baselines), evaluation of a resolved
+multi-document cascade as one workspace, and one rule set driving the
+viewer and the gate alike. The two combine well in a pipeline: sbomqs for
+the standard score, your own profile for the acceptance rules.
