@@ -59,7 +59,7 @@ describe('parseCdxJson', () => {
     expect(doc.name).toBe('acme-web');
     expect(doc.created).toBe('2026-05-01T00:00:00Z');
     expect(doc.creators).toEqual(['Tool: acme-gen-2.0', 'Person: ACME Security']);
-    expect(doc.describes).toEqual(['SPDXRef-root']);
+    expect(doc.describes).toEqual(['root']);
 
     const lib = doc.elements.find((e) => e.name === 'left-pad')!;
     expect(lib).toMatchObject({
@@ -85,9 +85,9 @@ describe('parseCdxJson', () => {
     expect(file.purpose).toBeUndefined();
 
     expect(doc.relationships).toContainEqual({
-      from: { kind: 'local', spdxId: 'SPDXRef-root' },
+      from: { kind: 'local', spdxId: 'root' },
       type: 'DEPENDS_ON',
-      to: { kind: 'local', spdxId: 'SPDXRef-lib-a' },
+      to: { kind: 'local', spdxId: 'lib-a' },
     });
   });
 
@@ -124,13 +124,13 @@ describe('parseCdxJson', () => {
     const docRef = doc.externalDocumentRefs[0]!.docRef;
     // The component carrying the link depends on the element over there...
     expect(doc.relationships).toContainEqual({
-      from: { kind: 'local', spdxId: 'SPDXRef-uses-child' },
+      from: { kind: 'local', spdxId: 'uses-child' },
       type: 'DEPENDS_ON',
       to: { kind: 'external', docRef, spdxId: 'comp-x' },
     });
     // ...and a dependsOn BOM-Link points at the document as a whole.
     expect(doc.relationships).toContainEqual({
-      from: { kind: 'local', spdxId: 'SPDXRef-root' },
+      from: { kind: 'local', spdxId: 'root' },
       type: 'DEPENDS_ON',
       to: { kind: 'external', docRef, spdxId: null },
     });
@@ -163,6 +163,72 @@ describe('parseCdxJson', () => {
     expect(resolutions[0]).toMatchObject({
       status: 'resolved',
       targetDocId: loadedChild.document.id,
+    });
+  });
+
+  it('fragment ids match the child document verbatim (nesting invariant)', () => {
+    // The parent addresses a NON-root element of the child; the fragment
+    // must equal the child element's spdxId so the tree nests the addressed
+    // element instead of silently falling back to the child's root.
+    const parent = bom({
+      components: [
+        {
+          type: 'library',
+          'bom-ref': 'edge',
+          name: 'edge',
+          externalReferences: [{ type: 'bom', url: 'urn:cdx:aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee/1#jwt-lib' }],
+        },
+      ],
+    });
+    const child = bom({
+      serialNumber: CHILD_SERIAL,
+      metadata: { component: { type: 'application', 'bom-ref': 'auth-root', name: 'auth' } },
+      components: [{ type: 'library', 'bom-ref': 'jwt-lib', name: 'jwt-lib', version: '9.2.1' }],
+    });
+    const loadedParent = loadedFromText('parent.cdx.json', parent);
+    const loadedChild = loadedFromText('child.cdx.json', child);
+
+    const externalRel = loadedParent.document.relationships.find((r) => r.to.kind === 'external')!;
+    const fragment = externalRel.to.kind === 'external' ? externalRel.to.spdxId : null;
+    expect(fragment).toBe('jwt-lib');
+    expect(loadedChild.indexes.elementBySpdxId.has(fragment!)).toBe(true);
+  });
+
+  it('matches BOM-Link URNs case-insensitively', () => {
+    const parent = bom({
+      metadata: { component: { type: 'application', 'bom-ref': 'r', name: 'p' } },
+      components: [
+        {
+          type: 'library',
+          'bom-ref': 's',
+          name: 's',
+          externalReferences: [{ type: 'bom', url: 'URN:CDX:AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE/1' }],
+        },
+      ],
+    });
+    const child = bom({
+      serialNumber: 'urn:uuid:AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE',
+      metadata: { component: { type: 'application', 'bom-ref': 'r', name: 'c' } },
+    });
+    const { workspace } = addDocuments(emptyWorkspace, [
+      loadedFromText('p.cdx.json', parent),
+      loadedFromText('c.cdx.json', child),
+    ]);
+    expect([...workspace.resolutions.values()][0]).toMatchObject({ status: 'resolved' });
+  });
+
+  it('tolerates a digit-string BOM version and unknown cpe forms', () => {
+    const text = bom({
+      serialNumber: CHILD_SERIAL,
+      version: '2',
+      components: [{ type: 'library', 'bom-ref': 'x', name: 'x', cpe: 'cpe:weird' }],
+    });
+    const { document } = parseDocument(input('v.cdx.json', text));
+    expect(document!.namespace).toBe('urn:cdx:aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee/2');
+    expect(document!.elements[0]!.externalRefs).toContainEqual({
+      category: 'SECURITY',
+      type: 'cpe',
+      locator: 'cpe:weird',
     });
   });
 });

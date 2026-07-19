@@ -4,6 +4,28 @@ All notable changes to SBOM Lens. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [SemVer](https://semver.org) (0.x: the API surface is the app itself).
 
+## [0.23.1] - 2026-07-19
+
+### Fixed
+- **BOM-Link fragments now address elements.** bom-refs become element ids
+  verbatim (the SPDX 3.x IRI precedent) instead of a sanitized
+  `SPDXRef-` form, so a fragment like `#jwt-lib` finds the element it names
+  in the linked BOM. Before, the tree silently fell back to the linked
+  BOM's root when a fragment pointed at a non-root element - plausible but
+  wrong nesting. A test now pins the invariant.
+- **BOM-Link URNs match case-insensitively** (namespace and link are both
+  lowercased): mixed-case serial numbers no longer silently fail to
+  resolve.
+- A component `cpe` that is neither a 2.3 formatted string nor a 2.2 URI is
+  labelled `cpe` instead of being mislabelled `cpe22Type`; a digit-string
+  BOM `version` ("2") is honoured instead of defaulting to 1.
+
+### Changed
+- The parser's deliberate readings are now stated in code and docs: the
+  AND-join over CycloneDX license lists, CONTAINS as a tree rendering of
+  the component inventory, the uncapped breadth, and the tolerant reading
+  of YAML-serialized BOMs (README limits).
+
 ## [0.23.0] - 2026-07-19
 
 ### Added

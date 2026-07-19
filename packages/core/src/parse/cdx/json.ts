@@ -31,7 +31,11 @@ import type { ParseResult, SourceInput } from '../parser';
  * separate until it can rebase onto this shared core.
  */
 
-/** Assembly nesting is capped so a malformed or hostile BOM cannot overflow the stack. */
+/**
+ * Assembly nesting is capped so a malformed or hostile BOM cannot overflow
+ * the stack. Breadth deliberately is not capped - the SPDX parsers accept
+ * arbitrarily many elements too, and the worker keeps parsing off-thread.
+ */
 const MAX_NESTING = 64;
 
 const PURPOSE_BY_TYPE: Record<string, string> = {
@@ -55,10 +59,18 @@ export function parseCdxJson(
   const diagnostics: Diagnostic[] = [];
   const specVersion = asString(root.specVersion) ?? 'unknown';
   const serial = asString(root.serialNumber);
-  const bomVersion = typeof root.version === 'number' && Number.isInteger(root.version) ? root.version : 1;
+  const bomVersion =
+    typeof root.version === 'number' && Number.isInteger(root.version)
+      ? root.version
+      : typeof root.version === 'string' && /^\d+$/.test(root.version)
+        ? Number(root.version)
+        : 1;
   // The BOM-Link identity doubles as the namespace so link targets resolve
   // through the same matcher SPDX namespaces use.
-  const namespace = serial ? `urn:cdx:${serial.replace(/^urn:uuid:/, '')}/${bomVersion}` : null;
+  // Lowercased on both sides (here and in bomLinkRef): URN scheme/NID are
+  // case-insensitive and UUIDs are canonically lowercase, but real BOMs mix
+  // cases - a byte-exact comparison would silently never resolve.
+  const namespace = serial ? `urn:cdx:${serial.replace(/^urn:uuid:/i, '').toLowerCase()}/${bomVersion}` : null;
   const documentId = makeDocumentId(namespace, input.sha1);
   const spec: SpecInfo = { model: 'cyclonedx', version: `CycloneDX-${specVersion}`, serialization };
 
@@ -74,7 +86,7 @@ export function parseCdxJson(
   const docRefByUrn = new Map<string, string>();
   const bomLinkRef = (url: string): { docRef: string; fragment: string | null } => {
     const hash = url.indexOf('#');
-    const urn = hash === -1 ? url : url.slice(0, hash);
+    const urn = (hash === -1 ? url : url.slice(0, hash)).toLowerCase();
     const fragment = hash === -1 ? null : decodeURIComponent(url.slice(hash + 1));
     let docRef = docRefByUrn.get(urn);
     if (!docRef) {
@@ -89,7 +101,7 @@ export function parseCdxJson(
   const collectBomLinks = (refs: unknown, ownerSpdxId: string | undefined): void => {
     for (const r of asRecordArray(refs)) {
       const url = asString(r.url);
-      if (asString(r.type) !== 'bom' || !url?.startsWith('urn:cdx:')) continue;
+      if (asString(r.type) !== 'bom' || !url?.toLowerCase().startsWith('urn:cdx:')) continue;
       const { docRef, fragment } = bomLinkRef(url);
       if (ownerSpdxId) {
         relationships.push({
@@ -115,7 +127,13 @@ export function parseCdxJson(
       return;
     }
     const bomRef = asString(node['bom-ref']);
-    const spdxId = uniqueId(`SPDXRef-${bomRef ?? name}`, usedIds);
+    // bom-refs become spdxIds VERBATIM (the SPDX-3 IRI precedent: spdxId is
+    // an internal string, arbitrary values are fine). BOM-Link fragments
+    // address elements by bom-ref, so any transformation here would break
+    // cross-document element resolution. Invented SPDXRef-<name> ids exist
+    // only for components without a bom-ref; duplicate bom-refs are
+    // spec-invalid and get a suffix.
+    const spdxId = bomRef ? uniqueRaw(bomRef, usedIds) : uniqueId(`SPDXRef-${name}`, usedIds);
     if (bomRef) idByBomRef.set(bomRef, spdxId);
     const type = asString(node.type)?.toLowerCase() ?? '';
     const isFile = type === 'file';
@@ -165,6 +183,10 @@ export function parseCdxJson(
     }
   }
   const rootSpdxId = describes[0];
+  // The components list is the subject's inventory; rendering it as CONTAINS
+  // under the described root mirrors how syft-style SPDX nests packages. An
+  // interpretation for the tree, not a spec claim - dependencies[] carries
+  // the actual graph.
   for (const component of asRecordArray(root.components)) addComponent(component, rootSpdxId);
   collectBomLinks(root.externalReferences, rootSpdxId);
 
@@ -180,7 +202,7 @@ export function parseCdxJson(
     }
     for (const target of Array.isArray(dep.dependsOn) ? dep.dependsOn : []) {
       if (typeof target !== 'string') continue;
-      if (target.startsWith('urn:cdx:')) {
+      if (target.toLowerCase().startsWith('urn:cdx:')) {
         const { docRef, fragment } = bomLinkRef(target);
         relationships.push({
           from: { kind: 'local', spdxId: from },
@@ -260,9 +282,12 @@ function readExternalRefs(node: Record<string, unknown>): ExternalRef[] | undefi
   const out: ExternalRef[] = [];
   const cpe = asString(node.cpe);
   if (cpe) {
+    const lower = cpe.toLowerCase();
     out.push({
       category: 'SECURITY',
-      type: cpe.toLowerCase().startsWith('cpe:2.3') ? 'cpe23Type' : 'cpe22Type',
+      // Only claim a concrete form when the string actually has it; matching
+      // reads the locator either way.
+      type: lower.startsWith('cpe:2.3:') ? 'cpe23Type' : lower.startsWith('cpe:/') ? 'cpe22Type' : 'cpe',
       locator: cpe,
     });
   }
@@ -281,6 +306,9 @@ function supplierName(value: unknown): string | undefined {
  * Licenses: expressions and id/name entries, joined. CycloneDX 1.6 marks an
  * entry's `acknowledgment` as declared or concluded; unmarked entries count
  * as declared (the overwhelmingly common case in generator output).
+ * CycloneDX leaves the aggregate semantics of a multi-entry license list
+ * undefined; joining with AND shows every named license rather than
+ * guessing a weaker OR - display, not legal interpretation.
  */
 function licenseParts(value: unknown, which: 'declared' | 'concluded'): string | undefined {
   const parts: string[] = [];
@@ -310,6 +338,18 @@ function readCreators(metadata: Record<string, unknown>): string[] {
     if (name) out.push(`Person: ${name}`);
   }
   return out;
+}
+
+/** Verbatim id, suffixed only on (spec-invalid) duplicates. */
+function uniqueRaw(candidate: string, used: Set<string>): string {
+  let id = candidate;
+  if (used.has(id)) {
+    let suffix = 2;
+    while (used.has(`${id}-${suffix}`)) suffix++;
+    id = `${id}-${suffix}`;
+  }
+  used.add(id);
+  return id;
 }
 
 function uniqueId(candidate: string, used: Set<string>): string {

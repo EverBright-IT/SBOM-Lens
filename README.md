@@ -174,7 +174,8 @@ Known boundaries, stated plainly so nothing surprises you:
 - **Format scope.** SPDX 2.x in full; SPDX 3.0.x as JSON-LD with the
   core/software profiles mapped (other profiles are counted, not rendered);
   CycloneDX 1.x as JSON (services, compositions, embedded VEX data, and XML
-  are out of scope). Trivy-native JSON is recognized with a conversion
+  are out of scope; a YAML-serialized BOM is read tolerantly but is not a
+  CycloneDX serialization). Trivy-native JSON is recognized with a conversion
   hint, not parsed. Detection is content-based.
 - **HTTPS or localhost required.** Cascade resolution hashes file bytes with
   `crypto.subtle`, which browsers expose only in secure contexts. Over plain
