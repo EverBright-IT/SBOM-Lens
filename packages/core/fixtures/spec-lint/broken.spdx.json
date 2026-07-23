@@ -1,0 +1,56 @@
+{
+  "spdxVersion": "SPDX-2.x",
+  "dataLicense": "MIT",
+  "SPDXID": "SPDXRef-DOCUMENT",
+  "name": "acme-broken",
+  "documentNamespace": "acme-platform/spdx#doc",
+  "creationInfo": {
+    "created": "2026-06-01T10:00:00+02:00",
+    "creators": ["acme-sbom-generator"]
+  },
+  "packages": [
+    {
+      "SPDXID": "Package-webserver",
+      "name": "webserver",
+      "versionInfo": "1.4.2",
+      "downloadLocation": "https://acme.example/webserver-1.4.2.tar.gz",
+      "licenseDeclared": "Apache 2.0",
+      "primaryPackagePurpose": "MICROSERVICE",
+      "checksums": [{ "algorithm": "SHA256", "checksumValue": "b1946ac9" }],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "generic/webserver@1.4.2"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Package-libssl",
+      "name": "libssl",
+      "versionInfo": "3.0.11",
+      "licenseConcluded": "(MIT OR Apache-2.0",
+      "packageVerificationCode": { "packageVerificationCodeValue": "not-a-hash" }
+    }
+  ],
+  "files": [
+    {
+      "SPDXID": "SPDXRef-File-config",
+      "fileName": "./etc/acme.conf",
+      "licenseConcluded": "MIT AND",
+      "checksums": [{ "algorithm": "CRC32", "checksumValue": "deadbeef" }]
+    }
+  ],
+  "relationships": [
+    {
+      "spdxElementId": "SPDXRef-DOCUMENT",
+      "relationshipType": "DESCRIBES",
+      "relatedSpdxElement": "SPDXRef-Package-libssl"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-libssl",
+      "relationshipType": "SHIPS_WITH",
+      "relatedSpdxElement": "SPDXRef-File-config"
+    }
+  ]
+}

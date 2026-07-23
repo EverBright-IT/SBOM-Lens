@@ -12,6 +12,7 @@ import { diag } from '../../model/diagnostics';
 import { makeDocumentId, makeElementId } from '../../model/ids';
 import { asRecordArray, asString, isRecord } from '../../util/narrow';
 import type { ParseResult, SourceInput } from '../parser';
+import { validateCdxStructure } from './validate';
 
 /**
  * CycloneDX 1.x JSON → document model. Additive next to the SPDX parsers,
@@ -241,6 +242,10 @@ export function parseCdxJson(
       ),
     );
   }
+
+  // Spec lint last: parser notes explain what could not be read, spec findings
+  // what the BOM itself gets wrong. It loads either way.
+  diagnostics.push(...validateCdxStructure(root));
 
   const document: SbomDocument = {
     id: documentId,

@@ -1,5 +1,6 @@
 import clsx from 'clsx';
 import type { Diagnostic } from '@sbomlens/core';
+import { isSpecFinding } from '@sbomlens/core';
 import { useAppStore } from '../app/store';
 import { CloseIcon } from './icons';
 
@@ -7,14 +8,32 @@ export function DiagnosticsDrawer() {
   const open = useAppStore((s) => s.diagnosticsOpen);
   const ws = useAppStore((s) => s.ws);
   const failures = useAppStore((s) => s.failures);
+  const specOnly = useAppStore((s) => s.diagnosticsSpecOnly);
   const actions = useAppStore((s) => s.actions);
+
+  // Spec findings ('your document violates the spec') and parser notes ('we
+  // had trouble reading it') answer different questions; the filter keeps a
+  // long list from burying whichever one the reader came for.
+  const visible = (diagnostics: Diagnostic[]) =>
+    specOnly ? diagnostics.filter((d) => isSpecFinding(d.code)) : diagnostics;
 
   if (!open) return null;
 
   return (
     <div className="absolute inset-x-0 bottom-7 z-20 max-h-72 overflow-auto border-t border-slate-200 bg-white shadow-[0_-8px_24px_-12px_rgb(0_0_0/0.15)] dark:border-slate-700 dark:bg-slate-900">
       <div className="sticky top-0 flex items-center justify-between border-b border-slate-100 bg-white px-4 py-2 dark:border-slate-800 dark:bg-slate-900">
-        <h2 className="text-xs font-medium tracking-wide text-slate-500 uppercase">Diagnostics</h2>
+        <div className="flex items-center gap-3">
+          <h2 className="text-xs font-medium tracking-wide text-slate-500 uppercase">Diagnostics</h2>
+          <label className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
+            <input
+              type="checkbox"
+              checked={specOnly}
+              onChange={(e) => actions.setDiagnosticsSpecOnly(e.target.checked)}
+              className="h-3 w-3 accent-amber-600"
+            />
+            Spec findings only
+          </label>
+        </div>
         <button
           type="button"
           onClick={() => actions.setDiagnosticsOpen(false)}
@@ -25,22 +44,24 @@ export function DiagnosticsDrawer() {
       </div>
 
       <div className="space-y-3 px-4 py-3">
-        {failures.map((failure, i) => (
+        {failures
+          .filter((failure) => visible(failure.diagnostics).length > 0)
+          .map((failure, i) => (
           <Group key={`failure-${i}`} title={`${failure.fileName} (not loaded)`}>
-            {failure.diagnostics.map((d, j) => (
+            {visible(failure.diagnostics).map((d, j) => (
               <Row key={j} diagnostic={d} />
             ))}
           </Group>
         ))}
 
         {[...ws.documents.values()]
-          .filter((loaded) => loaded.document.diagnostics.length > 0)
+          .filter((loaded) => visible(loaded.document.diagnostics).length > 0)
           .map((loaded) => (
             <Group
               key={loaded.document.id}
               title={`${loaded.document.name} (${loaded.source.fileName})`}
             >
-              {loaded.document.diagnostics.map((d, i) => (
+              {visible(loaded.document.diagnostics).map((d, i) => (
                 <Row
                   key={i}
                   diagnostic={d}
@@ -54,9 +75,11 @@ export function DiagnosticsDrawer() {
             </Group>
           ))}
 
-        {failures.length === 0 &&
-          [...ws.documents.values()].every((l) => l.document.diagnostics.length === 0) && (
-            <p className="py-4 text-center text-xs text-slate-400">No diagnostics.</p>
+        {failures.every((f) => visible(f.diagnostics).length === 0) &&
+          [...ws.documents.values()].every((l) => visible(l.document.diagnostics).length === 0) && (
+            <p className="py-4 text-center text-xs text-slate-400">
+              {specOnly ? 'No spec findings.' : 'No diagnostics.'}
+            </p>
           )}
       </div>
     </div>
@@ -85,6 +108,11 @@ function Row({ diagnostic, onJump }: { diagnostic: Diagnostic; onJump?: () => vo
       >
         {diagnostic.severity}
       </span>
+      {isSpecFinding(diagnostic.code) && (
+        <span className="shrink-0 rounded bg-amber-100 px-1 text-[10px] text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">
+          spec
+        </span>
+      )}
       <span className="shrink-0 font-mono text-[10px] text-slate-400">{diagnostic.code}</span>
       <span className="min-w-0 text-slate-600 dark:text-slate-300">{diagnostic.message}</span>
       {onJump && (

@@ -3,6 +3,7 @@ import type { DocumentId, LoadedDocument, ProfileCheckResult, WorkspaceState } f
 import {
   documentIssues,
   evaluateProfile,
+  isSpecFinding,
   profileReportToMarkdown,
   reachableDocs,
   refKey,
@@ -30,7 +31,11 @@ export function DocumentDetail({ ws, loaded }: { ws: WorkspaceState; loaded: Loa
   const actions = useAppStore((s) => s.actions);
   const doc = loaded.document;
   const D = docsFor(doc).document;
-  const diagnosticCount = doc.diagnostics.length;
+  // Two different questions, two different rows: spec findings say the
+  // document violates its own specification, parser notes say we had trouble
+  // reading it. Lumping them together left the reader guessing which it was.
+  const specFindings = doc.diagnostics.filter((d) => isSpecFinding(d.code)).length;
+  const parserNotes = doc.diagnostics.length - specFindings;
 
   return (
     <div className="space-y-3">
@@ -64,15 +69,27 @@ export function DocumentDetail({ ws, loaded }: { ws: WorkspaceState; loaded: Loa
           value={`${loaded.source.fileName} (${formatBytes(loaded.source.byteSize)})`}
         />
         <FieldRow label="SHA-1" value={loaded.source.sha1} mono copyable />
-        {diagnosticCount > 0 && (
+        {specFindings > 0 && (
+          <div className="grid grid-cols-[9rem_1fr] items-baseline gap-x-3 py-1">
+            <div className="text-xs text-slate-400 dark:text-slate-500">Spec findings</div>
+            <button
+              type="button"
+              className="w-fit text-[13px] text-amber-700 hover:underline dark:text-amber-400"
+              onClick={() => actions.openDiagnostics({ specOnly: true })}
+            >
+              {specFindings} spec finding{specFindings === 1 ? '' : 's'}
+            </button>
+          </div>
+        )}
+        {parserNotes > 0 && (
           <div className="grid grid-cols-[9rem_1fr] items-baseline gap-x-3 py-1">
             <div className="text-xs text-slate-400 dark:text-slate-500">Diagnostics</div>
             <button
               type="button"
               className="w-fit text-[13px] text-amber-700 hover:underline dark:text-amber-400"
-              onClick={() => actions.setDiagnosticsOpen(true)}
+              onClick={() => actions.openDiagnostics({ specOnly: false })}
             >
-              {diagnosticCount} parser note{diagnosticCount === 1 ? '' : 's'}
+              {parserNotes} parser note{parserNotes === 1 ? '' : 's'}
             </button>
           </div>
         )}

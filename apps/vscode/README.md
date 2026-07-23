@@ -3,8 +3,8 @@
 [![Open VSX Version](https://img.shields.io/open-vsx/v/everbright-it/sbomlens?label=Open%20VSX)](https://open-vsx.org/extension/everbright-it/sbomlens)
 [![VS Marketplace](https://img.shields.io/visual-studio-marketplace/v/everbright-it.sbomlens?label=VS%20Marketplace)](https://marketplace.visualstudio.com/items?itemName=everbright-it.sbomlens)
 
-View SPDX SBOMs, including cascading document hierarchies, right in your
-editor. The full [SBOM Lens](https://sbom-lens.everbright-it.de/) viewer as a
+View SPDX and CycloneDX SBOMs, including cascading document hierarchies,
+right in your editor. The full [SBOM Lens](https://sbom-lens.everbright-it.de/) viewer as a
 custom editor: Explore tree, document map, inventory, version conflicts,
 release diff, and quality reports.
 

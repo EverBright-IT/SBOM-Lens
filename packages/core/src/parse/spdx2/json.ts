@@ -19,6 +19,7 @@ import {
   parseElementRef,
   versionFromPurl,
 } from './common';
+import { validateSpdx2Structure } from './validate';
 
 /**
  * SPDX 2.x JSON/YAML → document model (YAML parses to the same object shape).
@@ -140,6 +141,10 @@ export function parseSpdx2Json(
     relationships,
   );
   checkRelationshipDocRefs(allRelationships, externalDocumentRefs, diagnostics);
+
+  // Spec lint last: parser notes explain what could not be read, spec findings
+  // what the document itself gets wrong. The document loads either way.
+  diagnostics.push(...validateSpdx2Structure(root));
 
   const document = {
     id: documentId,

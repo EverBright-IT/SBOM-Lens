@@ -4,6 +4,35 @@ All notable changes to SBOM Lens. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [SemVer](https://semver.org) (0.x: the API surface is the app itself).
 
+## [0.24.0] - 2026-07-23
+
+### Added
+- **Spec findings: documents are checked against their own specification.**
+  Beyond "can I read this?", the viewer now reports what a consumer
+  downstream would trip over: a relationship type outside the SPDX
+  vocabulary, a digest whose length cannot match its algorithm, a license
+  expression that does not parse, an identifier off its grammar, an SPDX 3
+  element without creationInfo, a relationship end pointing at an id that
+  is neither in the graph nor imported, a duplicate CycloneDX bom-ref.
+  28 rules across SPDX 2.x (13), SPDX 3.0.x (7) and CycloneDX 1.x (8),
+  next to the 9 OCM descriptor rules that already existed. Every finding
+  is a warning: nothing here can stop a document from loading.
+- **Spec findings and parser notes are told apart in the UI.** The document
+  detail shows them as separate rows, each linking into the diagnostics
+  drawer pre-filtered to what it counted. The drawer gains a "Spec
+  findings only" toggle and tags spec rows. `isSpecFinding()` is exported
+  from the core package.
+- **License expressions are checked for grammar** (operators, parentheses,
+  `LicenseRef-` shape), deliberately without matching identifiers against
+  the SPDX license list: no list is vendored and rating licenses stays a
+  non-goal. [docs/spec-findings.md](docs/spec-findings.md) states the
+  boundary and points at [spdx/tools-java](https://github.com/spdx/tools-java)
+  for authoritative conformance verification.
+- **The VS Code extension opens CycloneDX files.** `*.cdx.json` and
+  `*.bom.json` join the custom-editor selectors; the core has read
+  CycloneDX since 0.23.0, but the manifest never offered it. Description
+  and marketplace keywords say so now too.
+
 ## [0.23.1] - 2026-07-19
 
 ### Fixed

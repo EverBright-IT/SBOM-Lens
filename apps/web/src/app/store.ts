@@ -78,6 +78,8 @@ interface AppState {
   diffB: DocumentId | null;
 
   diagnosticsOpen: boolean;
+  /** Drawer filter: show only spec findings, hiding the parser notes. */
+  diagnosticsSpecOnly: boolean;
   helpOpen: boolean;
   urlDialogOpen: boolean;
   urlDialogPrefill: string;
@@ -136,6 +138,9 @@ interface AppState {
     setRefFetch(progress: { done: number; total: number } | null): void;
 
     setDiagnosticsOpen(open: boolean): void;
+    /** Open the drawer pre-filtered, so a count links to what it counted. */
+    openDiagnostics(options: { specOnly: boolean }): void;
+    setDiagnosticsSpecOnly(specOnly: boolean): void;
     setHelpOpen(open: boolean): void;
     openUrlDialog(prefill?: string): void;
     closeUrlDialog(): void;
@@ -189,6 +194,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
   diffB: null,
 
   diagnosticsOpen: false,
+  diagnosticsSpecOnly: false,
   helpOpen: false,
   urlDialogOpen: false,
   urlDialogPrefill: '',
@@ -393,6 +399,12 @@ export const useAppStore = create<AppState>()((set, get) => ({
       set({ refFetch: progress });
     },
 
+    openDiagnostics({ specOnly }) {
+      set({ diagnosticsOpen: true, diagnosticsSpecOnly: specOnly });
+    },
+    setDiagnosticsSpecOnly(specOnly) {
+      set({ diagnosticsSpecOnly: specOnly });
+    },
     setDiagnosticsOpen(open) {
       set({ diagnosticsOpen: open });
     },

@@ -1,0 +1,58 @@
+{
+  "@context": "https://spdx.org/rdf/3.0.1/spdx-context.jsonld",
+  "@graph": [
+    {
+      "type": "CreationInfo",
+      "@id": "_:creationinfo",
+      "specVersion": "2.3",
+      "created": "2026-06-01T10:00:00Z",
+      "createdBy": ["https://acme.example/agent/acme"]
+    },
+    {
+      "type": "Organization",
+      "spdxId": "https://acme.example/agent/acme",
+      "creationInfo": "_:creationinfo",
+      "name": "ACME Corp"
+    },
+    {
+      "type": "SpdxDocument",
+      "spdxId": "https://acme.example/doc/broken-3.0.0",
+      "creationInfo": "_:creationinfo",
+      "name": "acme-broken",
+      "rootElement": ["https://acme.example/pkg/webserver"]
+    },
+    {
+      "type": "software_Package",
+      "spdxId": "https://acme.example/pkg/webserver",
+      "creationInfo": "_:creationinfo",
+      "name": "webserver",
+      "packageVersion": "1.4.2",
+      "verifiedUsing": [{ "type": "Hash", "algorithm": "sha256", "hashValue": "b1946ac9" }]
+    },
+    {
+      "type": "software_Package",
+      "spdxId": "pkg-libssl",
+      "name": "libssl",
+      "packageVersion": "3.0.11"
+    },
+    {
+      "spdxId": "https://acme.example/pkg/untyped",
+      "creationInfo": "_:creationinfo",
+      "name": "untyped element"
+    },
+    {
+      "type": "Relationship",
+      "spdxId": "https://acme.example/rel/contains",
+      "creationInfo": "_:creationinfo",
+      "from": "https://acme.example/pkg/webserver",
+      "relationshipType": "contains",
+      "to": ["https://acme.example/pkg/ghost"]
+    },
+    {
+      "type": "Relationship",
+      "spdxId": "https://acme.example/rel/incomplete",
+      "creationInfo": "_:creationinfo",
+      "to": ["https://acme.example/pkg/webserver"]
+    }
+  ]
+}

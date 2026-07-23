@@ -12,6 +12,7 @@ import { makeDocumentId, makeElementId } from '../../model/ids';
 import { asRecordArray, asString, asStringArray, isRecord } from '../../util/narrow';
 import type { ParseResult, SourceInput } from '../parser';
 import { dedupeBySpdxId } from '../spdx2/common';
+import { validateSpdx3Structure } from './validate';
 
 /**
  * SPDX 3.0.x JSON-LD → document model. Additive next to the 2.x parsers:
@@ -261,6 +262,10 @@ export function parseSpdx3Json(input: SourceInput, root: Record<string, unknown>
     // rootElement may point at the Sbom collection itself; only elements count.
     if (elements.some((e) => e.spdxId === rootRef)) describes.add(rootRef);
   }
+
+  // Spec lint last: parser notes explain what could not be read, spec findings
+  // what the document itself gets wrong. The document loads either way.
+  diagnostics.push(...validateSpdx3Structure(graph, byId));
 
   const specVersion = asString(creationNode?.specVersion) ?? versionFromContext(root) ?? '3.x';
   const document = {

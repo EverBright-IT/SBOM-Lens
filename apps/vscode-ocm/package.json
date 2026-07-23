@@ -3,7 +3,7 @@
   "displayName": "OCM Lens",
   "icon": "icon.png",
   "description": "View Open Component Model component versions and deliveries right in your editor: CTF and component archives, with embedded SBOMs.",
-  "version": "0.23.1",
+  "version": "0.24.0",
   "publisher": "everbright-it",
   "license": "Apache-2.0",
   "private": true,

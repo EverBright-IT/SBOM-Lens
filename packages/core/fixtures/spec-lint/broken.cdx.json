@@ -1,0 +1,34 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.9",
+  "serialNumber": "3e671687-395b-41f5-a30f-a58921a69b79",
+  "version": 0,
+  "metadata": {
+    "component": { "type": "product", "name": "acme-platform", "version": "1.0.0" }
+  },
+  "components": [
+    {
+      "bom-ref": "component-1",
+      "type": "library",
+      "name": "libssl",
+      "version": "3.0.11",
+      "purl": "generic/libssl@3.0.11",
+      "hashes": [{ "alg": "SHA-256", "content": "b1946ac9" }]
+    },
+    {
+      "bom-ref": "component-1",
+      "type": "microservice",
+      "name": "webserver",
+      "version": "1.4.2",
+      "licenses": [{ "expression": "MIT AND" }],
+      "components": [
+        {
+          "bom-ref": "component-2",
+          "type": "library",
+          "name": "nested-lib",
+          "licenses": [{ "license": { "id": "MIT", "name": "MIT License" } }]
+        }
+      ]
+    }
+  ]
+}

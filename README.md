@@ -126,6 +126,16 @@ Inventory, and findings riding the exports. Matched by package URL, newest
 statement wins; it is a communication channel, not a scanner. See
 [docs/vex.md](docs/vex.md).
 
+Documents are also checked against their own specification. **Spec findings**
+report what a consumer downstream would trip over: a relationship type
+outside the vocabulary, a digest that cannot be a digest, a license expression
+that does not parse. They cover SPDX 2.x, SPDX 3.0.x, CycloneDX 1.x and OCM
+descriptors. They stay warnings and sit next to the document, separated from
+parser notes so the two are never confused. This is a reading aid, not a
+conformance verdict: for authoritative validation use
+[spdx/tools-java](https://github.com/spdx/tools-java). See
+[docs/spec-findings.md](docs/spec-findings.md).
+
 ## Keyboard
 
 | Key | Action |

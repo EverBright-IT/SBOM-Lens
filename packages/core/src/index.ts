@@ -8,6 +8,7 @@
 export type { DocumentId, ElementId } from './model/ids';
 export { makeDocumentId, makeElementId, splitElementId } from './model/ids';
 export type { Diagnostic, DiagnosticSeverity } from './model/diagnostics';
+export { isSpecFinding } from './parse/spec-lint';
 export type {
   Checksum,
   ElementRef,
