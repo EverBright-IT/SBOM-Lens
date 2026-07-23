@@ -4,6 +4,16 @@ All notable changes to SBOM Lens. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [SemVer](https://semver.org) (0.x: the API surface is the app itself).
 
+## [0.25.1] - 2026-07-23
+
+### Changed
+- **Both extension listings describe what they actually do.** The READMEs are
+  the marketplace product pages, and neither mentioned spec findings; SBOM
+  Lens also still told users to right-click `.spdx` files only, although the
+  manifest has offered `.cdx.json` and `.bom.json` since 0.24.0. Both now name
+  the feature, and SBOM Lens states the boundary next to its other non-goals:
+  license expressions are checked for grammar, not against the license list.
+
 ## [0.25.0] - 2026-07-23
 
 ### Added

@@ -53,6 +53,11 @@ and SBOMs stored in a delivery are extracted and linked automatically.
 - **Your own rules.** Drop an `.ocmlens/profile.json` into the workspace and
   every panel picks it up as a quality profile: field presence, patterns,
   coverage thresholds. Reports export as Markdown.
+- **Spec findings.** Descriptors are checked against the OCM specification:
+  component names and versions off their pattern, an access node without a
+  type, an incomplete digest triple, duplicate artifact identities. They stay
+  warnings and sit next to the descriptor, told apart from parser notes so you
+  always know which you are looking at.
 - **Private by design.** Everything is parsed locally inside the editor.
   Nothing is uploaded anywhere.
 - Field info tooltips carry the OCM specification's own vocabulary and link

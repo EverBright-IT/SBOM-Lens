@@ -1,6 +1,6 @@
 {
   "name": "@sbomlens/monorepo",
-  "version": "0.25.0",
+  "version": "0.25.1",
   "description": "A fast, minimal viewer for SPDX SBOMs, including cascading document hierarchies.",
   "license": "Apache-2.0",
   "private": true,

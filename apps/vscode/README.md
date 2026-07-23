@@ -12,8 +12,9 @@ release diff, and quality reports.
 
 ## Opening documents
 
-- **Open with SBOM Lens**: right-click a `.spdx`, `.spdx.json`, or
-  `.spdx.yaml` file in the explorer (or use *Reopen editor with...*).
+- **Open with SBOM Lens**: right-click a `.spdx`, `.spdx.json`,
+  `.spdx.yaml`, `.cdx.json`, or `.bom.json` file in the explorer (or use
+  *Reopen editor with...*).
   Multi-select several files and they open together in one panel, with
   cross-document references resolved between them.
 - **Open folder with SBOM Lens**: right-click a folder, and every SPDX
@@ -40,6 +41,12 @@ release diff, and quality reports.
   statements with status and justification, a VEX column and status filter
   in the inventory, findings in the exports. Matched by package URL, newest
   statement wins. A communication channel, not a scanner.
+- **Spec findings.** Every document is checked against the specification it
+  claims to follow: relationship types outside the vocabulary, digests whose
+  length cannot match their algorithm, license expressions that do not parse,
+  identifiers off their grammar. They stay warnings and sit next to the
+  document, told apart from parser notes so you always know which you are
+  looking at. A reading aid, not a conformance verdict.
 - **Private by design.** Documents are parsed locally inside the editor.
   Nothing is uploaded anywhere.
 - Field info tooltips carry the SPDX 2.3 spec docs and link into the exact
@@ -60,7 +67,10 @@ release diff, and quality reports.
   single large SPDX document has no hard cap; parsing runs off the UI thread.
 - Compliance profiles are capped at 64 KB / 200 checks; up to 16 persist.
 - No license-compliance judgement and no vulnerability overlays: license and
-  quality fields are shown, not interpreted.
+  quality fields are shown, not interpreted. Spec findings check expression
+  GRAMMAR, never whether a license identifier is real; for authoritative
+  conformance verification use
+  [spdx/tools-java](https://github.com/spdx/tools-java).
 - Documents are parsed locally and never uploaded; only preferences and
   imported profiles persist.
 
