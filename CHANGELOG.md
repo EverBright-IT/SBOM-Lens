@@ -4,6 +4,16 @@ All notable changes to SBOM Lens. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [SemVer](https://semver.org) (0.x: the API surface is the app itself).
 
+## [0.24.1] - 2026-07-23
+
+### Security
+- **fast-uri raised to 3.1.4** (GHSA-v2hh-gcrm-f6hx, CVSS 7.5). A build-time
+  dependency only, pulled transitively through ajv by vite-plugin-pwa and
+  @vscode/vsce; nothing shipped in the app or the extensions was affected.
+  The blocking osv-scanner gate stopped the 0.24.0 pipeline before any
+  artifact was published, which is what the gate is for. An `overrides`
+  entry keeps 3.1.4 as the floor. Feature-identical to 0.24.0.
+
 ## [0.24.0] - 2026-07-23
 
 ### Added

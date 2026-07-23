@@ -1,6 +1,6 @@
 {
   "name": "@sbomlens/monorepo",
-  "version": "0.24.0",
+  "version": "0.24.1",
   "description": "A fast, minimal viewer for SPDX SBOMs, including cascading document hierarchies.",
   "license": "Apache-2.0",
   "private": true,
@@ -47,6 +47,9 @@
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.63.0",
     "vitest": "^4.1.10"
+  },
+  "overrides": {
+    "fast-uri": "^3.1.4"
   },
   "author": "EverBright IT GmbH (https://everbright-it.de)",
   "homepage": "https://sbom-lens.everbright-it.de/",
