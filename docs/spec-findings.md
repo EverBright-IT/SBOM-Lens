@@ -32,7 +32,7 @@ Findings carry a stable code with a `_SCHEMA_` infix, prefixed by the format:
 
 | Prefix | Format | Rules |
 |---|---|---|
-| `SPDX2_SCHEMA_*` | SPDX 2.x (JSON, YAML) | 13 |
+| `SPDX2_SCHEMA_*` | SPDX 2.x (JSON, YAML, tag-value) | 13 |
 | `SPDX3_SCHEMA_*` | SPDX 3.0.x (JSON-LD) | 7 |
 | `CDX_SCHEMA_*` | CycloneDX 1.x (JSON) | 8 |
 | `OCM_SCHEMA_*` | OCM component descriptors | 9 |
@@ -45,6 +45,11 @@ URI without a fragment, the UTC form of `created`, the
 verification codes, purl-typed external references, `primaryPackagePurpose`,
 the 45-value relationship vocabulary, and license expression grammar.
 
+Both serializations run the same rules. Tag-value documents are checked on the
+parser's intermediates, with two exceptions that the parser reports better
+itself: checksums (`TV_BAD_CHECKSUM`) and external document references
+(`EXTREF_*`) already come with a line number there.
+
 **SPDX 3.0.x**: nodes without a type, identifiers that are neither an absolute
 IRI nor a blank node, elements without `creationInfo`, `specVersion`, hash
 shape, relationships without `from`/`relationshipType`, and relationship ends
@@ -56,8 +61,9 @@ ExternalMap.
 duplicate `bom-ref`s, hash shape, purls without a `pkg:` scheme, and license
 entries that are malformed or carry both an `id` and a `name`.
 
-Findings of one kind are aggregated into a single entry with a count and the
-first three subjects, so a BOM with thousands of components stays readable.
+Findings of one kind are aggregated into a single entry per rule, with a count
+and the first three subjects, so a BOM with thousands of components stays
+readable and the cost of checking does not grow with the number of offenders.
 
 ## What is deliberately not checked
 
@@ -72,13 +78,27 @@ first three subjects, so a BOM with thousands of components stays readable.
   measure (see [compliance-profiles.md](compliance-profiles.md)). Spec findings
   cover spec legality; the only presence checks here are fields the
   specification itself declares mandatory.
-- **SPDX tag-value.** The tag-value parser reports malformed input with line
-  numbers already; the structural rules run on the JSON and YAML
-  serializations for now.
 - **Anything detection rejects.** Content detection needs an `SPDX-2*` version
   literal or an `spdx.org/rdf/3.x` context before a document is treated as
   SPDX at all. A file failing that never reaches the lint; it surfaces as an
   unsupported-format message instead.
+
+## Stability
+
+Two things are a contract, not an implementation detail:
+
+- **`isSpecFinding(code)`**, exported from `@sbomlens/core`. The viewer splits
+  its diagnostics rows on it, and the CLI makes the same split.
+- **The `_SCHEMA_` infix.** Every lint code carries it (`SPDX2_SCHEMA_*`,
+  `SPDX3_SCHEMA_*`, `CDX_SCHEMA_*`, `OCM_SCHEMA_*`), and no parser code may.
+  A test pins that partition over every code the fixtures emit, so an
+  accidental collision fails CI instead of silently mislabelling a note as a
+  spec violation.
+
+Individual codes are additive: new ones may appear in a minor release,
+existing ones do not change meaning. A rule that turns out to produce false
+positives is removed rather than quietly loosened, and the removal is noted in
+the changelog.
 
 ## When you need authoritative verification
 

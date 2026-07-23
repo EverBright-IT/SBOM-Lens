@@ -1,6 +1,6 @@
 import type { Diagnostic } from '../../model/diagnostics';
 import { asRecordArray, asString, isRecord } from '../../util/narrow';
-import { checksumProblem, createLint, licenseExpressionError } from '../spec-lint';
+import { checksumProblem, createLint, createTally, licenseExpressionError } from '../spec-lint';
 
 /**
  * Spec lint for CycloneDX BOMs, the counterpart to the SPDX and OCM ones. The
@@ -34,7 +34,7 @@ const URN_UUID = /^urn:uuid:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-f
 
 export function validateCdxStructure(root: Record<string, unknown>): Diagnostic[] {
   const lint = createLint();
-  const { warn, warnAll } = lint;
+  const { warn } = lint;
 
   // The parser accepts any specVersion so a future BOM still opens; the lint
   // is where that tolerance gets a voice.
@@ -56,18 +56,18 @@ export function validateCdxStructure(root: Record<string, unknown>): Diagnostic[
     warn('CDX_SCHEMA_BAD_VERSION', `version ${JSON.stringify(version)} is not a positive integer.`);
   }
 
-  const badType: string[] = [];
-  const badHash: string[] = [];
-  const badPurl: string[] = [];
-  const badLicense: string[] = [];
-  const duplicateRef = new Set<string>();
+  const badType = createTally();
+  const badHash = createTally();
+  const badPurl = createTally();
+  const badLicense = createTally();
+  const duplicateRef = createTally({ unique: true });
   const seenRefs = new Set<string>();
 
   const visit = (component: Record<string, unknown>) => {
     const name = asString(component.name) ?? '(unnamed component)';
 
     const type = asString(component.type);
-    if (type !== undefined && !COMPONENT_TYPES.has(type)) badType.push(`${name} (${type})`);
+    if (type !== undefined && !COMPONENT_TYPES.has(type)) badType.add(`${name} (${type})`);
 
     // bom-refs address components from dependencies and BOM-Links; a duplicate
     // makes those references ambiguous.
@@ -82,21 +82,21 @@ export function validateCdxStructure(root: Record<string, unknown>): Diagnostic[
       const content = asString(entry.content);
       if (algorithm === undefined || content === undefined) continue;
       const problem = checksumProblem(algorithm, content);
-      if (problem) badHash.push(`${name}: ${problem}`);
+      if (problem) badHash.add(`${name}: ${problem}`);
     }
 
     const purl = asString(component.purl);
-    if (purl !== undefined && !purl.startsWith('pkg:')) badPurl.push(`${name} (${purl})`);
+    if (purl !== undefined && !purl.startsWith('pkg:')) badPurl.add(`${name} (${purl})`);
 
     for (const entry of asRecordArray(component.licenses)) {
       const expression = asString(entry.expression);
       if (expression !== undefined) {
         const problem = licenseExpressionError(expression);
-        if (problem) badLicense.push(`${name}: ${problem}`);
+        if (problem) badLicense.add(`${name}: ${problem}`);
       }
       // license is either an id or a name, never both (the schema says oneOf).
       if (isRecord(entry.license) && asString(entry.license.id) && asString(entry.license.name)) {
-        badLicense.push(`${name}: license carries both id and name`);
+        badLicense.add(`${name}: license carries both id and name`);
       }
     }
 
@@ -107,11 +107,11 @@ export function validateCdxStructure(root: Record<string, unknown>): Diagnostic[
   if (isRecord(metadataComponent)) visit(metadataComponent);
   for (const component of asRecordArray(root.components)) visit(component);
 
-  warnAll('CDX_SCHEMA_BAD_COMPONENT_TYPE', badType, (count, list) => `${count} component(s) with a type outside the CycloneDX vocabulary: ${list}.`);
-  warnAll('CDX_SCHEMA_DUPLICATE_BOM_REF', [...duplicateRef], (count, list) => `${count} bom-ref(s) are used more than once, which makes references ambiguous: ${list}.`);
-  warnAll('CDX_SCHEMA_BAD_HASH', badHash, (count, list) => `${count} hash(es) do not match their algorithm: ${list}.`);
-  warnAll('CDX_SCHEMA_BAD_PURL', badPurl, (count, list) => `${count} purl(s) do not start with "pkg:": ${list}.`);
-  warnAll('CDX_SCHEMA_BAD_LICENSE_EXPRESSION', badLicense, (count, list) => `${count} license entr(y|ies) are malformed: ${list}.`);
+  lint.warnTally('CDX_SCHEMA_BAD_COMPONENT_TYPE', badType, (count, list) => `${count} component(s) with a type outside the CycloneDX vocabulary: ${list}.`);
+  lint.warnTally('CDX_SCHEMA_DUPLICATE_BOM_REF', duplicateRef, (count, list) => `${count} bom-ref(s) are used more than once, which makes references ambiguous: ${list}.`);
+  lint.warnTally('CDX_SCHEMA_BAD_HASH', badHash, (count, list) => `${count} hash(es) do not match their algorithm: ${list}.`);
+  lint.warnTally('CDX_SCHEMA_BAD_PURL', badPurl, (count, list) => `${count} purl(s) do not start with "pkg:": ${list}.`);
+  lint.warnTally('CDX_SCHEMA_BAD_LICENSE_EXPRESSION', badLicense, (count, list) => `${count} license entr(y|ies) are malformed: ${list}.`);
 
   return lint.diagnostics;
 }

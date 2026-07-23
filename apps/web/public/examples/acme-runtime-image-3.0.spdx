@@ -151,7 +151,7 @@ PackageSupplier: Organization: Alpine Linux
 ExternalRef: PACKAGE-MANAGER purl pkg:apk/alpine/scanelf@2.10.0?distro=3.20
 
 PackageName: ssl_client
-SPDXID: SPDXRef-Package-ssl_client
+SPDXID: SPDXRef-Package-ssl-client
 PackageVersion: 3.17.3
 PackageDownloadLocation: NOASSERTION
 PrimaryPackagePurpose: LIBRARY
@@ -639,7 +639,7 @@ Relationship: SPDXRef-Package-runtime-image CONTAINS SPDXRef-Package-libssl3
 Relationship: SPDXRef-Package-runtime-image CONTAINS SPDXRef-Package-apk-tools
 Relationship: SPDXRef-Package-runtime-image CONTAINS SPDXRef-Package-apk-tools-dev
 Relationship: SPDXRef-Package-runtime-image CONTAINS SPDXRef-Package-scanelf
-Relationship: SPDXRef-Package-runtime-image CONTAINS SPDXRef-Package-ssl_client
+Relationship: SPDXRef-Package-runtime-image CONTAINS SPDXRef-Package-ssl-client
 Relationship: SPDXRef-Package-runtime-image CONTAINS SPDXRef-Package-curl
 Relationship: SPDXRef-Package-runtime-image CONTAINS SPDXRef-Package-curl-dev
 Relationship: SPDXRef-Package-runtime-image CONTAINS SPDXRef-Package-libcurl

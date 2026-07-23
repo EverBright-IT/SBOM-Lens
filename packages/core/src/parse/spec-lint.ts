@@ -9,8 +9,9 @@ import { diag } from '../model/diagnostics';
  *
  *   1. Everything is a WARNING. A document never fails its lint; it loads and
  *      the findings sit next to it.
- *   2. Per-item findings aggregate into ONE diagnostic (count plus the first
- *      three subjects). A BOM with 4000 packages must not produce 4000 rows.
+ *   2. Per-item findings aggregate into ONE diagnostic per RULE (count plus
+ *      the first three subjects), collected through a bounded `Tally` so the
+ *      cost does not grow with the number of offenders.
  *
  * Codes carry the `_SCHEMA_` infix, which is what `isSpecFinding` keys on to
  * tell "your document violates the spec" apart from "the parser had trouble".
@@ -19,8 +20,72 @@ import { diag } from '../model/diagnostics';
 /** Codes with this infix are spec findings, not parser notes. */
 const SPEC_LINT_INFIX = '_SCHEMA_';
 
+/**
+ * Tells a spec finding apart from a parser note by its code.
+ *
+ * STABILITY CONTRACT. Two things are public surface here, not implementation
+ * detail:
+ *
+ *   1. This function, exported from the core barrel. The viewer splits its
+ *      diagnostics rows on it, and the CLI (`sbomlens check`, later `verify`)
+ *      is meant to make the same split, so a rename breaks that branch on
+ *      rebase rather than at compile time in this repo.
+ *   2. The `_SCHEMA_` infix itself. Every lint code carries it: `SPDX2_SCHEMA_*`,
+ *      `SPDX3_SCHEMA_*`, `CDX_SCHEMA_*`, `OCM_SCHEMA_*`. New formats must follow
+ *      the convention, and no PARSER code may contain the infix, or it would be
+ *      mistaken for a spec finding.
+ *
+ * Individual codes are additive-only in the same sense the check-report
+ * envelope is: new codes may appear in a minor release, existing ones do not
+ * change meaning. See docs/spec-findings.md.
+ */
 export function isSpecFinding(code: string): boolean {
   return code.includes(SPEC_LINT_INFIX);
+}
+
+/** How many offending subjects a message names before it says "...". */
+const SAMPLE_LIMIT = 3;
+
+/**
+ * Counts offending subjects while keeping only the first few by name.
+ *
+ * The naive version collects every subject in an array and prints three of
+ * them. On a 50k-package SBOM where a generator omits one field everywhere,
+ * that array costs tens of megabytes to produce a single sentence. A tally
+ * costs the same whether one package or fifty thousand are affected.
+ */
+export interface Tally {
+  add(subject: string): void;
+  readonly count: number;
+  /** "a, b, c, ..." — the first three subjects, so a message stays readable. */
+  sample(): string;
+}
+
+/**
+ * `unique` counts DISTINCT subjects, for rules whose finding is about the
+ * value rather than the item: five packages with the same unknown relationship
+ * type are one problem, not five.
+ */
+export function createTally(options: { unique?: boolean } = {}): Tally {
+  const samples: string[] = [];
+  const seen = options.unique ? new Set<string>() : undefined;
+  let count = 0;
+  return {
+    add(subject) {
+      if (seen) {
+        if (seen.has(subject)) return;
+        seen.add(subject);
+      }
+      count++;
+      if (samples.length < SAMPLE_LIMIT) samples.push(subject);
+    },
+    get count() {
+      return count;
+    },
+    sample() {
+      return `${samples.join(', ')}${count > SAMPLE_LIMIT ? ', ...' : ''}`;
+    },
+  };
 }
 
 export interface SpecLint {
@@ -29,10 +94,11 @@ export interface SpecLint {
   /** One finding about the document as a whole. */
   warn(code: string, message: string): void;
   /**
-   * One finding about `subjects` items. Emits nothing when the list is empty;
-   * `render` receives the count and a ready-made "a, b, c, ..." sample.
+   * One finding about everything a tally counted. Emits nothing when the tally
+   * is empty; `render` receives the count and the sample. One tally per RULE,
+   * even when several passes feed it, so a rule never produces two rows.
    */
-  warnAll(code: string, subjects: string[], render: (count: number, sample: string) => string): void;
+  warnTally(code: string, tally: Tally, render: (count: number, sample: string) => string): void;
 }
 
 export function createLint(): SpecLint {
@@ -42,16 +108,11 @@ export function createLint(): SpecLint {
     warn(code, message) {
       diagnostics.push(diag('warning', code, message));
     },
-    warnAll(code, subjects, render) {
-      if (subjects.length === 0) return;
-      diagnostics.push(diag('warning', code, render(subjects.length, sample(subjects))));
+    warnTally(code, tally, render) {
+      if (tally.count === 0) return;
+      diagnostics.push(diag('warning', code, render(tally.count, tally.sample())));
     },
   };
-}
-
-/** "a, b, c, ..." — the first three subjects, so a message stays readable. */
-export function sample(subjects: string[]): string {
-  return `${subjects.slice(0, 3).join(', ')}${subjects.length > 3 ? ', ...' : ''}`;
 }
 
 /**

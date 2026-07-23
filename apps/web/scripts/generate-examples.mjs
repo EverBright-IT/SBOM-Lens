@@ -70,7 +70,12 @@ function runtimeImage() {
   BASE_LIBS.forEach((name, i) => {
     // Suffix variants pad the list to ~120 packages, like real image scans.
     for (const suffix of ['', '-dev'].slice(0, i % 3 === 0 ? 2 : 1)) {
-      const id = `SPDXRef-Package-${name}${suffix}`.replaceAll('+', 'x');
+      // SPDX 2.3 idstrings allow letters, digits, '.' and '-' only, so a
+      // package name like ssl_client or libstdc++ cannot be pasted into an
+      // SPDXID unchanged. Real generators sanitize here; so do we.
+      const id = `SPDXRef-Package-${name}${suffix}`
+        .replaceAll('+', 'x') // libstdc++ reads better as libstdcxx than libstdc--
+        .replace(/[^0-9A-Za-z.-]/g, '-');
       const v = version(i);
       ids.push({ id, name: `${name}${suffix}` });
       lines.push(
@@ -217,10 +222,10 @@ function webstack(runtimeSha, identitySha) {
           pkg('frontend-spa', 'SPDXRef-Package-frontend-spa', '2.1.0', 'APPLICATION', {
             licenseConcluded: 'MIT',
           }),
-          pkg('postgresql', 'SPDXRef-Package-postgres', '16.4', 'DATABASE', {
+          pkg('postgresql', 'SPDXRef-Package-postgres', '16.4', 'APPLICATION', {
             licenseConcluded: 'PostgreSQL',
           }),
-          pkg('redis', 'SPDXRef-Package-redis', '7.4.0', 'DATABASE', {
+          pkg('redis', 'SPDXRef-Package-redis', '7.4.0', 'APPLICATION', {
             licenseConcluded: 'BSD-3-Clause',
           }),
           pkg('otel-collector', 'SPDXRef-Package-otel', '0.109.0', 'APPLICATION', {

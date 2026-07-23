@@ -1,0 +1,27 @@
+SPDXVersion: SPDX-2.x
+DataLicense: MIT
+SPDXID: SPDXRef-DOCUMENT
+DocumentName: acme-broken-tag-value
+DocumentNamespace: acme-platform/spdx#doc
+Creator: acme-sbom-generator
+Created: 2026-06-01T10:00:00+02:00
+
+PackageName: webserver
+SPDXID: Package-webserver
+PackageVersion: 1.4.2
+PackageDownloadLocation: https://acme.example/webserver-1.4.2.tar.gz
+PrimaryPackagePurpose: MICROSERVICE
+PackageLicenseDeclared: Apache 2.0
+
+PackageName: libssl
+SPDXID: SPDXRef-Package-libssl
+PackageVersion: 3.0.11
+PackageLicenseConcluded: (MIT OR Apache-2.0
+
+FileName: ./etc/acme.conf
+SPDXID: SPDXRef-File-config
+FileChecksum: SHA1: 0000000000000000000000000000000000000000
+LicenseConcluded: MIT AND
+
+Relationship: SPDXRef-DOCUMENT DESCRIBES SPDXRef-Package-libssl
+Relationship: SPDXRef-Package-libssl SHIPS_WITH SPDXRef-File-config

@@ -4,6 +4,37 @@ All notable changes to SBOM Lens. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [SemVer](https://semver.org) (0.x: the API surface is the app itself).
 
+## [0.25.0] - 2026-07-23
+
+### Added
+- **Tag-value documents are checked too.** The spec lint ran on JSON and YAML
+  only, so a `.spdx` file simply showed no findings, which reads exactly like
+  "this document is fine" rather than "nobody looked". The shipped demo
+  cascade is tag-value, so the feature was invisible where most people meet it
+  first. The serialization-independent rules now run on the parser's
+  intermediates; checksums and external document references stay with the
+  parser there, which reports them with a line number.
+
+### Changed
+- **One finding per rule, at a bounded cost.** Findings are collected through
+  a tally that counts everything and names the first three, instead of an
+  array that grew with the number of offenders: a 50k-package SBOM violating
+  one rule everywhere now costs 13 MB instead of 30 to produce the same
+  sentence. Package and file passes share one tally per rule, so a rule no
+  longer emits two rows for one document.
+- **The `isSpecFinding` contract is written down**, in the function, in the
+  barrel, and in [docs/spec-findings.md](docs/spec-findings.md): the exported
+  helper and the `_SCHEMA_` code convention are public surface the CLI
+  consumes, and a test pins the partition over every code the fixtures emit.
+
+### Fixed
+- **The bundled example cascade no longer violates SPDX 2.3.** The generator
+  pasted package names into SPDXIDs while sanitizing only `+`, so an Alpine
+  name like `ssl_client` produced an identifier the idstring grammar forbids;
+  two packages also carried a `primaryPackagePurpose` of `DATABASE`, which is
+  not in the vocabulary. Found by the tag-value lint above on our own demo,
+  which is the point of the feature. A test now keeps the examples clean.
+
 ## [0.24.1] - 2026-07-23
 
 ### Security

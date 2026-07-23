@@ -18,6 +18,7 @@ import {
   parseElementRef,
   versionFromPurl,
 } from './common';
+import { validateSpdx2TagValue } from './validate';
 
 /**
  * Single-pass line state machine for SPDX 2.x tag-value.
@@ -323,6 +324,32 @@ export function parseSpdx2TagValue(input: SourceInput): ParseResult {
   const deduped = dedupeBySpdxId(elements, diagnostics);
   const { relationships: allRelationships, describes } = normalizeDescribes(docSpdxId, [], relationships);
   checkRelationshipDocRefs(allRelationships, externalDocumentRefs, diagnostics);
+
+  // Spec lint on the drafts: tag-value has no object tree to walk, but the same
+  // rules apply to it. Checksums are excluded because TV_BAD_CHECKSUM already
+  // reports them with a line number.
+  diagnostics.push(
+    ...validateSpdx2TagValue(
+      {
+        spdxId: doc.spdxId,
+        version: doc.version,
+        dataLicense: doc.dataLicense,
+        namespace: doc.namespace,
+        created: doc.created,
+        creators: doc.creators,
+      },
+      drafts.map((d) => ({
+        kind: d.kind,
+        name: d.name,
+        spdxId: d.spdxId,
+        downloadLocation: d.downloadLocation,
+        purpose: d.purpose,
+        licenseConcluded: d.licenseConcluded,
+        licenseDeclared: d.licenseDeclared,
+      })),
+      relationships.map((r) => r.type),
+    ),
+  );
 
   const document = {
     id: documentId,

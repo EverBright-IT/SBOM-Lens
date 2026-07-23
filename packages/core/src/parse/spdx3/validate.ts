@@ -1,6 +1,7 @@
 import type { Diagnostic } from '../../model/diagnostics';
 import { asRecordArray, asString, isRecord } from '../../util/narrow';
-import { checksumProblem, createLint, isAbsoluteUri } from '../spec-lint';
+import type { Tally } from '../spec-lint';
+import { checksumProblem, createLint, createTally, isAbsoluteUri } from '../spec-lint';
 
 /**
  * Spec lint for SPDX 3.0.x documents. Deliberately limited to the JSON-LD
@@ -53,59 +54,57 @@ export function validateSpdx3Structure(
   byId: Map<string, Record<string, unknown>>,
 ): Diagnostic[] {
   const lint = createLint();
-  const { warn, warnAll } = lint;
+  const { warn } = lint;
 
-  const missingType: string[] = [];
-  const badId: string[] = [];
-  const missingCreationInfo: string[] = [];
-  const badHash: string[] = [];
-  const incompleteRelationship: string[] = [];
+  const missingType = createTally();
+  const badId = createTally();
+  const missingCreationInfo = createTally();
+  const badHash = createTally();
+  const incompleteRelationship = createTally();
 
   for (const node of graph) {
     const type = localType(node);
     const id = nodeId(node);
     const label = id ?? `(${type || 'untyped node'})`;
 
-    if (type === '') missingType.push(id ?? '(node without spdxId)');
+    if (type === '') missingType.add(id ?? '(node without spdxId)');
 
     // § 5.2: spdxId is an IRI. Blank nodes (`_:x`) are legal JSON-LD and used
     // by real generators for CreationInfo, so they are not IRIs and not wrong.
-    if (id !== undefined && !id.startsWith('_:') && !isAbsoluteUri(id)) badId.push(id);
+    if (id !== undefined && !id.startsWith('_:') && !isAbsoluteUri(id)) badId.add(id);
 
     // Every Element carries creationInfo; helper objects (CreationInfo, Hash,
     // ExternalMap, ...) do not. Checked against a whitelist of element types so
     // that unknown types never produce a false warning.
-    if (ELEMENT_TYPES.has(type) && node.creationInfo === undefined) missingCreationInfo.push(label);
+    if (ELEMENT_TYPES.has(type) && node.creationInfo === undefined) missingCreationInfo.add(label);
 
-    for (const problem of hashProblems(node.verifiedUsing)) badHash.push(`${label}: ${problem}`);
+    for (const problem of hashProblems(node.verifiedUsing)) badHash.add(`${label}: ${problem}`);
 
     if (type === 'Relationship' || type === 'LifecycleScopedRelationship') {
       const missing = ['from', 'relationshipType'].filter((field) => node[field] === undefined);
-      if (missing.length > 0) incompleteRelationship.push(`${label} (no ${missing.join('/')})`);
+      if (missing.length > 0) incompleteRelationship.add(`${label} (no ${missing.join('/')})`);
     }
   }
 
-  warnAll('SPDX3_SCHEMA_MISSING_TYPE', missingType, (count, list) => `${count} graph node(s) without a type: ${list}.`);
-  warnAll('SPDX3_SCHEMA_BAD_SPDXID', badId, (count, list) => `${count} spdxId(s) are neither an absolute IRI nor a blank node: ${list}.`);
-  warnAll(
+  lint.warnTally('SPDX3_SCHEMA_MISSING_TYPE', missingType, (count, list) => `${count} graph node(s) without a type: ${list}.`);
+  lint.warnTally('SPDX3_SCHEMA_BAD_SPDXID', badId, (count, list) => `${count} spdxId(s) are neither an absolute IRI nor a blank node: ${list}.`);
+  lint.warnTally(
     'SPDX3_SCHEMA_MISSING_CREATION_INFO',
     missingCreationInfo,
     (count, list) => `${count} element(s) without creationInfo, which SPDX 3 requires on every element: ${list}.`,
   );
-  warnAll('SPDX3_SCHEMA_BAD_HASH', badHash, (count, list) => `${count} hash(es) do not match their algorithm: ${list}.`);
-  warnAll(
+  lint.warnTally('SPDX3_SCHEMA_BAD_HASH', badHash, (count, list) => `${count} hash(es) do not match their algorithm: ${list}.`);
+  lint.warnTally(
     'SPDX3_SCHEMA_INCOMPLETE_RELATIONSHIP',
     incompleteRelationship,
     (count, list) => `${count} relationship(s) without from/relationshipType: ${list}.`,
   );
 
   validateSpecVersion(graph, warn);
-  validateReferences(graph, byId, warnAll);
+  validateReferences(graph, byId, lint);
 
   return lint.diagnostics;
 }
-
-type WarnAll = (code: string, subjects: string[], render: (count: number, sample: string) => string) => void;
 
 /** § 5.3 CreationInfo: specVersion states which model version applies. */
 function validateSpecVersion(graph: Record<string, unknown>[], warn: (code: string, message: string) => void): void {
@@ -129,7 +128,7 @@ function validateSpecVersion(graph: Record<string, unknown>[], warn: (code: stri
 function validateReferences(
   graph: Record<string, unknown>[],
   byId: Map<string, Record<string, unknown>>,
-  warnAll: WarnAll,
+  lint: { warnTally: (code: string, tally: Tally, render: (count: number, sample: string) => string) => void },
 ): void {
   const imported = new Set<string>();
   for (const node of graph) {
@@ -139,7 +138,7 @@ function validateReferences(
     }
   }
 
-  const dangling = new Set<string>();
+  const dangling = createTally({ unique: true });
   const resolves = (ref: string) => ref.startsWith('_:') || byId.has(ref) || imported.has(ref);
 
   for (const node of graph) {
@@ -151,9 +150,9 @@ function validateReferences(
     }
   }
 
-  warnAll(
+  lint.warnTally(
     'SPDX3_SCHEMA_DANGLING_REF',
-    [...dangling],
+    dangling,
     (count, list) => `${count} relationship end(s) point at an spdxId that is neither in the graph nor imported: ${list}.`,
   );
 }

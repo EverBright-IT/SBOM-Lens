@@ -6,7 +6,7 @@ DocumentNamespace: https://example.org/spdxdocs/acme-platform-1.0
 # Release-level SBOM. Component SBOMs are linked as external documents
 # and resolved by checksum — note the version drift in the DocumentRef
 # name (2.2) vs the actual file (2.1): only the hash is trusted.
-ExternalDocumentRef: DocumentRef-WEBSTACK-2.2 https://registry.example.org/acme/webstack/2.1/acme-webstack-2.1.spdx.json SHA1:e7d23659f53d78e2bcf83c23bc7d5412d4d3ca7d
+ExternalDocumentRef: DocumentRef-WEBSTACK-2.2 https://registry.example.org/acme/webstack/2.1/acme-webstack-2.1.spdx.json SHA1:a987ae89d5da24fdd70f62a64823ace526465431
 ExternalDocumentRef: DocumentRef-RELEASE-NOTES https://example.org/acme/platform/1.0/release-notes.pdf SHA1:aa0000000000000000000000000000000000aa00
 Creator: Organization: ACME Corp
 Creator: Tool: acme-sbom-composer-1.1

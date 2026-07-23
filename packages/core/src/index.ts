@@ -8,6 +8,8 @@
 export type { DocumentId, ElementId } from './model/ids';
 export { makeDocumentId, makeElementId, splitElementId } from './model/ids';
 export type { Diagnostic, DiagnosticSeverity } from './model/diagnostics';
+// Consumed by the viewer AND the CLI; the `_SCHEMA_` code convention it keys
+// on is a contract, not a detail. See parse/spec-lint.ts.
 export { isSpecFinding } from './parse/spec-lint';
 export type {
   Checksum,

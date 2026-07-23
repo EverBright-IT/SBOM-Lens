@@ -17,7 +17,7 @@
       "spdxDocument": "https://registry.example.org/acme/runtime/3.0/acme-runtime-image-3.0.spdx",
       "checksum": {
         "algorithm": "SHA1",
-        "checksumValue": "c6d845b4741192e76ee958b7f34bbf3a61f7fa39"
+        "checksumValue": "4e98e883f50045bfb3b1364a2f76d5792a95d258"
       }
     },
     {
@@ -99,7 +99,7 @@
       "SPDXID": "SPDXRef-Package-postgres",
       "versionInfo": "16.4",
       "downloadLocation": "NOASSERTION",
-      "primaryPackagePurpose": "DATABASE",
+      "primaryPackagePurpose": "APPLICATION",
       "supplier": "Organization: ACME Corp",
       "licenseConcluded": "PostgreSQL"
     },
@@ -108,7 +108,7 @@
       "SPDXID": "SPDXRef-Package-redis",
       "versionInfo": "7.4.0",
       "downloadLocation": "NOASSERTION",
-      "primaryPackagePurpose": "DATABASE",
+      "primaryPackagePurpose": "APPLICATION",
       "supplier": "Organization: ACME Corp",
       "licenseConcluded": "BSD-3-Clause"
     },
