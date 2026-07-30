@@ -4,6 +4,20 @@ All notable changes to SBOM Lens. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [SemVer](https://semver.org) (0.x: the API surface is the app itself).
 
+## [0.26.1] - 2026-07-23
+
+### Security
+- **postcss to 8.5.25 and brace-expansion to 5.0.8** (GHSA-r28c-9q8g-f849 and
+  GHSA-mh99-v99m-4gvg, both CVSS 7.5). Build-time dependencies only, pulled
+  transitively through vite and through eslint / vite-plugin-pwa; nothing
+  shipped in the app or the extensions was affected. Both advisories were
+  published after the 0.26.0 pipeline started, so the blocking osv-scanner
+  gate caught them on the very next run. brace-expansion needed an
+  `overrides` entry because the deep `minimatch@5` chain declares `^2.0.1`
+  and cannot reach the fix on its own; the package ships CJS alongside ESM,
+  and the PWA build, eslint and the full suite were re-run to prove the major
+  jump holds. Feature-identical to 0.26.0.
+
 ## [0.26.0] - 2026-07-23
 
 ### Added
