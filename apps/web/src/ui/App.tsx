@@ -1,6 +1,7 @@
 import clsx from 'clsx';
 import { useEffect, useRef, useState } from 'react';
 import { initCatalog } from '../app/catalog';
+import { openDeepLinks } from '../app/deepLink';
 import { initProfiles } from '../app/profiles';
 import { host } from '../host/adapter';
 import { useVersionConflicts } from '../app/selectors';
@@ -9,7 +10,7 @@ import { DiagnosticsDrawer } from './DiagnosticsDrawer';
 import { EmptyState } from './EmptyState';
 import { HelpDialog, UrlDialog } from './dialogs';
 import { BrandLogo, GitHubIcon, GitLabIcon, MoonIcon, SunIcon, SystemThemeIcon } from './icons';
-import { BRAND, pref } from '../app/brand';
+import { BRAND, IS_VSCODE, pref } from '../app/brand';
 import { OpenMenu } from './OpenMenu';
 import { THEME_ORDER, setThemeMode, themeMode, type ThemeMode } from './theme';
 import { DropOverlay, Toasts } from './overlays';
@@ -62,10 +63,13 @@ export function App() {
   const hasDocuments = useAppStore((s) => s.ws.documents.size > 0);
   const actions = useAppStore((s) => s.actions);
 
-  // A deployment may ship a catalog of preconfigured SBOM sources.
+  // A deployment may ship a catalog of preconfigured SBOM sources, and the
+  // address bar may carry `?url=` deep links (browser only: inside the editor
+  // the host opens documents itself).
   useEffect(() => {
     initProfiles();
     if (host().caps.catalog) void initCatalog();
+    if (!IS_VSCODE) void openDeepLinks(window.location.search);
   }, []);
 
   // Global shortcuts: '/' focuses search, '?' toggles help, Esc closes panels.

@@ -9,9 +9,15 @@ export type FetchDocumentResult =
   | { ok: true; bytes: ArrayBuffer }
   | { ok: false; status?: number; statusText?: string };
 
-export interface IngestPush {
-  fileName: string;
-  buffer: ArrayBuffer;
+export type IngestPush =
+  | { fileName: string; buffer: ArrayBuffer }
+  /** Blob-backed push: disk-backed storage, streamed by the worker. */
+  | { fileName: string; blob: Blob };
+
+/** Side-channel intent riding a host push (see HostToWebviewMessage). */
+export interface IngestPushOptions {
+  /** Open the Diff view over this push: two documents, A then B. */
+  compare?: boolean;
 }
 
 export interface OcmRegistryPort {
@@ -63,7 +69,7 @@ export interface HostAdapter {
   createWorker(): Worker;
 
   /** Host-initiated document pushes (e.g. "open with SBOM Lens" in an editor). */
-  onIngestMessage(callback: (files: IngestPush[]) => void): void;
+  onIngestMessage(callback: (files: IngestPush[], opts?: IngestPushOptions) => void): void;
 }
 
 let current: HostAdapter | null = null;

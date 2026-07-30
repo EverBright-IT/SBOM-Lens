@@ -157,9 +157,11 @@ timestamping; and `jsonNormalisation/v1` (deprecated), which stays
   **500 files** listed, and a **256-byte** hex head for binaries; the raw
   blob bytes are inspected in the worker and then dropped. Registry fetches
   cap layers at **50 MB** and **256 MB** per component version (skipped
-  layers are reported). The VS Code extension buffers locally opened
-  deliveries in memory for now (a chunked webview bridge is on the roadmap);
-  its workspace scan skips files over **50 MB**.
+  layers are reported). In the VS Code extension, files over **32 MB** are
+  handed to the viewer as resource URIs and fetched into disk-backed Blobs
+  (the same streaming path the browser uses), so large local deliveries are
+  no longer buffered in extension-host memory and the workspace scan no
+  longer skips them.
 - **Verification needs a secure context**: `crypto.subtle` drives both the
   cascade checksums and signature verification, so HTTPS or localhost is
   required (plain HTTP on a remote host disables them).

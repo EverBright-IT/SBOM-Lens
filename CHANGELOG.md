@@ -4,6 +4,29 @@ All notable changes to SBOM Lens. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [SemVer](https://semver.org) (0.x: the API surface is the app itself).
 
+## [0.26.0] - 2026-07-23
+
+### Added
+- **`?url=` deep links.** A README, a release note or a registry page can link
+  to "this SBOM, rendered" instead of "download this file, then find a
+  viewer": `https://sbom-lens.everbright-it.de/?url=<sbom-url>`, repeatable so
+  a whole cascade travels in one link. Only http(s) reaches a fetch, at most
+  eight documents per link, and stored access tokens are never attached - a
+  link someone sent must not spend the recipient's credentials. When a source
+  answers 401/403 the From-URL dialog opens prefilled instead.
+- **[OCM Lens] Pinned signature keys verify documents automatically.** Public
+  keys (or certificates, used for their key) the user decides to trust live in
+  prefs; a component version whose signature verifies against a pinned key
+  shows its green chip without any manual paste.
+- **[OCM Lens] Multi-GB deliveries open in the extension too.** The webview
+  streams large local `.ctf` and component archives in chunks instead of the
+  extension host buffering them whole - the streaming path the browser has had
+  since 0.16.0, now on both surfaces. This closes the chunk-bridge item left
+  open in 0.18.1.
+- **[OCM Lens] Compare two registry versions in one step.** Pick two versions
+  of a component and the diff opens directly, without materialising both
+  deliveries by hand first.
+
 ## [0.25.1] - 2026-07-23
 
 ### Changed

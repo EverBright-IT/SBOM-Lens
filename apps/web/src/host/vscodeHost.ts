@@ -1,6 +1,6 @@
 import workerUrl from '../worker/parse.worker.ts?worker&url';
 import { HAS_DELIVERIES } from '../app/brand';
-import type { HostAdapter, IngestPush, OcmRegistryPort } from './adapter';
+import type { HostAdapter, IngestPush, IngestPushOptions, OcmRegistryPort } from './adapter';
 import type { HostToWebviewMessage, WebviewToHostMessage } from './vscode-protocol';
 import { PREFS_GLOBAL } from './vscode-protocol';
 
@@ -25,7 +25,7 @@ export function createVscodeHost(api: VsCodeApi = acquireVsCodeApi()): HostAdapt
   const pendingSecrets = new Map<number, (value: string | null) => void>();
   const pendingOcmVersions = new Map<number, (r: { ok: boolean; versions?: string[]; error?: string }) => void>();
   const pendingOcmResolves = new Map<number, (r: { ok: boolean; skippedLayers?: number; error?: string }) => void>();
-  let ingestCallback: ((files: IngestPush[]) => void) | null = null;
+  let ingestCallback: ((files: IngestPush[], opts?: IngestPushOptions) => void) | null = null;
 
   // Sync pref reads come from the snapshot the extension injects into the page.
   const prefs: Record<string, string> =
@@ -44,7 +44,30 @@ export function createVscodeHost(api: VsCodeApi = acquireVsCodeApi()): HostAdapt
               f.bytes.byteOffset + f.bytes.byteLength,
             ) as ArrayBuffer,
           })),
+          message.compare ? { compare: true } : undefined,
         );
+        break;
+      case 'ingestUris':
+        // Fetch each webview-resource URI into a Blob. Chromium spills large
+        // blobs to disk, and the worker reads them via slice() — the bytes
+        // never exist as one buffer. CSP already allows connect-src to the
+        // webview resource origin.
+        void (async () => {
+          const entries: IngestPush[] = await Promise.all(
+            message.files.map(async (f) => {
+              try {
+                const response = await fetch(f.uri);
+                if (!response.ok) throw new Error(`${response.status}`);
+                return { fileName: f.fileName, blob: await response.blob() };
+              } catch {
+                // An empty buffer surfaces as a visible per-file parse
+                // failure; there is no toast channel this far down.
+                return { fileName: f.fileName, buffer: new ArrayBuffer(0) };
+              }
+            }),
+          );
+          ingestCallback?.(entries);
+        })();
         break;
       case 'fetchResult':
         pendingFetches.get(message.id)?.(message);

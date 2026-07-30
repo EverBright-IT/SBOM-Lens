@@ -34,11 +34,25 @@ export interface LensShellConfig {
 
 /** What activateLens hands back for flavor-specific commands. */
 export interface LensShellApi {
-  /** Open (or reuse) the shared panel and push in-memory files into it. */
-  openFiles(files: { fileName: string; bytes: Uint8Array }[], title: string): Promise<void>;
+  /**
+   * Open (or reuse) the shared panel and push in-memory files into it.
+   * `compare` asks the webview to open its Diff view over the push
+   * (exactly two files: base first, candidate second).
+   */
+  openFiles(
+    files: { fileName: string; bytes: Uint8Array }[],
+    title: string,
+    opts?: { compare?: boolean },
+  ): Promise<void>;
 }
 
-const MAX_SCAN_BYTES = 50 * 1024 * 1024;
+/**
+ * Files up to this size are pushed as bytes (one message, overlay-sniffable).
+ * Anything larger rides as a webview-resource URI the webview fetches into a
+ * disk-backed Blob — the old behavior (read fully, or skip over 50 MB) held
+ * whole deliveries in extension-host memory and skipped the rest.
+ */
+const INLINE_PUSH_BYTES = 32 * 1024 * 1024;
 const MAX_PROFILE_BYTES = 65536;
 
 export function activateLens(context: vscode.ExtensionContext, config: LensShellConfig): LensShellApi {
@@ -49,20 +63,7 @@ export function activateLens(context: vscode.ExtensionContext, config: LensShell
   let sharedPanel: vscode.WebviewPanel | null = null;
 
   async function showDeliveryPanel(uris: readonly vscode.Uri[], title: string): Promise<void> {
-    const kept: vscode.Uri[] = [];
-    let skipped = 0;
-    for (const uri of uris) {
-      const stat = await vscode.workspace.fs.stat(uri);
-      if (stat.size > MAX_SCAN_BYTES) skipped++;
-      else kept.push(uri);
-    }
-    if (skipped > 0) {
-      void vscode.window.showWarningMessage(
-        `${config.displayName}: skipped ${skipped} file(s) over 50 MB.`,
-      );
-    }
-    if (kept.length === 0) return;
-
+    if (uris.length === 0) return;
     if (!sharedPanel) {
       sharedPanel = vscode.window.createWebviewPanel(config.viewType, title, {
         viewColumn: vscode.ViewColumn.Active,
@@ -75,15 +76,16 @@ export function activateLens(context: vscode.ExtensionContext, config: LensShell
     await vscode.window.withProgress(
       {
         location: vscode.ProgressLocation.Notification,
-        title: `${config.displayName}: loading ${kept.length} file(s)...`,
+        title: `${config.displayName}: loading ${uris.length} file(s)...`,
       },
-      () => setupWebview(context, config, sharedPanel!, { uris: kept }),
+      () => setupWebview(context, config, sharedPanel!, { uris }),
     );
   }
 
   async function openFiles(
     files: { fileName: string; bytes: Uint8Array }[],
     title: string,
+    opts?: { compare?: boolean },
   ): Promise<void> {
     if (!sharedPanel) {
       sharedPanel = vscode.window.createWebviewPanel(config.viewType, title, {
@@ -94,7 +96,7 @@ export function activateLens(context: vscode.ExtensionContext, config: LensShell
       sharedPanel.title = title;
       sharedPanel.reveal();
     }
-    await setupWebview(context, config, sharedPanel, { files });
+    await setupWebview(context, config, sharedPanel, { files, compare: opts?.compare });
   }
 
   /** All matching files under one folder — between one file and the whole workspace. */
@@ -198,6 +200,8 @@ async function workspaceProfiles(
 interface WebviewSource {
   uris?: readonly vscode.Uri[];
   files?: { fileName: string; bytes: Uint8Array }[];
+  /** Ask the webview to diff the pushed pair (base first). */
+  compare?: boolean;
 }
 
 async function setupWebview(
@@ -207,7 +211,21 @@ async function setupWebview(
   source: WebviewSource,
 ): Promise<void> {
   const mediaRoot = vscode.Uri.joinPath(context.extensionUri, 'media');
-  panel.webview.options = { enableScripts: true, localResourceRoots: [mediaRoot] };
+  // Files over the inline threshold are served to the webview as resource
+  // URIs (fetched into disk-backed Blobs there), which needs their parent
+  // directories among the resource roots. Only the large ones widen the
+  // webview's read scope; small files keep riding the byte push.
+  const sourceUris = source.uris ?? [];
+  const sizes = await Promise.all(
+    sourceUris.map(async (uri) => (await vscode.workspace.fs.stat(uri)).size),
+  );
+  const largeParents = sourceUris
+    .filter((_, i) => sizes[i]! > INLINE_PUSH_BYTES)
+    .map((uri) => vscode.Uri.joinPath(uri, '..'));
+  panel.webview.options = {
+    enableScripts: true,
+    localResourceRoots: [mediaRoot, ...largeParents],
+  };
 
   const rawHtml = new TextDecoder().decode(
     await vscode.workspace.fs.readFile(vscode.Uri.joinPath(mediaRoot, 'index.html')),
@@ -242,15 +260,21 @@ async function setupWebview(
     openExternal: (url) => void vscode.env.openExternal(vscode.Uri.parse(url)),
     onReady: () => {
       void (async () => {
-        const files: { fileName: string; bytes: Uint8Array }[] = await Promise.all(
-          (source.uris ?? []).map(async (uri) => ({
-            fileName: uri.path.split('/').pop() ?? config.defaultFileName,
-            bytes: new Uint8Array(await vscode.workspace.fs.readFile(uri)),
-          })),
-        );
+        const files: { fileName: string; bytes: Uint8Array }[] = [];
+        const handles: { fileName: string; uri: string }[] = [];
+        for (const [i, uri] of sourceUris.entries()) {
+          const fileName = uri.path.split('/').pop() ?? config.defaultFileName;
+          if (sizes[i]! > INLINE_PUSH_BYTES) {
+            handles.push({ fileName, uri: panel.webview.asWebviewUri(uri).toString() });
+          } else {
+            files.push({ fileName, bytes: new Uint8Array(await vscode.workspace.fs.readFile(uri)) });
+          }
+        }
         files.push(...(source.files ?? []));
         files.push(...(await workspaceProfiles(config.profileDir)));
-        if (files.length > 0) post({ type: 'ingestFiles', files });
+        if (files.length > 0)
+          post({ type: 'ingestFiles', files, ...(source.compare ? { compare: true } : {}) });
+        if (handles.length > 0) post({ type: 'ingestUris', files: handles });
       })();
     },
     ...(config.extraBridge ? { extraMessage: config.extraBridge(post) } : {}),

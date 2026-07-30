@@ -27,7 +27,17 @@ export type WebviewToHostMessage =
 
 /** extension → webview */
 export type HostToWebviewMessage =
-  | { type: 'ingestFiles'; files: PushedFile[] }
+  /**
+   * `compare` asks the webview to open the Diff view over the push: exactly
+   * two documents expected, first = base (A), second = candidate (B).
+   */
+  | { type: 'ingestFiles'; files: PushedFile[]; compare?: boolean }
+  /**
+   * Large files ride as webview-resource URIs instead of bytes: the webview
+   * fetches them into disk-backed Blobs and the worker streams via slice(),
+   * so a multi-GB delivery never exists as one buffer on either side.
+   */
+  | { type: 'ingestUris'; files: { fileName: string; uri: string }[] }
   | {
       type: 'fetchResult';
       id: number;

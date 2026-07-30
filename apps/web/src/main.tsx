@@ -2,7 +2,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { registerSW } from 'virtual:pwa-register';
 import { IS_VSCODE } from './app/brand';
-import { ingestBuffers } from './app/ingest';
+import { ingestPush } from './app/ingest';
 import { host, setHost } from './host/adapter';
 import { createVscodeHost } from './host/vscodeHost';
 import { webHost } from './host/webHost';
@@ -13,7 +13,7 @@ import './index.css';
 // The host seam must exist before anything renders or fetches. IS_VSCODE is
 // a build-time constant, so the unused host implementation tree-shakes away.
 setHost(IS_VSCODE ? createVscodeHost() : webHost);
-host().onIngestMessage((files) => void ingestBuffers(files));
+host().onIngestMessage((files, opts) => void ingestPush(files, opts));
 initTheme();
 
 // Offline support; updates activate silently on the next visit. A webview

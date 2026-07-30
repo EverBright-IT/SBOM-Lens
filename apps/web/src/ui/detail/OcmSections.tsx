@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type { SbomDocument, SbomElement } from '@sbomlens/core';
 import type { OcmBlobInfo, OcmDigest, OcmLabel, OcmSignatureInfo, SignatureResult } from '@sbomlens/core/ocm';
 import { verifyDocumentSignatures } from '@sbomlens/core/ocm';
+import { addTrustedKey, loadTrustedKeys, removeTrustedKey, type TrustedKey } from '../../app/trustedKeys';
 import { host } from '../../host/adapter';
 import { formatBytes } from '../nodeInfo';
 import { Chip, CopyButton, FieldRow, Section } from './FieldRow';
@@ -242,6 +243,13 @@ export function OcmDocumentSections({ doc }: { doc: SbomDocument }) {
  * RSA signature with crypto.subtle: no server, no upload. Honest by design:
  * a gap it cannot bridge shows "unverifiable" with a reason, never a false
  * green or red.
+ *
+ * Pinned keys take the paste out of the loop: signatures are checked
+ * against every pinned key on load, and a match shows green with the key's
+ * label. A non-match stays neutral ("not verified"): a pinned key that
+ * simply belongs to a different signer must not paint a legitimate
+ * signature red. The manual verdict, an explicit act against one chosen
+ * key, always wins over the pinned one.
  */
 function SignatureSection({ doc, signatures }: { doc: SbomDocument; signatures: OcmSignatureInfo[] }) {
   const [open, setOpen] = useState(false);
@@ -249,6 +257,10 @@ function SignatureSection({ doc, signatures }: { doc: SbomDocument; signatures: 
   const [busy, setBusy] = useState(false);
   const [results, setResults] = useState<SignatureResult[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [trusted, setTrusted] = useState<TrustedKey[]>(loadTrustedKeys);
+  const [pinned, setPinned] = useState<{ label: string; results: SignatureResult[] }[] | null>(null);
+  const [pinLabel, setPinLabel] = useState('');
+  const [pinError, setPinError] = useState<string | null>(null);
 
   // Results belong to the document they were computed for; drop them on switch.
   useEffect(() => {
@@ -256,10 +268,48 @@ function SignatureSection({ doc, signatures }: { doc: SbomDocument; signatures: 
     setError(null);
     setOpen(false);
     setPem('');
+    setPinLabel('');
+    setPinError(null);
   }, [doc.id]);
+
+  // Auto-verify against every pinned key. Keys that fail to import are
+  // skipped (the pin-time check catches most, but crypto.subtle has the
+  // final word); a stale run is discarded when the document switches.
+  useEffect(() => {
+    if (trusted.length === 0) {
+      setPinned(null);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      const out: { label: string; results: SignatureResult[] }[] = [];
+      for (const key of trusted) {
+        try {
+          out.push({ label: key.label, results: await verifyDocumentSignatures(doc, key.pem) });
+        } catch {
+          // Unimportable pinned key: skip; the manual path reports precisely.
+        }
+      }
+      if (!cancelled) setPinned(out);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [doc, trusted]);
 
   const verdictFor = (name: string | undefined, index: number): SignatureResult | undefined =>
     results?.find((r) => r.name === (name ?? 'signature')) ?? results?.[index];
+
+  const pinnedFor = (
+    name: string | undefined,
+    index: number,
+  ): { result: SignatureResult; keyLabel: string } | undefined => {
+    for (const entry of pinned ?? []) {
+      const r = entry.results.find((x) => x.name === (name ?? 'signature')) ?? entry.results[index];
+      if (r?.verdict === 'valid') return { result: r, keyLabel: entry.label };
+    }
+    return undefined;
+  };
 
   const runVerify = async () => {
     setBusy(true);
@@ -272,6 +322,20 @@ function SignatureSection({ doc, signatures }: { doc: SbomDocument; signatures: 
       setBusy(false);
     }
   };
+
+  const pinCurrentKey = () => {
+    const outcome = addTrustedKey(pinLabel, pem);
+    if (!outcome.ok) {
+      setPinError(outcome.error);
+      return;
+    }
+    setPinError(null);
+    setPinLabel('');
+    setTrusted(loadTrustedKeys());
+  };
+
+  const nonePinnedMatched =
+    !results && pinned !== null && pinned.length > 0 && signatures.every((s, i) => !pinnedFor(s.name, i));
 
   return (
     <Section
@@ -315,18 +379,73 @@ function SignatureSection({ doc, signatures }: { doc: SbomDocument; signatures: 
             )}
           </div>
           {error && <p className="text-xs text-red-600 dark:text-red-400">{error}</p>}
+          {results?.some((r) => r.verdict === 'valid') && (
+            <div className="flex items-center gap-2 border-t border-slate-100 pt-1.5 dark:border-slate-800">
+              <input
+                value={pinLabel}
+                onChange={(e) => setPinLabel(e.target.value)}
+                placeholder="Label, e.g. acme-release"
+                className="w-40 rounded border border-slate-200 bg-transparent px-1.5 py-0.5 text-xs outline-none focus:border-accent-400 dark:border-slate-700 dark:bg-slate-900"
+              />
+              <button
+                type="button"
+                disabled={pinLabel.trim().length === 0}
+                onClick={pinCurrentKey}
+                className="rounded border border-slate-200 px-2 py-0.5 text-xs text-slate-600 hover:border-accent-300 hover:text-accent-700 disabled:opacity-40 dark:border-slate-700 dark:text-slate-300 dark:hover:border-accent-700 dark:hover:text-accent-400"
+              >
+                Pin this key
+              </button>
+              <span className="text-xs text-slate-400">
+                Pinned keys verify future documents automatically.
+              </span>
+            </div>
+          )}
+          {pinError && <p className="text-xs text-red-600 dark:text-red-400">{pinError}</p>}
+          {trusted.length > 0 && (
+            <div className="border-t border-slate-100 pt-1.5 dark:border-slate-800">
+              <div className="pb-0.5 text-xs text-slate-500 dark:text-slate-400">
+                Pinned keys ({trusted.length})
+              </div>
+              {trusted.map((key) => (
+                <div key={key.label} className="flex items-center gap-2 py-0.5 text-xs">
+                  <span className="min-w-0 truncate font-mono">{key.label}</span>
+                  <button
+                    type="button"
+                    onClick={() => setTrusted(removeTrustedKey(key.label))}
+                    className="text-slate-400 hover:text-red-600 dark:hover:text-red-400"
+                  >
+                    remove
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
+      )}
+
+      {nonePinnedMatched && (
+        <p className="mb-1.5 text-xs text-slate-400 dark:text-slate-500">
+          No pinned key matched these signatures. Use Verify... for a precise verdict against a
+          chosen key.
+        </p>
       )}
 
       <div className="space-y-2">
         {signatures.map((sig, i) => {
-          const result = verdictFor(sig.name, i);
+          const manual = verdictFor(sig.name, i);
+          const viaPin = manual ? undefined : pinnedFor(sig.name, i);
+          const result = manual ?? viaPin?.result;
           return (
             <div key={i} className="rounded border border-slate-100 px-2.5 py-1.5 dark:border-slate-800">
               <div className="flex items-center gap-2">
                 <span className="min-w-0 truncate text-[13px] font-medium">{sig.name ?? `signature ${i + 1}`}</span>
                 <SignatureChip result={result} />
               </div>
+              {viaPin && (
+                <p className="py-0.5 text-xs text-slate-500 dark:text-slate-400">
+                  Verified with the pinned key "{viaPin.keyLabel}".
+                </p>
+              )}
               {result?.reason && (
                 <p className="py-0.5 text-xs text-slate-500 dark:text-slate-400">{result.reason}</p>
               )}

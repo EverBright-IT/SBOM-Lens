@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { IngestPush } from './adapter';
 import type { HostToWebviewMessage, WebviewToHostMessage } from './vscode-protocol';
 import { createVscodeHost } from './vscodeHost';
 
@@ -76,7 +77,7 @@ describe('vscodeHost bridge correlation', () => {
 
   it('delivers host-pushed files to the ingest callback as ArrayBuffers', () => {
     const host = createVscodeHost(fakeApi);
-    const received: Array<{ fileName: string; buffer: ArrayBuffer }> = [];
+    const received: IngestPush[] = [];
     host.onIngestMessage((files) => received.push(...files));
     expect(sent.at(-1)).toEqual({ type: 'ready' });
 
@@ -85,8 +86,50 @@ describe('vscodeHost bridge correlation', () => {
       files: [{ fileName: 'a.spdx', bytes: new TextEncoder().encode('SPDX') }],
     });
     expect(received).toHaveLength(1);
-    expect(received[0]!.fileName).toBe('a.spdx');
-    expect(new TextDecoder().decode(received[0]!.buffer)).toBe('SPDX');
+    const first = received[0]!;
+    expect(first.fileName).toBe('a.spdx');
+    if (!('buffer' in first)) throw new Error('expected a buffer push');
+    expect(new TextDecoder().decode(first.buffer)).toBe('SPDX');
+  });
+
+  it('fetches ingestUris into Blob pushes and degrades failures to empty buffers', async () => {
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = (async (url: RequestInfo | URL) =>
+      String(url).includes('big.ctf')
+        ? ({ ok: true, blob: async () => new Blob([new Uint8Array([1, 2, 3])]) } as Response)
+        : ({ ok: false, status: 404 } as Response)) as typeof fetch;
+    try {
+      const host = createVscodeHost(fakeApi);
+      const batches: IngestPush[][] = [];
+      host.onIngestMessage((files) => batches.push(files));
+      reply({
+        type: 'ingestUris',
+        files: [
+          { fileName: 'big.ctf', uri: 'https://resource.test/big.ctf' },
+          { fileName: 'gone.ctf', uri: 'https://resource.test/gone.ctf' },
+        ],
+      });
+      await vi.waitFor(() => expect(batches).toHaveLength(1));
+      const [ok, failed] = batches[0]!;
+      if (!('blob' in ok!)) throw new Error('expected a blob push');
+      expect(ok.fileName).toBe('big.ctf');
+      expect(ok.blob.size).toBe(3);
+      if (!('buffer' in failed!)) throw new Error('expected a buffer fallback');
+      expect(failed.buffer.byteLength).toBe(0);
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+  });
+
+  it('passes the compare intent through to the ingest callback', () => {
+    const host = createVscodeHost(fakeApi);
+    const opts: Array<{ compare?: boolean } | undefined> = [];
+    host.onIngestMessage((_files, o) => opts.push(o));
+
+    const files = [{ fileName: 'a.ctf', bytes: new Uint8Array([1]) }];
+    reply({ type: 'ingestFiles', files });
+    reply({ type: 'ingestFiles', files, compare: true });
+    expect(opts).toEqual([undefined, { compare: true }]);
   });
 
   it('reads prefs from the injected snapshot and echoes writes', () => {

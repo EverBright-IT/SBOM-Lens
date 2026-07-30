@@ -287,6 +287,24 @@ export async function ingestBuffers(entries: ReadonlyArray<IngestEntry>): Promis
   return added;
 }
 
+/**
+ * Host pushes (VS Code "open with", registry fetches) land here. `compare`
+ * opens the Diff view over the push: two documents, A = base, B = candidate.
+ * If a side was already loaded its id cannot be recovered from the push
+ * (duplicates are suppressed), so the view still opens with sides untouched
+ * and the user picks.
+ */
+export async function ingestPush(
+  files: ReadonlyArray<IngestEntry>,
+  opts?: { compare?: boolean },
+): Promise<void> {
+  const added = await ingestBuffers(files);
+  if (!opts?.compare) return;
+  const { actions } = useAppStore.getState();
+  if (added.length === 2) actions.setDiffSides(added[0]!, added[1]!);
+  actions.setView('diff');
+}
+
 // Archive extensions only make sense where deliveries do — the SPDX-only
 // product would just hand a tarball to a parser that cannot read it.
 const ACCEPTED_FILE = HAS_DELIVERIES
@@ -419,11 +437,24 @@ export interface UrlIngestResult {
   ok: boolean;
   message?: string;
   documentId?: DocumentId;
+  /** HTTP status when the server answered; absent on network/CORS failures. */
+  status?: number;
 }
 
-export async function ingestUrl(url: string): Promise<UrlIngestResult> {
+export interface UrlIngestOptions {
+  /**
+   * Whether a stored access token for the host may be attached. Deep links
+   * (`?url=`) pass false: a link someone else sent must not spend the
+   * recipient's credentials. The dialog, where the user types the URL
+   * themselves, keeps the default.
+   */
+  useStoredToken?: boolean;
+}
+
+export async function ingestUrl(url: string, options: UrlIngestOptions = {}): Promise<UrlIngestResult> {
   const { actions } = useAppStore.getState();
-  const result = await host().fetchDocument(url, authHeaders(await tokenForUrl(url)));
+  const token = options.useStoredToken === false ? undefined : await tokenForUrl(url);
+  const result = await host().fetchDocument(url, authHeaders(token));
   if (!result.ok) {
     if (result.status === undefined) {
       return {
@@ -439,6 +470,7 @@ export async function ingestUrl(url: string): Promise<UrlIngestResult> {
         : '';
     return {
       ok: false,
+      status: result.status,
       message: `Server answered ${result.status} ${result.statusText ?? ''}`.trimEnd() + `.${hint}`,
     };
   }
