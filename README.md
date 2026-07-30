@@ -68,12 +68,46 @@ Click **Load example** for a bundled four-document demo cascade, or drop your ow
 | Drag & drop | Anywhere in the window; folders are walked recursively |
 | Open ▸ Files / Folder | Standard pickers |
 | Open ▸ From URL | Fetches a document over HTTP(S), e.g. from a GitLab generic package registry |
+| `?url=` deep link | `https://sbom-lens.everbright-it.de/?url=<sbom-url>` opens a document straight from the address bar. Repeatable, so a cascade travels in one link |
 | Placeholder ▸ Fetch | Each unresolved reference offers a one-click fetch of its recorded URL |
 | **Fetch all** (status bar) | Downloads every referenced document **recursively** until the cascade is complete. One click for the full tree instead of one per placeholder |
 
 **Access tokens:** for private registries, add a per-host token in the URL dialog
 (GitLab `PRIVATE-TOKEN` or `Authorization: Bearer`). Tokens live in
 `sessionStorage` only: they die with the tab and are never persisted.
+
+**Deep links** make an SBOM linkable: a README, a release note or a registry
+page can point at "this document, rendered" instead of "download this file,
+then find a viewer". Repeat the parameter for a whole cascade:
+
+```
+https://sbom-lens.everbright-it.de/?url=<release.spdx.json>&url=<component.spdx.json>
+```
+
+A deep link is input from whoever sent it, so three rules apply, and they are
+pinned by tests rather than left to review:
+
+- **http(s) only, absolute.** `javascript:`, `data:`, `file:` and relative URLs
+  are rejected; a link cannot reach a non-fetch scheme, nor probe the
+  deployment that serves the viewer.
+- **Eight documents per link.** Enough for a cascade, not enough to be a way of
+  pointing someone else's browser at a server.
+- **Stored tokens are never attached.** A link someone sent must not spend the
+  recipient's credentials. If the source answers 401/403, the URL dialog opens
+  prefilled instead, so attaching a token stays a deliberate act.
+
+What a deep link deliberately does *not* do is filter by target address.
+`http://localhost:8080/sbom.json` is a legitimate link during development, so
+private ranges stay allowed. The consequence is understood: a crafted link can
+make the recipient's browser issue one GET from inside their network. The
+browser's same-origin policy keeps the response unreadable, nothing reaches the
+attacker and nothing reaches us — and any web page can already do the same with
+an image tag. Blocking the ranges would cost the local case and buy no real
+protection.
+
+> A URL in the address bar ends up in browser history and, on a deployment with
+> analytics, in its page-view record. Do not put a pre-signed or token-carrying
+> URL into a deep link you share.
 
 **CORS:** the browser can only fetch URLs whose server allows cross-origin
 requests. When it doesn't, SBOM Lens says so plainly. Download the file and drop

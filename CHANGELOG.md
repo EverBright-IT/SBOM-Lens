@@ -4,6 +4,25 @@ All notable changes to SBOM Lens. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [SemVer](https://semver.org) (0.x: the API surface is the app itself).
 
+## [0.26.2] - 2026-07-23
+
+### Changed
+- **Deep links are documented.** The `?url=` feature shipped in 0.26.0 with
+  nothing in the README: a shareable-link feature nobody could discover, when
+  discoverability was the whole reason to build it. The loading table now lists
+  it, and the rules it enforces (http(s) only, eight documents, no stored
+  tokens) are stated where a reader looks for them, along with the reason
+  private address ranges stay allowed and a warning not to share a
+  token-carrying URL as a deep link.
+- **The `overrides` entries carry a reason and an exit condition.**
+  [docs/ci-security.md](docs/ci-security.md) explains when to reach for an
+  override at all, why each of the two exists, and what has to happen before it
+  can go. Two hard-won notes ride along: the entry alone does not move the
+  lockfile (`npm update` does), and a major jump through the build toolchain has
+  to be exercised through its consumers, not just through the test suite.
+  Renovate now raises override bumps as their own merge request instead of
+  burying them in a grouped devDependency PR, so a stale entry becomes visible.
+
 ## [0.26.1] - 2026-07-23
 
 ### Security

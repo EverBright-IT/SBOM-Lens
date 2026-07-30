@@ -47,6 +47,37 @@ update PRs must originate on the internal GitLab so history never diverges.
 - **SAST/Secret Detection**: prefer fixing; for true false positives use the
   vendored `// nosemgrep` comment with a justification.
 
+## Forcing a transitive fix (`overrides`)
+
+Sometimes the fix for an advisory sits behind a range a dependency cannot
+reach: the vulnerable package is four levels down and its parent declares
+`^2.0.1` while the fix lands in 5.0.8. Bumping the direct dependency does not
+help, and ignoring the finding leaves the vulnerable code in the tree. For
+those cases the root `package.json` carries an `overrides` entry.
+
+`overrides` is a blunt instrument. It applies to every transitive occurrence,
+silently, forever, and nothing warns when it goes stale — so each entry needs a
+reason and an exit condition:
+
+| Override | Why | When it can go |
+|---|---|---|
+| `fast-uri: ^3.1.4` | GHSA-v2hh-gcrm-f6hx (7.5); the declared ranges (`^3.0.1`) allowed the fix but npm would not re-resolve on its own | once every consumer (ajv, via vite-plugin-pwa and @vscode/vsce) requires 3.1.4 or newer on its own |
+| `brace-expansion: ^5.0.8` | GHSA-mh99-v99m-4gvg (7.5); the fix is a major version and the deep `minimatch@5` chain declares `^2.0.1` | once the chain (vite-plugin-pwa → workbox-build → … → minimatch) ships a minimatch that depends on 5.x |
+
+Two practical notes, both learned the hard way:
+
+- **Adding the entry is not enough.** `npm install` keeps an already-resolved
+  version; the lockfile only moves after an explicit `npm update <package>`.
+  Always re-run the scanner afterwards to prove the override took.
+- **A major jump has to be exercised, not assumed.** These packages sit in the
+  build toolchain, so "tests pass" proves little. Run the consumers: the PWA
+  build (workbox requires brace-expansion through minimatch) and eslint (same
+  chain), plus `npm ci --dry-run` for lockfile consistency.
+
+Renovate treats `overrides` as its own dependency type, so a stale entry
+surfaces as its own merge request (see the `overrides` rule in
+`renovate.json`) instead of hiding inside a grouped devDependency bump.
+
 ## Verifying after a push
 
 The jobs above only prove themselves in a real pipeline run (the local

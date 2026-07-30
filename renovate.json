@@ -1,25 +1,52 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": ["config:recommended"],
-  "labels": ["renovate"],
+  "extends": [
+    "config:recommended"
+  ],
+  "labels": [
+    "renovate"
+  ],
   "rangeStrategy": "bump",
   "prConcurrentLimit": 5,
   "lockFileMaintenance": {
     "enabled": true,
-    "schedule": ["before 6am on the first day of the month"]
+    "schedule": [
+      "before 6am on the first day of the month"
+    ]
   },
   "packageRules": [
     {
       "description": "Group non-major devDependency bumps into one PR",
-      "matchDepTypes": ["devDependencies"],
-      "matchUpdateTypes": ["minor", "patch"],
+      "matchDepTypes": [
+        "devDependencies"
+      ],
+      "matchUpdateTypes": [
+        "minor",
+        "patch"
+      ],
       "groupName": "devDependencies (non-major)"
     },
     {
-      "description": "Runtime dependencies stay individual PRs — the app ships them",
-      "matchDepTypes": ["dependencies"],
-      "matchUpdateTypes": ["minor", "patch"],
+      "description": "Runtime dependencies stay individual PRs \u2014 the app ships them",
+      "matchDepTypes": [
+        "dependencies"
+      ],
+      "matchUpdateTypes": [
+        "minor",
+        "patch"
+      ],
       "groupName": null
+    },
+    {
+      "description": "Security overrides get their own PR: each one exists for a named advisory and must not go stale inside a grouped bump. See docs/ci-security.md.",
+      "matchDepTypes": [
+        "overrides"
+      ],
+      "groupName": null,
+      "labels": [
+        "renovate",
+        "override"
+      ]
     }
   ]
 }
