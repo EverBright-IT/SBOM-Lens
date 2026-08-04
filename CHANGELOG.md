@@ -4,6 +4,22 @@ All notable changes to SBOM Lens. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [SemVer](https://semver.org) (0.x: the API surface is the app itself).
 
+## [0.26.3] - 2026-07-23
+
+### Fixed
+- **Both extension listings now link to a tracker that exists.** Neither
+  manifest declared `bugs`, so Open VSX and the VS Marketplace derived
+  "Support" from `repository` and pointed at the GitLab monorepo's issue
+  list - where issues are switched off on the public mirror, so every
+  support link answered 404. Both now name the GitHub tracker explicitly,
+  and OCM Lens points at its own product repository rather than the one
+  named after the other product. The READMEs say the same thing, so the
+  listing body and the metadata agree.
+- `repository` deliberately keeps pointing at the monorepo in both
+  manifests: that is where the code actually is, and a viewer built to
+  check supply-chain provenance should not put a repository into its own
+  SBOM that does not contain its source.
+
 ## [0.26.2] - 2026-07-23
 
 ### Changed

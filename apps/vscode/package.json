@@ -3,13 +3,16 @@
   "displayName": "SBOM Lens",
   "icon": "icon.png",
   "description": "View SPDX and CycloneDX SBOMs, including cascading document hierarchies, right in your editor.",
-  "version": "0.26.2",
+  "version": "0.26.3",
   "publisher": "everbright-it",
   "license": "Apache-2.0",
   "private": true,
   "repository": {
     "type": "git",
     "url": "https://gitlab.com/everbrightit-group/sbom-lens.git"
+  },
+  "bugs": {
+    "url": "https://github.com/EverBright-IT/SBOM-Lens/issues"
   },
   "homepage": "https://sbom-lens.everbright-it.de/",
   "engines": {

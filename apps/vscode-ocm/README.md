@@ -102,9 +102,13 @@ and SBOMs stored in a delivery are extracted and linked automatically.
 
 ## Links
 
-- [Source & issues](https://gitlab.com/everbrightit-group/sbom-lens)
-  (GitLab, canonical: one monorepo for both products, label `ocm-lens`), or
-  the [GitHub mirror](https://github.com/EverBright-IT/SBOM-Lens)
+- [OCM Lens home](https://gitlab.com/everbrightit-group/ocm-lens) — what the
+  product is, where to get it ([GitHub](https://github.com/EverBright-IT/OCM-Lens))
+- [Source](https://gitlab.com/everbrightit-group/sbom-lens) (GitLab,
+  canonical: one monorepo for both products), or the
+  [GitHub mirror](https://github.com/EverBright-IT/SBOM-Lens)
+- [Report a bug](https://github.com/EverBright-IT/OCM-Lens/issues) — GitHub is
+  where the public tracker lives
 - [Changelog](https://gitlab.com/everbrightit-group/sbom-lens/-/blob/main/CHANGELOG.md)
 - [How OCM maps onto the viewer](https://gitlab.com/everbrightit-group/sbom-lens/-/blob/main/docs/ocm.md):
   the mapping table, supported archive layouts, and the limits
