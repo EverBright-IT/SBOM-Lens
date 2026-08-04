@@ -78,6 +78,15 @@ Renovate treats `overrides` as its own dependency type, so a stale entry
 surfaces as its own merge request (see the `overrides` rule in
 `renovate.json`) instead of hiding inside a grouped devDependency bump.
 
+**Why the lockfile refreshes weekly.** Three releases in a row failed the
+osv-scanner gate on advisories published between refreshes: the fixes were
+already inside the declared ranges, but a lockfile only moves when something
+moves it. Monthly maintenance left a window in which every release tripped over
+a fix it could already have had. `lockFileMaintenance` now runs weekly, and
+`vulnerabilityAlerts` is unscheduled so a security fix never waits for a group
+slot. That trades a few more merge requests for a gate that fires on genuinely
+new problems instead of on a stale lockfile.
+
 ## Verifying after a push
 
 The jobs above only prove themselves in a real pipeline run (the local

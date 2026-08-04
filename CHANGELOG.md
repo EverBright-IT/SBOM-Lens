@@ -4,6 +4,23 @@ All notable changes to SBOM Lens. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [SemVer](https://semver.org) (0.x: the API surface is the app itself).
 
+## [0.26.4] - 2026-08-04
+
+### Security
+- **brace-expansion 5.0.9, fast-uri 3.1.5, undici 7.29.0** (GHSA-rgw5-rvv9-x895,
+  GHSA-7p8r-x3mc-p8w7 and five undici advisories; 7.5 down to 4.2). Build-time
+  dependencies only; nothing shipped in the app or the extensions carried them.
+  Every fix was already inside a declared range, so the lockfile just had to be
+  moved. Feature-identical to 0.26.3.
+
+### Changed
+- **Renovate refreshes the lockfile weekly instead of monthly**, and security
+  fixes are no longer held for a group slot. Three releases in a row failed the
+  gate on advisories published between refreshes, each time on a fix that was
+  already reachable. A few more merge requests are cheaper than a gate that
+  keeps firing on a stale lockfile. Reasoning in
+  [docs/ci-security.md](docs/ci-security.md).
+
 ## [0.26.3] - 2026-07-23
 
 ### Fixed

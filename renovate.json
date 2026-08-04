@@ -11,7 +11,7 @@
   "lockFileMaintenance": {
     "enabled": true,
     "schedule": [
-      "before 6am on the first day of the month"
+      "before 6am on monday"
     ]
   },
   "packageRules": [
@@ -48,5 +48,15 @@
         "override"
       ]
     }
-  ]
+  ],
+  "vulnerabilityAlerts": {
+    "description": "Security fixes jump the queue: their own PR, labelled, not held for the group schedule.",
+    "labels": [
+      "renovate",
+      "security"
+    ],
+    "schedule": [
+      "at any time"
+    ]
+  }
 }
