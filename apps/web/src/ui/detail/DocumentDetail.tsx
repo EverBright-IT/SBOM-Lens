@@ -237,6 +237,31 @@ function QualitySection({ ws, loaded }: { ws: WorkspaceState; loaded: LoadedDocu
           {report.gatedFailed} of {report.gatedPassed + report.gatedFailed} gated checks failing
         </p>
       )}
+      {/* What the profile approximates and what it cannot check. Collapsed so
+          it never dominates the report, present so the report is never read
+          as a conformance statement. */}
+      {(report.profileDescription || report.profileSpecUrl) && (
+        <details className="mb-2">
+          <summary className="cursor-pointer text-xs text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200">
+            What this profile checks
+          </summary>
+          {report.profileDescription && (
+            <p className="mt-1 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+              {report.profileDescription}
+            </p>
+          )}
+          {report.profileSpecUrl && (
+            <a
+              href={report.profileSpecUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="mt-1 inline-block text-xs text-accent-600 hover:underline dark:text-accent-400"
+            >
+              Requirement source ↗
+            </a>
+          )}
+        </details>
+      )}
       <div className="grid gap-x-8 gap-y-0.5 sm:grid-cols-2">
         {booleans.map((result) => (
           <div key={result.id} className="flex items-center gap-1.5 text-xs" title={result.actual}>

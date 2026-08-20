@@ -32,7 +32,7 @@ both steps below are done.
 
 Renovate behavior lives in [`renovate.json`](../renovate.json): non-major
 devDependency bumps are grouped into one MR, runtime dependencies get
-individual MRs, lockfile maintenance runs monthly.
+individual MRs, lockfile maintenance runs weekly.
 
 **GitHub mirror:** Dependabot stays off on purpose. The mirror is read-only -
 update PRs must originate on the internal GitLab so history never diverges.
@@ -83,9 +83,18 @@ osv-scanner gate on advisories published between refreshes: the fixes were
 already inside the declared ranges, but a lockfile only moves when something
 moves it. Monthly maintenance left a window in which every release tripped over
 a fix it could already have had. `lockFileMaintenance` now runs weekly, and
-`vulnerabilityAlerts` is unscheduled so a security fix never waits for a group
-slot. That trades a few more merge requests for a gate that fires on genuinely
-new problems instead of on a stale lockfile.
+carries `prConcurrentLimit: 0` so the refresh is never skipped because five
+other update MRs happen to be open.
+
+**Which alerts actually reach us.** `vulnerabilityAlerts` on its own does
+nothing here: Renovate declares it `supportedPlatforms: ['github']`, it reads
+GitHub's Dependabot alerts, and Dependabot is off on the mirror on purpose
+(see above). The platform-independent source is `osvVulnerabilityAlerts`,
+which queries the OSV database and is enabled. Its documented limit matters
+for us: OSV alerts cover **direct dependencies only**, while every advisory
+that has broken a release so far was transitive. So the weekly lockfile
+refresh, not the alerting, is what closes that gap; the `vulnerabilityAlerts`
+block now only labels whatever PRs the OSV path raises.
 
 ## Verifying after a push
 

@@ -144,8 +144,14 @@ documents** without nagging you to resolve them.
 | **Diff** | "What changed between these two releases?" Added, removed and version-changed packages between two cascades (each side is a document plus everything reachable through its resolved references), copyable as Markdown for release notes |
 
 Each document's detail pane additionally shows a **quality report** oriented on
-the NTIA minimum elements: author/timestamp/namespace/relationship checks, plus
-per-package coverage of versions, suppliers, unique IDs, checksums, and licenses.
+the [NTIA minimum elements (2021)](https://www.ntia.gov/report/2021/minimum-elements-software-bill-materials-sbom): author/timestamp/namespace/
+relationship checks, plus per-package coverage of versions, suppliers, unique
+IDs, checksums, and licenses. A **CISA 2026 minimum elements** preset measures
+the same document against the [successor](https://www.cisa.gov/resources-tools/resources/2026-minimum-elements-software-bill-materials-sbom) published on 29 July 2026 by
+CISA, NSA, FBI and 16 international partners, which replaces the 2021 document,
+and a **[BSI TR-03183-2](https://www.bsi.bund.de/dok/TR-03183)** preset approximates the German technical
+requirement. Every report names its requirement source and links it, so the
+mapping can be checked against the standard rather than trusted.
 Factual numbers, no invented score. Organizations can go further with
 **custom compliance profiles**: a small JSON file with your own minimum
 elements (field presence, patterns, coverage thresholds, recency) that imports

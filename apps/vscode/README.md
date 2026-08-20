@@ -32,7 +32,9 @@ release diff, and quality reports.
   references become actionable placeholders.
 - **Analysis views.** A sortable cross-cascade inventory (CSV/JSON export via
   the native save dialog), version-conflict detection, release-to-release
-  diffs, and an NTIA quality report per document.
+  diffs, and a quality report per document against the NTIA minimum elements
+  (2021), the [CISA 2026 minimum elements](https://www.cisa.gov/resources-tools/resources/2026-minimum-elements-software-bill-materials-sbom) that replace them, or
+  [BSI TR-03183-2](https://www.bsi.bund.de/dok/TR-03183). Each report links its requirement source.
 - **Your own compliance rules.** Drop a `.sbomlens/profile.json` into the
   workspace and every panel picks it up as a quality profile: thresholds,
   field patterns, coverage gates. Reports export as Markdown.

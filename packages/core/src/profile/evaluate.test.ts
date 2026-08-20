@@ -234,6 +234,28 @@ describe('profileReportToMarkdown', () => {
     expect(md).toContain('| Version | 1/2 | 50% | ≥ 100% | **fail** |');
     expect(md).toContain('1 dangling relationship target(s)');
   });
+
+  it('carries the caveat and the requirement source into the export', async () => {
+    // docs/compliance-profiles.md promises that "exported reports carry the
+    // caveat with them". Until v0.27.0 the description never left the source
+    // file, which made that promise false; this pins it.
+    const { CISA_2026_PROFILE } = await import('./cisa2026');
+    const { ws, loaded } = docFrom({ creators: ['Organization: ACME'], packages: [{ version: '1' }] });
+    const report = evaluateProfile(ws, loaded, CISA_2026_PROFILE);
+    expect(report.profileDescription).toBe(CISA_2026_PROFILE.description);
+    expect(report.profileSpecUrl).toBe(CISA_2026_PROFILE.specUrl);
+
+    const md = profileReportToMarkdown(report, { docName: 't' });
+    expect(md).toContain('Requirement source: <https://www.cisa.gov/');
+    expect(md).toContain('not a conformance statement');
+  });
+
+  it('omits both lines for a profile that declares neither', () => {
+    const { ws, loaded } = docFrom({ creators: ['Organization: ACME'], packages: [] });
+    const report = evaluateProfile(ws, loaded, profileOf({ id: 'c', type: 'document-field', field: 'creators' }));
+    expect(report.profileSpecUrl).toBeUndefined();
+    expect(profileReportToMarkdown(report, { docName: 't' })).not.toContain('Requirement source');
+  });
 });
 
 describe('OCM essentials profile on a component descriptor', () => {

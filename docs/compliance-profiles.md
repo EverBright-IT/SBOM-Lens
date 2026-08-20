@@ -1,6 +1,7 @@
 # Compliance profiles
 
-SBOM Lens ships the NTIA minimum elements as its default quality report, and
+SBOM Lens ships the [NTIA minimum elements (2021)](https://www.ntia.gov/report/2021/minimum-elements-software-bill-materials-sbom) as its default quality
+report, and
 lets every organization define its **own** minimum elements as a small JSON
 file. The active profile drives the Quality section of each document and its
 Markdown export; nothing else in the app changes.
@@ -122,17 +123,42 @@ chars (must compile), ids unique, `algorithms` ≤ 8 entries.
   rules.
 
 Switch profiles in the Quality section's dropdown; `×` removes an imported
-profile (falls back to the builtin: NTIA minimum elements in SBOM Lens,
+profile (falls back to the builtin: NTIA minimum elements (2021) in SBOM Lens,
 OCM component essentials in OCM Lens); **Export** writes the current report
 as Markdown for audits. Up to 16 imported profiles (256 KB total) persist;
 anything beyond that stays session-only with a notice.
 
 ## Builtin presets
 
-Besides the default (NTIA minimum elements for SPDX documents, OCM component
-essentials for component descriptors), the dropdown offers:
+Besides the default (NTIA minimum elements (2021) for SPDX documents, OCM
+component essentials for component descriptors), the dropdown offers:
 
-- **BSI TR-03183-2 field coverage (approximation)**: the machine-checkable
+- **[CISA 2026 minimum elements](https://www.cisa.gov/resources-tools/resources/2026-minimum-elements-software-bill-materials-sbom)**: the data fields of the *2026 Minimum
+  Elements for a Software Bill of Materials* (CISA, NSA, FBI and 16
+  international partners including the BSI, 29 July 2026), which
+  **updates and replaces** the 2021 NTIA minimum elements. Nine checks
+  cover eleven of the seventeen data fields in the document's Appendix A:
+  SBOM author (a Person or Organization creator, not the tool), SBOM
+  timestamp, SBOM tool name, and coverage meters for component producer,
+  version, identifiers, hash and licence, plus dependency relationships.
+  Two mapping decisions are worth knowing. **Component producer is read
+  from the SPDX `originator` field, not `supplier`**: the 2026 text
+  replaced "Supplier Name" because supplier denotes the distributor, and
+  SPDX draws the same line. Mainstream generators populate neither field
+  today, so a low meter is a finding about the SBOM rather than about the
+  profile. **Hash value and hash algorithm are one check**, because both
+  formats carry them as a pair. Unlike the BSI preset there is no format
+  baseline: the 2026 elements name SPDX and CycloneDX without a version
+  floor. Component name and the two SBOM data-format fields are satisfied
+  by construction in any parsed document and are not checked; SBOM author
+  signature, generation context, SBOM version and the tool version on its
+  own are not readable by this engine and are listed in the profile's own
+  description. The six *Practices and Processes* elements describe how an
+  organisation handles SBOM data and are out of scope for a document
+  check, with one note: the **Coverage** element explicitly accepts
+  linking to separate SBOM documents, which is what the workspace
+  resolves and reports as a cascade.
+- **[BSI TR-03183-2 field coverage (approximation)](https://www.bsi.bund.de/dok/TR-03183)**: the machine-checkable
   field requirements of BSI TR-03183 part 2 v2.1.0, gated at 100%: SBOM
   creator with contact (email or URL, on a Person/Organization creator),
   timestamp, per-component version, creator (via supplier), licence, and a
@@ -149,8 +175,9 @@ essentials for component descriptors), the dropdown offers:
   coverage, not the full TR.
   What the engine cannot check (component filenames, the
   executable/archive/structured properties, source URIs, the completeness
-  indication) is listed in the profile's own description, so exported
-  reports carry the caveat with them.
+  indication) is listed in the profile's own description, which the report
+  shows under *What this profile checks* and the Markdown export carries as
+  a blockquote, together with a link to the requirement source.
 
 Builtin presets are code, not stored data: they cannot be removed, and the
 selection persists per product.
@@ -161,7 +188,8 @@ For scoring SBOMs against the published standards themselves, use
 [sbomqs](https://github.com/interlynk-io/sbomqs): it implements BSI
 TR-03183-2 (v1.1, v2.0, v2.1), the NTIA minimum elements, FSCT v3, and
 OpenChain Telco, reads both SPDX and CycloneDX, and is actively
-maintained. SBOM Lens deliberately does not compete on standards breadth;
+maintained. As of sbomqs v2.0.12 it carries no scorer for the 2026
+minimum elements. SBOM Lens deliberately does not compete on standards breadth;
 the BSI preset above stays a viewer-side approximation.
 
 Profiles cover what a standards scorer cannot: checks you define yourself

@@ -1,5 +1,11 @@
 import type { ComplianceProfile, SpecInfo } from '@sbomlens/core';
-import { BSI_TR_03183_PROFILE, MAX_PROFILE_BYTES, NTIA_PROFILE, validateProfile } from '@sbomlens/core';
+import {
+  BSI_TR_03183_PROFILE,
+  CISA_2026_PROFILE,
+  MAX_PROFILE_BYTES,
+  NTIA_PROFILE,
+  validateProfile,
+} from '@sbomlens/core';
 import { OCM_ESSENTIALS_PROFILE } from '@sbomlens/core/ocm';
 import { HAS_DELIVERIES, pref } from './brand';
 import { host } from '../host/adapter';
@@ -179,7 +185,10 @@ export function builtinProfileName(model: SpecInfo['model']): string {
  */
 export function extraBuiltinProfiles(model: SpecInfo['model']): { id: string; profile: ComplianceProfile }[] {
   if (HAS_DELIVERIES && model === 'ocm') return [];
-  return [{ id: 'builtin:bsi-tr-03183', profile: BSI_TR_03183_PROFILE }];
+  return [
+    { id: 'builtin:cisa-2026', profile: CISA_2026_PROFILE },
+    { id: 'builtin:bsi-tr-03183', profile: BSI_TR_03183_PROFILE },
+  ];
 }
 
 /** Resolves the active profile, falling back to the model's builtin. */

@@ -108,6 +108,7 @@ export function validateProfile(raw: unknown): ProfileValidation {
       schema,
       name: name!,
       description: asString(raw.description),
+      specUrl: asString(raw.specUrl),
       ...(requires ? { requires } : {}),
       checks,
     },

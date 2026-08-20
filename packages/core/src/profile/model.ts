@@ -114,6 +114,13 @@ export interface ComplianceProfile {
   schema: typeof PROFILE_SCHEMA_V1 | typeof PROFILE_SCHEMA_V2 | typeof PROFILE_SCHEMA_V3;
   name: string;
   description?: string;
+  /**
+   * The requirement source itself. A profile that approximates a published
+   * standard must let the reader check the mapping against that standard,
+   * the same way field tooltips link the SPDX spec. Display only: no schema
+   * bump, because an engine that ignores it loses a link, never a check.
+   */
+  specUrl?: string;
   requires?: ProfileRequires;
   checks: ProfileCheck[];
 }

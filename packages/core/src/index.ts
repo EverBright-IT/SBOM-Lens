@@ -133,6 +133,7 @@ export type { CoverageStat, ProfileCheckResult, ProfileReport } from './profile/
 export { evaluateProfile } from './profile/evaluate';
 export { NTIA_PROFILE } from './profile/ntia';
 export { BSI_TR_03183_PROFILE } from './profile/bsi';
+export { CISA_2026_PROFILE } from './profile/cisa2026';
 export { profileReportToMarkdown } from './profile/markdown';
 
 export type { SpecFieldDoc } from './spec/spdx23-field-docs';

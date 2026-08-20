@@ -15,6 +15,7 @@ import { PROFILE_SCHEMA_V3 } from './model';
 export const BSI_TR_03183_PROFILE: ComplianceProfile = {
   schema: PROFILE_SCHEMA_V3,
   name: 'BSI TR-03183-2 field coverage (approximation)',
+  specUrl: 'https://www.bsi.bund.de/dok/TR-03183',
   description:
     'Approximates BSI TR-03183-2 v2.1.0. The TR accepts only SPDX 3.0.1+ or ' +
     'CycloneDX 1.6+ as formats; this profile enforces that baseline as a ' +

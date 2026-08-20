@@ -12,7 +12,9 @@
     "enabled": true,
     "schedule": [
       "before 6am on monday"
-    ]
+    ],
+    "prConcurrentLimit": 0,
+    "description": "Weekly, and exempt from prConcurrentLimit: only lockfile maintenance moves transitive versions, and osv-scanner findings are almost always transitive. See docs/ci-security.md."
   },
   "packageRules": [
     {
@@ -50,13 +52,11 @@
     }
   ],
   "vulnerabilityAlerts": {
-    "description": "Security fixes jump the queue: their own PR, labelled, not held for the group schedule.",
+    "description": "PR styling only. Detection comes from osvVulnerabilityAlerts: this option itself is GitHub-only (Renovate supportedPlatforms), and Dependabot is off on the mirror by design.",
     "labels": [
       "renovate",
       "security"
-    ],
-    "schedule": [
-      "at any time"
     ]
-  }
+  },
+  "osvVulnerabilityAlerts": true
 }

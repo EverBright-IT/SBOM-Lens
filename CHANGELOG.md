@@ -4,6 +4,43 @@ All notable changes to SBOM Lens. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [SemVer](https://semver.org) (0.x: the API surface is the app itself).
 
+## [0.27.0] - 2026-08-20
+
+### Added
+- **CISA 2026 minimum elements** as a selectable builtin profile. The
+  *2026 Minimum Elements for a Software Bill of Materials* (CISA, NSA, FBI
+  and 16 international partners including the BSI, 29 July 2026) updates and
+  replaces the 2021 NTIA minimum elements. Nine checks cover eleven of the
+  seventeen data fields in Appendix A. Component producer is read from the
+  SPDX `originator` field rather than `supplier`, following the document's
+  own reason for the rename; hash value and hash algorithm are one check.
+  No format baseline, since the 2026 elements set no version floor. What the
+  engine cannot read (author signature, generation context, SBOM version,
+  tool version on its own) is named in the profile description.
+
+### Changed
+- The default quality report is now labelled **NTIA minimum elements (2021)**
+  and carries a description pointing at its successor. The checks are
+  unchanged, so existing reports keep their results.
+- **Every profile report now names and links its requirement source.** Profiles
+  gained an optional `specUrl`, and the report shows the profile description
+  under *What this profile checks* while the Markdown export carries it as a
+  blockquote. Until now the descriptions, which is where each preset states
+  what it approximates and what it cannot check, existed only in the source
+  file: `docs/compliance-profiles.md` promised that exported reports carry
+  that caveat, and they did not.
+- **Renovate: the alerting was inert on this platform.** `vulnerabilityAlerts`
+  is declared `supportedPlatforms: ['github']` by Renovate and reads
+  Dependabot alerts, which are off on the mirror by design, so the block never
+  fired. `osvVulnerabilityAlerts` is now enabled as the platform-independent
+  source. Because OSV alerts cover direct dependencies only while every
+  advisory that broke a release was transitive, weekly `lockFileMaintenance`
+  also got `prConcurrentLimit: 0` so the refresh cannot be starved by open
+  update MRs. `docs/ci-security.md` said "monthly" in one place and "weekly"
+  in another; both now say what the config does.
+- SBOM Lens extension: README and marketplace keywords name the CISA 2026 and
+  BSI TR-03183-2 presets, not just NTIA.
+
 ## [0.26.4] - 2026-08-04
 
 ### Security

@@ -10,7 +10,16 @@ import { PROFILE_SCHEMA_V1 } from './model';
  */
 export const NTIA_PROFILE: ComplianceProfile = {
   schema: PROFILE_SCHEMA_V1,
-  name: 'NTIA minimum elements',
+  name: 'NTIA minimum elements (2021)',
+  specUrl: 'https://www.ntia.gov/report/2021/minimum-elements-software-bill-materials-sbom',
+  description:
+    'The 2021 NTIA minimum elements, kept as the default report because ' +
+    'contracts and procurement documents still name them. CISA, NSA, FBI ' +
+    'and international partners published the 2026 Minimum Elements on ' +
+    '29 July 2026, which updates and replaces this document: it renames ' +
+    'supplier to component producer, and adds component hash, component ' +
+    'license and SBOM tool elements. Select the CISA 2026 preset to ' +
+    'measure against the current version.',
   checks: [
     { id: 'creators', type: 'document-field', field: 'creators', label: 'SBOM author (creators)' },
     { id: 'created', type: 'document-field', field: 'created', label: 'Timestamp (created)' },

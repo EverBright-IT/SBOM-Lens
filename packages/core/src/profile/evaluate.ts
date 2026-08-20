@@ -30,6 +30,10 @@ export interface ProfileCheckResult {
 
 export interface ProfileReport {
   profileName: string;
+  /** Carried so every rendering path can show what the profile is and is not. */
+  profileDescription?: string;
+  /** The requirement source, so a reader can check the mapping themselves. */
+  profileSpecUrl?: string;
   packagesTotal: number;
   results: ProfileCheckResult[];
   gatedPassed: number;
@@ -135,6 +139,8 @@ export function evaluateProfile(
 
   return {
     profileName: profile.name,
+    ...(profile.description ? { profileDescription: profile.description } : {}),
+    ...(profile.specUrl ? { profileSpecUrl: profile.specUrl } : {}),
     packagesTotal: packages.length,
     results,
     gatedPassed,

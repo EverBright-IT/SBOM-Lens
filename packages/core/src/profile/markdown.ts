@@ -18,11 +18,20 @@ export function profileReportToMarkdown(
   lines.push(`# Quality report: ${opts.docName}`);
   lines.push('');
   lines.push(`- Profile: **${report.profileName}**`);
+  if (report.profileSpecUrl) lines.push(`- Requirement source: <${report.profileSpecUrl}>`);
   if (opts.sourceFileName) lines.push(`- Source file: \`${opts.sourceFileName}\``);
   if (opts.generatedAt) lines.push(`- Generated: ${opts.generatedAt}`);
   const gates = report.gatedPassed + report.gatedFailed;
   lines.push(`- Result: **${report.gatedPassed}/${gates} gated checks passed**`);
   lines.push('');
+
+  // The description carries what the profile approximates and what it
+  // cannot check. An exported report that drops it would read as a
+  // conformance statement, which is exactly what it is not.
+  if (report.profileDescription) {
+    lines.push('> ' + report.profileDescription);
+    lines.push('');
+  }
 
   const booleans = report.results.filter((r) => r.kind === 'boolean');
   if (booleans.length > 0) {
