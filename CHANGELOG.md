@@ -4,6 +4,20 @@ All notable changes to SBOM Lens. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [SemVer](https://semver.org) (0.x: the API surface is the app itself).
 
+## [0.27.1] - 2026-08-20
+
+### Security
+- **js-yaml 4.3.1, nanoid 3.3.18** (GHSA-5p4m-2wfm-xmqj 7.5, GHSA-2v37-7h3g-55p8
+  8.2). Both are transitive build-time dependencies: js-yaml arrives through
+  vsce and secretlint, nanoid through vite and postcss. Nothing shipped in the
+  app or the extensions carried them. `npm update` moved both, so no `overrides`
+  entry was needed.
+- These landed between lockfile refreshes, which is the pattern v0.27.0 set out
+  to close, and they show why the fix in it was the right one: both are
+  transitive, so OSV alerting would not have raised them either way. The weekly
+  `lockFileMaintenance` run is the mechanism that catches this class, and it
+  had not yet run when v0.27.0 was tagged.
+
 ## [0.27.0] - 2026-08-20
 
 ### Added
