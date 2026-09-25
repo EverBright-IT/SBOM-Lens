@@ -127,5 +127,15 @@ export const CRYPTO_CURVE_COUNT = ${curveEnum.length};
 `;
 
 const target = resolve(here, '../src/spec/cdx-crypto-registry.ts');
-writeFileSync(target, out);
-console.log(`wrote ${target}: ${families.length} families, ${curveEnum.length} curves, ${curveAliases.size} curve spellings`);
+if (process.argv.includes('--check')) {
+  // CI drift gate: the committed module must be what the data files yield. A
+  // comparison here needs no git in the job image.
+  if (readFileSync(target, 'utf8') !== out) {
+    console.error(`${target} is out of date: run "npm run generate:crypto-registry -w @sbomlens/core" and commit the result`);
+    process.exit(1);
+  }
+  console.log(`${target} matches its data files`);
+} else {
+  writeFileSync(target, out);
+  console.log(`wrote ${target}: ${families.length} families, ${curveEnum.length} curves, ${curveAliases.size} curve spellings`);
+}

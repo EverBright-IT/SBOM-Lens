@@ -36,8 +36,9 @@ test:
     - npm run test
     # The vendored vocabularies (SPDX License List ids, CycloneDX crypto
     # registry) are generated; the committed output must match its sources.
-    - npm run generate:license-ids -w @sbomlens/core && npm run generate:crypto-registry -w @sbomlens/core
-    - git diff --exit-code -- packages/core/src/spec/spdx-license-ids.ts packages/core/src/spec/cdx-crypto-registry.ts
+    # The generators compare in --check mode: node:22-alpine carries no git.
+    - npm run generate:license-ids -w @sbomlens/core -- --check
+    - npm run generate:crypto-registry -w @sbomlens/core -- --check
 
 # Known-vulnerability gate over the lockfile (blocking). Ignores, when ever
 # needed, go into osv-scanner.toml; see docs/ci-security.md.

@@ -116,15 +116,16 @@ describe('CSAF through the ingest funnel', () => {
   });
 
   it('commits a folder of advisories as one batch with one summary', async () => {
-    const before = useAppStore.getState().toasts.length;
+    // Earlier tests' toasts auto-dismiss on a timer; clear them so the count is exact.
+    for (const t of useAppStore.getState().toasts) useAppStore.getState().actions.dismissToast(t.id);
     await ingestBuffers([
       { fileName: 'a.csaf.json', buffer: buf(CSAF) },
       { fileName: 'b.csaf.json', buffer: buf(CSAF.replace('ACME-CSAF-1', 'ACME-CSAF-2')) },
     ]);
     const state = useAppStore.getState();
     expect(state.vex.documents.map((d) => d.trackingId)).toEqual(['ACME-CSAF-1', 'ACME-CSAF-2']);
-    expect(state.toasts.length - before).toBe(1);
-    expect(state.toasts[state.toasts.length - 1]!.message).toContain('2 advisory documents loaded');
+    expect(state.toasts).toHaveLength(1);
+    expect(state.toasts[0]!.message).toContain('2 advisory documents loaded');
   });
 
   it('records an advisory with a spec finding as loaded, not as a failure', async () => {

@@ -12,7 +12,7 @@
  * Run after bumping the source packages:  node packages/core/scripts/extract-license-ids.mjs
  */
 import { createRequire } from 'node:module';
-import { writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -97,7 +97,17 @@ export function isDeprecatedExceptionId(id: string): boolean {
 `;
 
 const target = resolve(here, '../src/spec/spdx-license-ids.ts');
-writeFileSync(target, out);
-console.log(
-  `wrote ${target}: ${ids.length} ids (${deprecated.length} deprecated), ${exceptions.length} exceptions (${deprecatedExceptions.length} deprecated)`,
-);
+if (process.argv.includes('--check')) {
+  // CI drift gate: the committed module must be what the sources yield. A
+  // comparison here needs no git in the job image.
+  if (readFileSync(target, 'utf8') !== out) {
+    console.error(`${target} is out of date: run "npm run generate:license-ids -w @sbomlens/core" and commit the result`);
+    process.exit(1);
+  }
+  console.log(`${target} matches its sources`);
+} else {
+  writeFileSync(target, out);
+  console.log(
+    `wrote ${target}: ${ids.length} ids (${deprecated.length} deprecated), ${exceptions.length} exceptions (${deprecatedExceptions.length} deprecated)`,
+  );
+}

@@ -4,6 +4,17 @@ All notable changes to SBOM Lens. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [SemVer](https://semver.org) (0.x: the API surface is the app itself).
 
+## [0.29.2] - 2026-09-25
+
+### Fixed
+- CI: the drift check for the generated SPDX License List and Cryptography
+  Registry modules called `git diff`, and the `node:22-alpine` job image
+  carries no git, so the `test` job of 0.29.1 failed at its last step after
+  lint, typecheck and all 692 tests had passed. The generators now compare
+  in `--check` mode, on GitLab and GitHub alike. A test that counted toasts
+  relative to earlier tests' auto-dismissed ones is exact now. No product
+  change: 0.29.1 and 0.29.2 ship the same viewer.
+
 ## [0.29.1] - 2026-09-25
 
 ### Fixed

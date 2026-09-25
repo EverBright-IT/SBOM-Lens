@@ -20,6 +20,9 @@ jobs:
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test
+      # Generated vocabularies must match their sources (same gate as GitLab).
+      - run: npm run generate:license-ids -w @sbomlens/core -- --check
+      - run: npm run generate:crypto-registry -w @sbomlens/core -- --check
       # Both product flavors, with the same four gates as the GitLab
       # build/build-ocm jobs: brand leak (twice), separation (no OCM code in
       # the SBOM Lens bundle), and the counter-check that a passing gate

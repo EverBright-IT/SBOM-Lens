@@ -5,7 +5,7 @@ pipeline; the GitHub workflow mirrors the quality gates and the osv scan.
 
 | Job | Pipeline | When | Blocking | What it does |
 | --- | --- | --- | --- | --- |
-| `test` | GitLab + GitHub | every push/MR | yes | lint, typecheck, unit tests |
+| `test` | GitLab + GitHub | every push/MR | yes | lint, typecheck, unit tests, and the generated SPDX License List and Cryptography Registry modules must match their sources (`--check` mode of the generators) |
 | `osv-scan` | GitLab + GitHub | every push/MR | yes | known CVEs in `package-lock.json` via [osv-scanner](https://google.github.io/osv-scanner/) |
 | `semgrep-sast` | GitLab (template) | every push/MR | findings reported as artifacts | static analysis of the TS/JS sources |
 | `secret_detection` | GitLab (template) | every push/MR | findings reported as artifacts | committed-credential scan |
