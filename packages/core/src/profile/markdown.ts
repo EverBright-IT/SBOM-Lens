@@ -53,7 +53,8 @@ export function profileReportToMarkdown(
       const c = result.coverage!;
       const threshold = c.threshold === undefined ? '-' : `≥ ${c.threshold}%`;
       const verdict = c.threshold === undefined ? 'info' : result.pass ? 'pass' : '**fail**';
-      lines.push(`| ${result.label} | ${c.satisfied}/${c.total} | ${c.percent}% | ${threshold} | ${verdict} |`);
+      const percent = c.total === 0 ? 'none in scope' : `${c.percent}%`;
+      lines.push(`| ${result.label} | ${c.satisfied}/${c.total} | ${percent} | ${threshold} | ${verdict} |`);
     }
     lines.push('');
   }

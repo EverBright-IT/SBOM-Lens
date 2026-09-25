@@ -151,12 +151,21 @@ IDs, checksums, and licenses. A **CISA 2026 minimum elements** preset measures
 the same document against the [successor](https://www.cisa.gov/resources-tools/resources/2026-minimum-elements-software-bill-materials-sbom) published on 29 July 2026 by
 CISA, NSA, FBI and 16 international partners, which replaces the 2021 document,
 and a **[BSI TR-03183-2](https://www.bsi.bund.de/dok/TR-03183)** preset approximates the German technical
-requirement. Three sector presets measure field coverage the same way:
+requirement. Four further presets measure field coverage the same way:
 **[OpenChain Automotive SBOM v1.1](https://github.com/OpenChain-Project/Automotive-SBOM)**
 (the thirteen mandatory fields), **[FDA 524B cybersecurity (02/2026)](https://www.fda.gov/regulatory-information/search-fda-guidance-documents/cybersecurity-medical-devices-quality-management-system-considerations-and-content-premarket)**
-(the 2021 baseline plus level of support and end-of-support date), and
+(the 2021 baseline plus level of support and end-of-support date),
 **BSI TR-03183-2 licence fields (6.1)** (distribution and effective licence as
-SPDX identifiers, checked against the SPDX License List). Every report names
+SPDX identifiers, checked against the SPDX License List), and the
+**[G7 SBOM for AI minimum elements](https://www.bsi.bund.de/SharedDocs/Downloads/EN/BSI/KI/SBOM-for-AI_minimum-elements.html)**
+(17 of the 50 elements measured, with model and dataset meters scoped to
+those components). A CycloneDX **CBOM** (cryptographic assets with their
+algorithms, certificates, keys and protocols) gets its own detail section,
+lint against the CycloneDX Cryptography Registry, and four presets that
+count what the inventory states against the EU PQC roadmap, the DORA
+certificate register, PCI DSS 12.3.3 and the parameter tables of
+BSI TR-02102-1 (2026-01), each row citing its source and none of them
+rating an algorithm. Every report names
 its requirement source and links it, so the mapping can be checked against the
 standard rather than trusted. None of them states conformance.
 Factual numbers, no invented score. Organizations can go further with
@@ -166,12 +175,17 @@ per drag&drop, via the deployment catalog, or from `.sbomlens/profile.json`
 in a VS Code workspace. Reports export as Markdown. See
 [docs/compliance-profiles.md](docs/compliance-profiles.md).
 
-Drop an **OpenVEX document** next to your SBOMs and the viewer shows what the
-supplier communicates about known vulnerabilities: per-package statements with
-status, justification, and action, a VEX column + status filter in the
-Inventory, and findings riding the exports. Matched by package URL, newest
-statement wins; it is a communication channel, not a scanner. See
-[docs/vex.md](docs/vex.md).
+Drop an **OpenVEX document or a CSAF advisory** (or a whole folder of them, as
+a `csaf_downloader` mirror produces) next to your SBOMs and the viewer shows
+what the supplier communicates about known vulnerabilities: per-package
+statements with status, justification and remediations, a VEX column + status
+filter in the Inventory, and findings riding the exports. Matched by package
+URL, CPE or file hash, newest statement wins; it is a communication channel,
+not a scanner. Each CSAF document is measured against the clauses of
+[BSI TR-03191](https://www.bsi.bund.de/SharedDocs/Downloads/EN/BSI/Publications/TechGuidelines/TR03191/BSI-TR-03191.html)
+that a file can show (CVE and CVSS, profile, fixing versions, TLP, product
+tree structure, product hashes, revision history), as facts with clause
+numbers, never as a verdict. See [docs/vex.md](docs/vex.md).
 
 Documents are also checked against their own specification. **Spec findings**
 report what a consumer downstream would trip over: a relationship type
@@ -230,9 +244,9 @@ Known boundaries, stated plainly so nothing surprises you:
 
 - **Format scope.** SPDX 2.x in full; SPDX 3.0.x as JSON-LD with the
   core/software profiles mapped (other profiles are counted, not rendered);
-  CycloneDX 1.x as JSON or XML (services, compositions and embedded VEX data
-  are out of scope; a YAML-serialized BOM is read tolerantly but is not a
-  CycloneDX serialization). XML is read by a small built-in reader that
+  CycloneDX 1.x as JSON or XML including CBOM cryptographic assets (services,
+  compositions and embedded VEX data are out of scope; a YAML-serialized BOM
+  is read tolerantly but is not a CycloneDX serialization). XML is read by a small built-in reader that
   refuses document type declarations (no entity expansion, no external
   references) and expects UTF-8; SPDX RDF/XML is recognized only far enough
   to say so. Trivy-native JSON is recognized with a conversion hint, not

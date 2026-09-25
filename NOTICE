@@ -24,6 +24,12 @@ and spdx-exceptions, Copyright the SPDX contributors and the package
 authors, licensed under the Creative Commons Attribution License 3.0
 (CC-BY-3.0). Identifiers and deprecation flags only; no licence texts.
 
+This product includes the vocabulary of the CycloneDX Cryptography Registry
+(https://cyclonedx.org/registry/cryptography/, cryptography-defs.json and its
+schema from https://github.com/CycloneDX/specification), Copyright OWASP
+Foundation and CycloneDX contributors, licensed under the Apache License 2.0.
+Algorithm family and elliptic curve names only; no ratings.
+
 This product includes field documentation paraphrased from the Open
 Component Model specification
 (https://ocm.software, https://github.com/open-component-model/ocm-spec),

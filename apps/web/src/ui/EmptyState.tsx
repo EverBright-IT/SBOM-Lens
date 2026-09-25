@@ -5,10 +5,12 @@ import { useAppStore } from '../app/store';
 import { loadExample } from './examples';
 import { BrandLogo, DocumentIcon } from './icons';
 import { FilePickers } from './OpenMenu';
+import { VexDocumentRow } from './detail/VexSection';
 
 export function EmptyState() {
   const actions = useAppStore((s) => s.actions);
   const catalog = useAppStore((s) => s.catalog);
+  const advisories = useAppStore((s) => s.vex.documents);
   const filesRef = useRef<HTMLInputElement>(null);
   const folderRef = useRef<HTMLInputElement>(null);
 
@@ -67,6 +69,22 @@ export function EmptyState() {
                 </button>
               ))}
             </div>
+          </div>
+        )}
+
+        {advisories.length > 0 && (
+          <div className="mt-7 text-left">
+            <h2 className="mb-2 text-center text-[11px] font-medium tracking-wide text-slate-400 uppercase">
+              Loaded advisories ({advisories.length})
+            </h2>
+            <div className="space-y-2 rounded-md border border-slate-200 px-3 py-2 dark:border-slate-700">
+              {advisories.map((doc) => (
+                <VexDocumentRow key={`${doc.id}\u0000${doc.fileName}`} doc={doc} onRemove={() => actions.removeVexDocument(doc.id)} />
+              ))}
+            </div>
+            <p className="mt-1.5 text-center text-xs text-slate-400 dark:text-slate-500">
+              Open an SBOM to match these statements against its inventory.
+            </p>
           </div>
         )}
 

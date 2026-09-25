@@ -308,14 +308,15 @@ function Meter({ result }: { result: ProfileCheckResult }) {
           className={`block h-full rounded-full ${
             failing ? 'bg-amber-400/90' : percent === 100 ? 'bg-emerald-400/80' : 'bg-accent-400/80'
           }`}
-          style={{ width: `${percent}%` }}
+          style={{ width: `${total === 0 ? 0 : percent}%` }}
         />
       </span>
       <span
         className={`text-right tabular-nums ${failing ? 'text-amber-700 dark:text-amber-400' : 'text-slate-400'}`}
         title={gated ? `Requires at least ${threshold}%` : undefined}
       >
-        {formatCount(satisfied)}/{formatCount(total)} · {percent}%{gated ? ` · ≥${threshold}%` : ''}
+        {formatCount(satisfied)}/{formatCount(total)} · {total === 0 ? 'none in scope' : `${percent}%`}
+        {gated ? ` · ≥${threshold}%` : ''}
       </span>
     </div>
   );

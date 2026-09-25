@@ -1,9 +1,10 @@
+import type { CryptoElementExt } from '../model/crypto';
 import type { SbomDocument, SbomElement } from '../model/document';
 import { effectiveLicense } from '../model/document';
 import { licenseIdsInExpression } from '../parse/spec-lint';
 import { isDeprecatedLicenseId, isKnownLicenseId } from '../spec/spdx-license-ids';
 import type { LoadedDocument, WorkspaceState } from '../workspace/workspace';
-import type { ComplianceProfile, DocumentField, PackageField, ProfileCheck, ProfileSpecBaseline } from './model';
+import type { ComplianceProfile, CryptoField, DocumentField, PackageField, ProfileCheck, ProfileSpecBaseline } from './model';
 
 /**
  * Profile evaluation. Field semantics live in the two extractors below and
@@ -62,6 +63,7 @@ export function evaluateProfile(
   const doc = loaded.document;
   const now = opts?.now ?? Date.now();
   const packages = doc.elements.filter((el) => el.kind === 'package');
+  const cryptoAssets = doc.elements.map((el) => el.crypto).filter((c): c is CryptoElementExt => c !== undefined);
 
   // Preconditions gate FIRST: a requirement source that only accepts a
   // format must show that mismatch as a failing check, not bury it in the
@@ -107,8 +109,10 @@ export function evaluateProfile(
         return { id, label, kind: 'boolean', pass, actual: doc.created ?? 'missing', ...meter };
       }
       case 'package-coverage': {
+        // v5: a purpose filter scopes the meter; the total is what is in scope.
+        const scope = check.purposes ? packagesWithPurpose(packages, check.purposes) : packages;
         let satisfied = 0;
-        for (const element of packages) {
+        for (const element of scope) {
           const value =
             check.field === 'checksum' && check.algorithms
               ? hasChecksumAlgorithm(element, check.algorithms)
@@ -122,9 +126,35 @@ export function evaluateProfile(
             satisfied++;
           }
         }
-        const total = packages.length;
+        const total = scope.length;
         const percent = total === 0 ? 100 : Math.round((satisfied / total) * 100);
         // Cross-multiplication: no float division decides a gate.
+        const pass = check.threshold === undefined || satisfied * 100 >= check.threshold * total;
+        return {
+          id,
+          label,
+          kind: 'coverage',
+          pass,
+          coverage: { satisfied, total, percent, threshold: check.threshold },
+        };
+      }
+      case 'crypto-coverage': {
+        // v5: the scope is every element carrying cryptoProperties, narrowed
+        // by asset type, primitive and family; the total is what is in scope.
+        const scope = cryptoAssets.filter(
+          (c) =>
+            matchesFilter(c.assetType, check.assetTypes) &&
+            matchesFilter(c.algorithm?.primitive, check.primitives) &&
+            matchesFilter(c.algorithm?.family, check.families),
+        );
+        let satisfied = 0;
+        for (const asset of scope) {
+          const value = extractCryptoField(asset, check.field);
+          const present = typeof value === 'boolean' ? value : Boolean(value);
+          if (present && matchesModifiers(value, check.pattern, check.values)) satisfied++;
+        }
+        const total = scope.length;
+        const percent = total === 0 ? 100 : Math.round((satisfied / total) * 100);
         const pass = check.threshold === undefined || satisfied * 100 >= check.threshold * total;
         return {
           id,
@@ -159,6 +189,68 @@ export function evaluateProfile(
     gatedFailed,
     informational,
   };
+}
+
+/** Case-insensitive purpose match; a package without a purpose is never in scope. */
+function packagesWithPurpose(packages: SbomElement[], purposes: string[]): SbomElement[] {
+  const wanted = new Set(purposes.map((p) => p.toUpperCase()));
+  return packages.filter((p) => p.purpose !== undefined && wanted.has(p.purpose.toUpperCase()));
+}
+
+/** No filter: everything is in scope. A filter: the value must be stated and listed (case-insensitive). */
+function matchesFilter(value: string | undefined, wanted: string[] | undefined): boolean {
+  if (wanted === undefined) return true;
+  if (value === undefined) return false;
+  const lower = value.toLowerCase();
+  return wanted.some((w) => w.toLowerCase() === lower);
+}
+
+/** What a crypto asset states for a field: a value for string fields, presence for the rest. */
+function extractCryptoField(c: CryptoElementExt, field: CryptoField): string | boolean | undefined {
+  switch (field) {
+    case 'assetType':
+      return c.assetType;
+    case 'primitive':
+      return c.algorithm?.primitive;
+    case 'family':
+      return c.algorithm?.family;
+    case 'parameterSet':
+      return c.algorithm?.parameterSet;
+    case 'curve':
+      return c.algorithm?.ellipticCurve ?? c.algorithm?.curve;
+    case 'mode':
+      return c.algorithm?.mode;
+    case 'padding':
+      return c.algorithm?.padding;
+    case 'executionEnvironment':
+      return c.algorithm?.executionEnvironment;
+    case 'securityLevel':
+      return c.algorithm?.classicalSecurityLevel !== undefined || c.algorithm?.nistQuantumSecurityLevel !== undefined;
+    case 'certificateSubject':
+      return c.certificate?.subjectName;
+    case 'certificateIssuer':
+      return c.certificate?.issuerName;
+    case 'certificateValidity':
+      return c.certificate?.notValidAfter !== undefined;
+    case 'certificateState':
+      return c.certificate?.states && c.certificate.states.length > 0 ? c.certificate.states.join(', ') : undefined;
+    case 'certificateSignature':
+      return (c.related ?? []).some((r) => /signature/i.test(r.type));
+    case 'materialState':
+      return c.material?.state;
+    case 'materialExpiration':
+      return c.material?.expirationDate !== undefined;
+    case 'materialSecuredBy':
+      return c.material?.securedBy?.mechanism;
+    case 'protocolVersion':
+      return c.protocol?.version;
+    case 'cipherSuites':
+      return (c.protocol?.cipherSuites?.length ?? 0) > 0;
+    case 'related':
+      return (c.related?.length ?? 0) > 0;
+    case 'oid':
+      return c.oid;
+  }
 }
 
 /** Mirrors documentQuality's document block. */
@@ -290,6 +382,9 @@ function extractPackageField(
       return element.properties && element.properties.length > 0
         ? element.properties.map((p) => `${p.name}=${p.value}`).join('\n')
         : undefined;
+    // v5
+    case 'description':
+      return element.description && element.description.trim() !== '' ? element.description : undefined;
   }
 }
 
@@ -338,6 +433,8 @@ function defaultLabel(check: ProfileCheck): string {
       return `Created within ${check.maxAgeDays} days`;
     case 'package-coverage':
       return `Packages with ${check.field}`;
+    case 'crypto-coverage':
+      return `Cryptographic assets with ${check.field}`;
   }
 }
 

@@ -16,6 +16,22 @@
       </hashes>
       <purl>generic/libssl@3.0.11</purl>
     </component>
+    <component type="cryptographic-asset" bom-ref="crypto-1">
+      <name>weird-cipher</name>
+      <cryptoProperties>
+        <assetType>algorithm</assetType>
+        <algorithmProperties>
+          <primitive>block-cypher</primitive>
+          <algorithmFamily>AES256</algorithmFamily>
+          <ellipticCurve>P-256</ellipticCurve>
+          <curve>P-256</curve>
+          <mode>gcm</mode>
+        </algorithmProperties>
+      </cryptoProperties>
+    </component>
+    <component type="cryptographic-asset" bom-ref="crypto-2">
+      <name>untyped-asset</name>
+    </component>
     <component type="microservice" bom-ref="component-1">
       <name>webserver</name>
       <version>1.4.2</version>

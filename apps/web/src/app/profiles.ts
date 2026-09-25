@@ -1,6 +1,11 @@
 import type { ComplianceProfile, SpecInfo } from '@sbomlens/core';
 import {
   AUTOMOTIVE_SBOM_PROFILE,
+  G7_AI_SBOM_PROFILE,
+  CRYPTO_EU_ROADMAP_PROFILE,
+  CRYPTO_DORA_PROFILE,
+  CRYPTO_PCI_PROFILE,
+  CRYPTO_BSI_TR02102_PROFILE,
   BSI_LICENSING_PROFILE,
   BSI_TR_03183_PROFILE,
   CISA_2026_PROFILE,
@@ -194,6 +199,11 @@ export function extraBuiltinProfiles(model: SpecInfo['model']): { id: string; pr
     { id: 'builtin:bsi-licensing', profile: BSI_LICENSING_PROFILE },
     { id: 'builtin:fda-524b', profile: FDA_524B_PROFILE },
     { id: 'builtin:automotive-sbom', profile: AUTOMOTIVE_SBOM_PROFILE },
+    { id: 'builtin:g7-ai-sbom', profile: G7_AI_SBOM_PROFILE },
+    { id: 'builtin:crypto-eu-roadmap', profile: CRYPTO_EU_ROADMAP_PROFILE },
+    { id: 'builtin:crypto-dora-7-4', profile: CRYPTO_DORA_PROFILE },
+    { id: 'builtin:crypto-pci-12-3-3', profile: CRYPTO_PCI_PROFILE },
+    { id: 'builtin:crypto-bsi-tr02102', profile: CRYPTO_BSI_TR02102_PROFILE },
   ];
 }
 

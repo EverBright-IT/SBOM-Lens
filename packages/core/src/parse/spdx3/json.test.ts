@@ -143,10 +143,26 @@ describe('SPDX 3 mapping', () => {
     expect(document!.describes).toEqual(['https://acme.example/pkg/webstack']);
   });
 
+  it('maps AI packages as packages with purpose MODEL, profile fields left raw', () => {
+    const { document, diagnostics } = parse();
+    const model = document!.elements.find((e) => e.name === 'recommendation-model')!;
+    expect(model.kind).toBe('package');
+    expect(model.purpose).toBe('MODEL');
+    expect(diagnostics.find((d) => d.code === 'SPDX3_ELEMENTS_SKIPPED')).toBeUndefined();
+  });
+
   it('counts unmapped profile elements instead of dropping them silently', () => {
-    const { diagnostics } = parse();
+    const graph = JSON.stringify({
+      '@context': 'https://spdx.org/rdf/3.0.1/spdx-context.jsonld',
+      '@graph': [
+        { type: 'CreationInfo', '@id': '_:ci', specVersion: '3.0.1', created: '2026-06-01T10:00:00Z' },
+        { type: 'SpdxDocument', spdxId: 'https://acme.example/doc/build', creationInfo: '_:ci', name: 'build' },
+        { type: 'build_Build', spdxId: 'https://acme.example/build/nightly', creationInfo: '_:ci', name: 'nightly' },
+      ],
+    });
+    const { diagnostics } = parseDocument({ fileName: 'build.spdx3.json', text: graph, sha1: 'c'.repeat(40), byteSize: graph.length });
     const skipped = diagnostics.find((d) => d.code === 'SPDX3_ELEMENTS_SKIPPED');
-    expect(skipped?.message).toContain('ai_AIPackage (1)');
+    expect(skipped?.message).toContain('build_Build (1)');
   });
 
   it('feeds the profile engine: an NTIA report evaluates on a 3.x document', () => {
@@ -157,7 +173,7 @@ describe('SPDX 3 mapping', () => {
       source: { fileName: 'webstack.spdx3.json', byteSize: text.length, sha1: 'a'.repeat(40), text },
     };
     const report = evaluateProfile(emptyWorkspace, loaded, NTIA_PROFILE);
-    expect(report.packagesTotal).toBe(2);
+    expect(report.packagesTotal).toBe(3); // two software packages and the AI package
     expect(report.results.find((r) => r.id === 'created')?.pass).toBe(true);
     expect(report.results.find((r) => r.id === 'creators')?.pass).toBe(true);
   });

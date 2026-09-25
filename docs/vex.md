@@ -47,12 +47,44 @@ id. SBOM Lens resolves that indirection before matching:
   the package that appears in an SBOM — unless it carries its own
   identifier.
 - `flags` become the justification (they share OpenVEX's vocabulary),
-  `remediations[].details` the action statement, `threats` of category
-  `impact` the impact statement, and the first description/summary note the
-  description. `document.tracking` supplies the id, timestamp, and version.
-- Products identified **only by CPE** (no purl) match through the CPE key —
+  `remediations` stay structured (category, details, link, date, restart
+  requirement; the first details text doubles as the action statement),
+  `threats` of category `impact` the impact statement, and the first
+  description/summary note the description. `document.tracking` supplies
+  the id, timestamp, version and status; `document.category` (the profile),
+  `title` and the TLP label are shown next to the document.
+- Annotations aimed at a `group_ids` entry resolve through `product_groups`
+  to the members; an annotation without any product or group applies to
+  every product of that vulnerability, one aimed at an unknown group to
+  nobody.
+- Products identified **only by CPE** (no purl) match through the CPE key,
   the common case in BSI-CERT advisories. purl stays preferred when both are
-  present.
+  present. Products carrying **file hashes** in the
+  `product_identification_helper` match against the checksums of the loaded
+  elements, which is the link BSI TR-03191 section 4.4 asks for and works
+  when no purl exists at all.
+- The base and informational profiles carry no vulnerabilities; they load
+  as documents with no statements, so an advisory folder loads whole.
+
+## BSI TR-03191 measured
+
+Every CSAF document is measured against the machine-checkable clauses of
+[BSI TR-03191](https://www.bsi.bund.de/SharedDocs/Downloads/EN/BSI/Publications/TechGuidelines/TR03191/BSI-TR-03191.html)
+(v1.0.1): a CVE and a CVSS for every vulnerability, the Security Advisory or
+VEX profile, fixing versions stated next to the affected ones (or a no-fix
+remediation), the TLP label (4.3), a vendor / product_name / product_version
+tree, enumerated versions rather than ranges, file hashes of the referenced
+products (4.4, "where an SBOM is mandatory"), and `current_release_date`
+with a `revision_history` (4.6). The result is a list of facts with clause
+numbers under each document, never a conformance verdict: distribution as a
+trusted provider, signature validity windows and the 48-hour reaction to BSI
+warnings cannot be read off a file and are not measured.
+
+A handful of CSAF schema facts this reader relies on are reported as spec
+findings (`CSAF_SCHEMA_*`): the 2.x version, the mandatory tracking and
+publisher fields, the CVE id pattern, and product ids that a vulnerability
+references but the product tree never defines (mandatory test 6.1.1). This
+is not a schema validator; the OASIS csaf-validator owns that.
 
 ## Matching rules (deliberately conservative)
 
@@ -95,11 +127,12 @@ no statement), or unmatchable (no usable purl).
 
 ## Limits (deliberate)
 
-- **Matching is by purl and CPE.** CSAF products identified only by a file
-  hash are parsed but not matched. CPE matching is name-exact: no NIST-style
-  wildcard evaluation, no version ranges, no update/edition comparison — a
-  CPE the normalisation cannot pin to a concrete vendor+product stays
-  unmatched rather than guessed.
+- **Matching is by purl, CPE and file hash.** CPE matching is name-exact:
+  no NIST-style wildcard evaluation, no version ranges, no update/edition
+  comparison — a CPE the normalisation cannot pin to a concrete
+  vendor+product stays unmatched rather than guessed. A hash matches only
+  the element whose checksum is byte-identical; there is no version
+  dimension to widen.
 - CSAF `relationships` are resolved one level deep (to the component); a
   relationship whose reference is itself another relationship is not
   chased further.

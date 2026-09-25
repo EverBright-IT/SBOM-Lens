@@ -29,8 +29,10 @@ import { validateSpdx3Structure } from './validate';
  * document references (grouped by the defining document's IRI), and
  * relationship ends pointing at imported IRIs become external element
  * refs, so the existing cascade resolution links 3.x documents exactly
- * like 2.x ones. The non-software profiles (AI, dataset, build, security)
- * are not mapped yet; their elements are counted, not dropped silently.
+ * like 2.x ones. AI and dataset packages (ai_AIPackage, dataset_DatasetPackage,
+ * both Package subclasses) map as packages with purpose MODEL / DATA; their
+ * profile-specific fields (ai_*, dataset_*) stay raw. The remaining profile
+ * elements (build, security, ...) are counted, not dropped silently.
  */
 export function parseSpdx3Json(input: SourceInput, root: Record<string, unknown>): ParseResult {
   const diagnostics: Diagnostic[] = [];
@@ -172,8 +174,8 @@ export function parseSpdx3Json(input: SourceInput, root: Record<string, unknown>
 
   for (const node of graph) {
     const type = nodeType(node);
-    if (type === 'software_Package' || type === 'software_File') {
-      const kind = type === 'software_Package' ? 'package' : 'file';
+    if (type === 'software_Package' || type === 'software_File' || type in PURPOSE_BY_PACKAGE_TYPE) {
+      const kind = type === 'software_File' ? 'file' : 'package';
       const name = asString(node.name) ?? `(unnamed ${kind})`;
       const spdxId = asString(node.spdxId) ?? `SPDXRef-sbomlens-anonymous-${++anonCounter}`;
       const externalRefs = readExternalIdentifiers(node.externalIdentifier);
@@ -193,7 +195,9 @@ export function parseSpdx3Json(input: SourceInput, root: Record<string, unknown>
         originator: asStringArray(node.originatedBy).map(agentName).find(Boolean),
         downloadLocation: noAssertion(asString(node.software_downloadLocation)),
         copyright: noAssertion(asString(node.software_copyrightText)),
-        purpose: asString(node.software_primaryPurpose)?.toUpperCase(),
+        // The AI and dataset profiles say what the package is even when
+        // primaryPurpose is absent; a stated purpose still wins.
+        purpose: asString(node.software_primaryPurpose)?.toUpperCase() ?? PURPOSE_BY_PACKAGE_TYPE[type],
         description: asString(node.description) ?? asString(node.summary),
         comment: asString(node.comment),
         checksums: readHashes(node.verifiedUsing),
@@ -315,6 +319,12 @@ export function parseSpdx3Json(input: SourceInput, root: Record<string, unknown>
   };
   return { document, diagnostics };
 }
+
+/** Package subclasses of the AI and dataset profiles, and the purpose they imply. */
+const PURPOSE_BY_PACKAGE_TYPE: Record<string, string> = {
+  ai_AIPackage: 'MODEL',
+  dataset_DatasetPackage: 'DATA',
+};
 
 function sbomType(sbomNode: Record<string, unknown> | undefined): string | undefined {
   if (!sbomNode) return undefined;

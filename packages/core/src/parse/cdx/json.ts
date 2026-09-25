@@ -7,10 +7,11 @@ import type {
   SbomElement,
   SpecInfo,
 } from '../../model/document';
+import type { CryptoElementExt, CryptoRelatedAsset } from '../../model/crypto';
 import type { Diagnostic } from '../../model/diagnostics';
 import { diag } from '../../model/diagnostics';
 import { makeDocumentId, makeElementId } from '../../model/ids';
-import { asRecordArray, asString, isRecord } from '../../util/narrow';
+import { asRecordArray, asString, asStringArray, isRecord } from '../../util/narrow';
 import type { ParseResult, SourceInput } from '../parser';
 import { validateCdxStructure } from './validate';
 
@@ -50,6 +51,8 @@ const PURPOSE_BY_TYPE: Record<string, string> = {
   'operating-system': 'OPERATING-SYSTEM',
   'machine-learning-model': 'MODEL',
   data: 'DATA',
+  // Kept as its own purpose so an inventory facet can isolate the CBOM part.
+  'cryptographic-asset': 'CRYPTOGRAPHIC-ASSET',
 };
 
 export function parseCdxJson(
@@ -147,6 +150,10 @@ export function parseCdxJson(
       version: asString(node.version),
       purl: asString(node.purl),
       supplier: supplierName(node.supplier) ?? asString(node.publisher),
+      // The entity that created the component: 1.6 manufacturer, else the
+      // authors list (1.6), else the single author string (1.5 and earlier).
+      // This is the "producer" the CISA 2026 and G7 elements ask for.
+      originator: supplierName(node.manufacturer) ?? entityNames(node.authors) ?? asString(node.author),
       copyright: asString(node.copyright),
       licenseDeclared: licenseParts(node.licenses, 'declared'),
       licenseConcluded: licenseParts(node.licenses, 'concluded'),
@@ -155,6 +162,7 @@ export function parseCdxJson(
       checksums: readHashes(node.hashes),
       externalRefs: readExternalRefs(node),
       properties: readProperties(node.properties),
+      ...(isRecord(node.cryptoProperties) ? { crypto: readCryptoProperties(node.cryptoProperties) } : {}),
       raw: { kind: 'json', value: node },
     });
     if (parentSpdxId) {
@@ -223,6 +231,18 @@ export function parseCdxJson(
         type: 'DEPENDS_ON',
         to: { kind: 'local', spdxId: to },
       });
+    }
+    // provides[] (1.5+): what this component makes available, e.g. a library
+    // providing the algorithms a CBOM lists. Rendered as PROVIDES, an open
+    // type the tree does not follow (it is not containment).
+    for (const target of Array.isArray(dep.provides) ? dep.provides : []) {
+      if (typeof target !== 'string') continue;
+      const to = idByBomRef.get(target);
+      if (!to) {
+        unmappedDeps++;
+        continue;
+      }
+      relationships.push({ from: { kind: 'local', spdxId: from }, type: 'PROVIDES', to: { kind: 'local', spdxId: to } });
     }
   }
   if (unmappedDeps > 0) {
@@ -312,6 +332,14 @@ function supplierName(value: unknown): string | undefined {
   return isRecord(value) ? asString(value.name) : undefined;
 }
 
+/** The names of an organizationalContact/organizationalEntity list, joined; undefined when none. */
+function entityNames(value: unknown): string | undefined {
+  const names = asRecordArray(value)
+    .map((entry) => asString(entry.name))
+    .filter((name): name is string => name !== undefined && name !== '');
+  return names.length > 0 ? names.join(', ') : undefined;
+}
+
 /** `properties[]` name/value pairs, verbatim; entries without both are dropped. */
 function readProperties(value: unknown): { name: string; value: string }[] | undefined {
   const out: { name: string; value: string }[] = [];
@@ -393,4 +421,131 @@ function uniqueId(candidate: string, used: Set<string>): string {
   }
   used.add(id);
   return id;
+}
+
+/**
+ * `cryptoProperties` (CBOM, 1.6 and 1.7) into the crypto extension. Tolerant
+ * of both generations: 1.6 `curve` and the per-field refs, 1.7
+ * `ellipticCurve`, `algorithmFamily` and `relatedCryptographicAssets`. The
+ * XML mapper produces the same object shape, so one reader serves both.
+ */
+function readCryptoProperties(cp: Record<string, unknown>): CryptoElementExt {
+  const related: CryptoRelatedAsset[] = [];
+  const collectRelated = (node: Record<string, unknown>) => {
+    for (const entry of asRecordArray(node.relatedCryptographicAssets)) {
+      const ref = asString(entry.ref);
+      if (ref) related.push({ type: asString(entry.type) ?? 'related', ref });
+    }
+  };
+  const ext: CryptoElementExt = {
+    ...(asString(cp.assetType) !== undefined ? { assetType: asString(cp.assetType)! } : {}),
+    ...(asString(cp.oid) !== undefined ? { oid: asString(cp.oid)! } : {}),
+  };
+  const ap = isRecord(cp.algorithmProperties) ? cp.algorithmProperties : undefined;
+  if (ap) {
+    ext.algorithm = compact({
+      primitive: asString(ap.primitive),
+      family: asString(ap.algorithmFamily),
+      parameterSet: asString(ap.parameterSetIdentifier),
+      ellipticCurve: asString(ap.ellipticCurve),
+      curve: asString(ap.curve),
+      executionEnvironment: asString(ap.executionEnvironment),
+      implementationPlatform: asString(ap.implementationPlatform),
+      certificationLevel: nonEmpty(asStringArray(ap.certificationLevel)),
+      mode: asString(ap.mode),
+      padding: asString(ap.padding),
+      cryptoFunctions: nonEmpty(asStringArray(ap.cryptoFunctions)),
+      classicalSecurityLevel: asInteger(ap.classicalSecurityLevel),
+      nistQuantumSecurityLevel: asInteger(ap.nistQuantumSecurityLevel),
+    });
+  }
+  const cert = isRecord(cp.certificateProperties) ? cp.certificateProperties : undefined;
+  if (cert) {
+    const fingerprint = isRecord(cert.fingerprint) ? cert.fingerprint : undefined;
+    ext.certificate = compact({
+      serialNumber: asString(cert.serialNumber),
+      subjectName: asString(cert.subjectName),
+      issuerName: asString(cert.issuerName),
+      notValidBefore: asString(cert.notValidBefore),
+      notValidAfter: asString(cert.notValidAfter),
+      certificateFormat: asString(cert.certificateFormat),
+      fileExtension: asString(cert.certificateFileExtension) ?? asString(cert.certificateExtension),
+      states: nonEmpty(
+        asRecordArray(cert.certificateState)
+          .map((s) => asString(s.state))
+          .filter((s): s is string => s !== undefined)
+          .concat(asStringArray(cert.certificateState)),
+      ),
+      creationDate: asString(cert.creationDate),
+      activationDate: asString(cert.activationDate),
+      deactivationDate: asString(cert.deactivationDate),
+      revocationDate: asString(cert.revocationDate),
+      destructionDate: asString(cert.destructionDate),
+      fingerprint: fingerprint ? compact({ algorithm: asString(fingerprint.alg), value: asString(fingerprint.content) }) : undefined,
+    });
+    for (const [field, type] of [
+      ['signatureAlgorithmRef', 'signatureAlgorithm'],
+      ['subjectPublicKeyRef', 'subjectPublicKey'],
+    ] as const) {
+      const ref = asString(cert[field]);
+      if (ref) related.push({ type, ref });
+    }
+    collectRelated(cert);
+  }
+  const mat = isRecord(cp.relatedCryptoMaterialProperties) ? cp.relatedCryptoMaterialProperties : undefined;
+  if (mat) {
+    const securedBy = isRecord(mat.securedBy) ? mat.securedBy : undefined;
+    ext.material = compact({
+      type: asString(mat.type),
+      id: asString(mat.id),
+      state: asString(mat.state),
+      creationDate: asString(mat.creationDate),
+      activationDate: asString(mat.activationDate),
+      updateDate: asString(mat.updateDate),
+      expirationDate: asString(mat.expirationDate),
+      size: asInteger(mat.size),
+      format: asString(mat.format),
+      securedBy: securedBy ? compact({ mechanism: asString(securedBy.mechanism), algorithmRef: asString(securedBy.algorithmRef) }) : undefined,
+    });
+    const ref = asString(mat.algorithmRef);
+    if (ref) related.push({ type: 'algorithm', ref });
+    collectRelated(mat);
+  }
+  const proto = isRecord(cp.protocolProperties) ? cp.protocolProperties : undefined;
+  if (proto) {
+    ext.protocol = compact({
+      type: asString(proto.type),
+      version: asString(proto.version),
+      cipherSuites: nonEmpty(
+        asRecordArray(proto.cipherSuites).map((suite) =>
+          compact({
+            name: asString(suite.name),
+            algorithms: nonEmpty(asStringArray(suite.algorithms)),
+            identifiers: nonEmpty(asStringArray(suite.identifiers)),
+          }),
+        ),
+      ),
+    });
+    for (const ref of asStringArray(proto.cryptoRefArray)) related.push({ type: 'protocolCrypto', ref });
+    collectRelated(proto);
+  }
+  if (related.length > 0) ext.related = related;
+  return ext;
+}
+
+function asInteger(value: unknown): number | undefined {
+  if (typeof value === 'number' && Number.isInteger(value)) return value;
+  if (typeof value === 'string' && /^\d+$/.test(value)) return Number(value);
+  return undefined;
+}
+
+function nonEmpty<T>(list: T[]): T[] | undefined {
+  return list.length > 0 ? list : undefined;
+}
+
+type Compact<T> = { [K in keyof T]?: Exclude<T[K], undefined> };
+
+/** Drops undefined members so the model carries only what the BOM said. */
+function compact<T extends Record<string, unknown>>(value: T): Compact<T> {
+  return Object.fromEntries(Object.entries(value).filter(([, v]) => v !== undefined)) as Compact<T>;
 }

@@ -34,7 +34,7 @@ Findings carry a stable code with a `_SCHEMA_` infix, prefixed by the format:
 |---|---|---|
 | `SPDX2_SCHEMA_*` | SPDX 2.x (JSON, YAML, tag-value) | 14 |
 | `SPDX3_SCHEMA_*` | SPDX 3.0.x (JSON-LD) | 8 |
-| `CDX_SCHEMA_*` | CycloneDX 1.x (JSON, XML) | 9 |
+| `CDX_SCHEMA_*` | CycloneDX 1.x (JSON, XML) | 14 |
 | `OCM_SCHEMA_*` | OCM component descriptors | 9 |
 
 **SPDX 2.x**: the version literal, `dataLicense` (the spec mandates CC0-1.0),
@@ -68,6 +68,19 @@ duplicate `bom-ref`s, hash shape, purls without a `pkg:` scheme, license
 entries that are malformed or carry both an `id` and a `name`, and a license
 `acknowledgement` outside the 1.6 vocabulary (`declared`, `concluded`). The XML
 serialization is mapped onto the JSON shape first, so both run the same rules.
+
+**CycloneDX CBOM** (`cryptoProperties`): a cryptographic asset without
+`assetType`, values outside the closed vocabularies (primitive, mode,
+padding, execution environment, platform, functions, material type and
+state, protocol type), an `algorithmFamily` or `ellipticCurve` the
+[CycloneDX Cryptography Registry](https://cyclonedx.org/registry/cryptography/)
+does not list (curves are `category/name`, e.g. `nist/P-256`; a bare
+`P-256` is reported with the registry spelling), and the 1.6 fields that 1.7
+deprecated (`curve`, the per-field refs, `certificateExtension`,
+`cryptoRefArray`) when they appear in a 1.7 or later BOM. The registry is
+a vocabulary and is used as one: a family it does not list yet (FrodoKEM,
+Classic McEliece) is reported as unknown, not as wrong, and the crypto
+profiles still count such assets.
 
 Findings of one kind are aggregated into a single entry per rule, with a count
 and the first three subjects, so a BOM with thousands of components stays

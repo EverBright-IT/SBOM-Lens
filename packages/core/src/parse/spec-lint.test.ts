@@ -85,6 +85,11 @@ describe('spec lint, end to end', () => {
         'CDX_SCHEMA_BAD_PURL',
         'CDX_SCHEMA_BAD_LICENSE_EXPRESSION',
         'CDX_SCHEMA_BAD_ACKNOWLEDGEMENT',
+        'CDX_SCHEMA_CRYPTO_MISSING_ASSET_TYPE',
+        'CDX_SCHEMA_CRYPTO_BAD_VOCABULARY',
+        'CDX_SCHEMA_CRYPTO_UNKNOWN_FAMILY',
+        'CDX_SCHEMA_CRYPTO_UNKNOWN_CURVE',
+        'CDX_SCHEMA_CRYPTO_DEPRECATED_FIELD',
       ]),
     );
   });
@@ -121,6 +126,8 @@ describe('spec lint, end to end', () => {
       'cdx/minimal.cdx.xml',
       'cdx/parity.cdx.json',
       'cdx/parity.cdx.xml',
+      'cdx/crypto.cdx.json',
+      'cdx/crypto.cdx.xml',
       'ocm/cd-v2.yaml',
     ]) {
       expect(await findings(fixture), `${fixture} must produce no spec findings`).toEqual([]);

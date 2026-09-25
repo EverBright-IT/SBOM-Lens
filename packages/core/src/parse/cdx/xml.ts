@@ -133,6 +133,9 @@ function readComponent(el: XmlElement): Record<string, unknown> {
       case 'components':
         out.components = ownChildren(child).filter((c) => c.name === 'component').map(readComponent);
         break;
+      case 'cryptoProperties':
+        out.cryptoProperties = readCryptoProperties(child);
+        break;
       case 'name':
       case 'version':
       case 'description':
@@ -218,6 +221,49 @@ function readDependency(el: XmlElement): Record<string, unknown> {
   out.dependsOn = dependsOn;
   if (provides.length > 0) out.provides = provides;
   return out;
+}
+
+/**
+ * `<cryptoProperties>` into the JSON shape: the generic reader, with the
+ * XML list wrappers (`<cryptoFunctions><cryptoFunction>`, `<cipherSuites>
+ * <cipherSuite>`, `<relatedCryptographicAssets><relatedCryptographicAsset>`,
+ * ...) unwrapped into the arrays the JSON schema uses, so one reader in the
+ * JSON mapper serves both serializations.
+ */
+function readCryptoProperties(el: XmlElement): Record<string, unknown> {
+  const value = generic(el);
+  const out = isPlainObject(value) ? value : {};
+  const listWrappers: Record<string, string> = {
+    cryptoFunctions: 'cryptoFunction',
+    certificationLevel: 'certificationLevel',
+    certificateState: 'state',
+    certificateExtensions: 'certificateExtension',
+    relatedCryptographicAssets: 'relatedCryptographicAsset',
+    cipherSuites: 'cipherSuite',
+    algorithms: 'algorithm',
+    identifiers: 'identifier',
+    cryptoRefArray: 'cryptoRef',
+  };
+  const unwrap = (node: unknown): unknown => {
+    if (Array.isArray(node)) return node.map(unwrap);
+    if (!isPlainObject(node)) return node;
+    const result: Record<string, unknown> = {};
+    for (const [key, child] of Object.entries(node)) {
+      const item = listWrappers[key];
+      if (item !== undefined && isPlainObject(child) && item in child) {
+        const inner = child[item];
+        result[key] = (Array.isArray(inner) ? inner : [inner]).map(unwrap);
+      } else {
+        result[key] = unwrap(child);
+      }
+    }
+    return result;
+  };
+  return unwrap(out) as Record<string, unknown>;
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 /** Simple `<name>`, `<version>`, ... children into an object. */

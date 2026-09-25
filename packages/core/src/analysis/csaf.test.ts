@@ -122,6 +122,12 @@ function findingsFor(ws: WorkspaceState, name: string, map: ReturnType<typeof ma
 }
 
 describe('sniffCsaf', () => {
+  it('accepts the base and informational profiles, which carry no vulnerabilities list', () => {
+    const base = JSON.stringify({ document: { csaf_version: '2.0', category: 'csaf_base', title: 'Note' } });
+    expect(sniffCsaf(base).isCsaf).toBe(true);
+    expect(parseCsaf('note.json', JSON.parse(base)).statements).toEqual([]);
+  });
+
   it('recognizes CSAF and rejects everything else', () => {
     expect(sniffCsaf(JSON.stringify(csafDoc())).isCsaf).toBe(true);
     expect(sniffCsaf('{"@context":"https://openvex.dev/ns/v0.2.0","statements":[]}').isCsaf).toBe(false);
@@ -262,5 +268,154 @@ describe('CSAF through the shared matcher', () => {
     // Newer CSAF statement wins; the older OpenVEX one is superseded.
     expect(finding.status).toBe('affected');
     expect(finding.supersededCount).toBe(1);
+  });
+});
+
+describe('CSAF product groups, hashes, remediations and schema findings', () => {
+  const SHA = 'aabb00112233445566778899aabbccddeeff00112233445566778899aabbccdd';
+
+  it('applies a group-scoped remediation to the group members only, never to everybody', () => {
+    const doc = parseCsaf(
+      'groups.json',
+      csafDoc({
+        product_tree: {
+          ...(csafDoc().product_tree as Record<string, unknown>),
+          product_groups: [{ group_id: 'CSAFGID-servers', product_ids: ['CSAFPID-apiserver'] }],
+        },
+        vulnerabilities: [
+          {
+            cve: 'CVE-2026-7777',
+            product_status: { known_affected: ['CSAFPID-openssl', 'CSAFPID-apiserver'] },
+            remediations: [{ category: 'workaround', details: 'Disable TLS 1.0 on servers.', group_ids: ['CSAFGID-servers'] }],
+            threats: [{ category: 'impact', details: 'Downgrade attack.', group_ids: ['CSAFGID-unknown'] }],
+          },
+        ],
+      }),
+    );
+    const affected = doc.statements.filter((s) => s.vulnerability === 'CVE-2026-7777');
+    const forApi = affected.find((s) => s.products.some((p) => p.id === API_SERVER))!;
+    const forOpenssl = affected.find((s) => s.products.some((p) => p.id === OPENSSL))!;
+    expect(forApi.actionStatement).toBe('Disable TLS 1.0 on servers.');
+    expect(forApi.remediations).toEqual([{ category: 'workaround', details: 'Disable TLS 1.0 on servers.' }]);
+    expect(forOpenssl.actionStatement).toBeUndefined();
+    // A threat aimed at an unknown group applies to nobody.
+    expect(forApi.impactStatement).toBeUndefined();
+    expect(forOpenssl.impactStatement).toBeUndefined();
+  });
+
+  it('keeps remediations structured with url, date and restart requirement', () => {
+    const doc = parseCsaf(
+      'rem.json',
+      csafDoc({
+        vulnerabilities: [
+          {
+            cve: 'CVE-2026-8888',
+            product_status: { known_affected: ['CSAFPID-openssl'] },
+            remediations: [
+              {
+                category: 'vendor_fix',
+                details: 'Upgrade to 3.0.10.',
+                url: 'https://acme.example/fix',
+                date: '2026-06-02T00:00:00Z',
+                restart_required: { category: 'system' },
+                product_ids: ['CSAFPID-openssl'],
+              },
+            ],
+          },
+        ],
+      }),
+    );
+    expect(doc.statements[0]!.remediations).toEqual([
+      { category: 'vendor_fix', details: 'Upgrade to 3.0.10.', url: 'https://acme.example/fix', date: '2026-06-02T00:00:00Z', restartRequired: 'system' },
+    ]);
+  });
+
+  it('matches a product identified only by file hashes against an element checksum', () => {
+    const doc = parseCsaf(
+      'hash.json',
+      csafDoc({
+        product_tree: {
+          full_product_names: [
+            {
+              product_id: 'CSAFPID-blob',
+              name: 'firmware blob',
+              product_identification_helper: { hashes: [{ file_name: 'fw.bin', file_hashes: [{ algorithm: 'sha-256', value: SHA.toUpperCase() }] }] },
+            },
+          ],
+        },
+        vulnerabilities: [{ cve: 'CVE-2026-9999', product_status: { known_affected: ['CSAFPID-blob'] } }],
+      }),
+    );
+    expect(doc.statements[0]!.products[0]).toEqual({
+      id: `hash:sha-256:${SHA.toUpperCase()}`,
+      subcomponents: [],
+      hashes: [{ algorithm: 'sha-256', value: SHA.toUpperCase() }],
+    });
+    expect(doc.diagnostics.map((d) => d.code)).not.toContain('CSAF_PRODUCT_UNRESOLVED');
+
+    const lines = [
+      'SPDXVersion: SPDX-2.3',
+      'SPDXID: SPDXRef-DOCUMENT',
+      'DocumentName: fw',
+      'DocumentNamespace: https://example.org/spdxdocs/fw',
+      'PackageName: firmware',
+      'SPDXID: SPDXRef-fw',
+      'PackageVersion: 9',
+      'PackageDownloadLocation: NOASSERTION',
+      `PackageChecksum: SHA256: ${SHA}`,
+      '',
+    ];
+    const ws = addDocument(emptyWorkspace, loadedFromText('fw.spdx', lines.join('\n'))).workspace;
+    const findings = findingsFor(ws, 'firmware', matchVex(ws, [doc]));
+    expect(findings).toHaveLength(1);
+    expect(findings![0]).toMatchObject({ vulnerability: 'CVE-2026-9999', status: 'affected', matchedBy: 'hash' });
+  });
+
+  it('reads title, category, TLP and tracking status, and measures TR-03191', () => {
+    const doc = parseCsaf(
+      'meta.json',
+      csafDoc({
+        document: {
+          ...(csafDoc().document as Record<string, unknown>),
+          distribution: { tlp: { label: 'TLP:AMBER' } },
+          tracking: { ...((csafDoc().document as Record<string, unknown>).tracking as Record<string, unknown>), status: 'final' },
+        },
+      }),
+    );
+    expect(doc).toMatchObject({ title: 'ACME advisory', category: 'csaf_vex', tlp: 'TLP:AMBER', status: 'final' });
+    expect(doc.tr03191).toHaveLength(9);
+    expect(doc.tr03191!.find((f) => f.id === 'tr03191-tlp')).toMatchObject({ pass: true, actual: 'TLP:AMBER' });
+  });
+
+  it('emits schema findings for the mandatory pieces this reader relies on', () => {
+    const doc = parseCsaf(
+      'broken.json',
+      csafDoc({
+        document: { csaf_version: '3.0', category: 'csaf_vex', publisher: { name: 'ACME' }, tracking: { id: 'X' } },
+        vulnerabilities: [
+          { cve: 'CVE-26-1', product_status: { known_affected: ['CSAFPID-ghost'] }, remediations: [{ category: 'vendor_fix', details: 'x', product_ids: ['CSAFPID-ghost2'] }] },
+        ],
+      }),
+    );
+    const codes = doc.diagnostics.map((d) => d.code);
+    expect(codes).toEqual(
+      expect.arrayContaining([
+        'CSAF_SCHEMA_BAD_VERSION',
+        'CSAF_SCHEMA_MISSING_TRACKING',
+        'CSAF_SCHEMA_MISSING_PUBLISHER',
+        'CSAF_SCHEMA_BAD_CVE_ID',
+        'CSAF_SCHEMA_UNDEFINED_PRODUCT_ID',
+      ]),
+    );
+    const undefinedIds = doc.diagnostics.find((d) => d.code === 'CSAF_SCHEMA_UNDEFINED_PRODUCT_ID')!;
+    expect(undefinedIds.message).toContain('2 product id(s)');
+    // A document with the mandatory pieces stays silent (the shared fixture
+    // leaves out publisher.namespace and tracking.status, which are exactly
+    // the kind of omission the findings exist for).
+    const complete = csafDoc();
+    const document = complete.document as Record<string, Record<string, unknown>>;
+    document.publisher = { ...document.publisher, namespace: 'https://acme.example' };
+    document.tracking = { ...document.tracking, status: 'final' };
+    expect(parseCsaf('clean.json', complete).diagnostics.filter((d) => d.code.includes('_SCHEMA_'))).toEqual([]);
   });
 });

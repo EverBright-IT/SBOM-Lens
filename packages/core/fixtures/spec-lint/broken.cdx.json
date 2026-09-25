@@ -16,6 +16,22 @@
       "hashes": [{ "alg": "SHA-256", "content": "b1946ac9" }]
     },
     {
+      "bom-ref": "crypto-1",
+      "type": "cryptographic-asset",
+      "name": "weird-cipher",
+      "cryptoProperties": {
+        "assetType": "algorithm",
+        "algorithmProperties": {
+          "primitive": "block-cypher",
+          "algorithmFamily": "AES256",
+          "ellipticCurve": "P-256",
+          "curve": "P-256",
+          "mode": "gcm"
+        }
+      }
+    },
+    { "bom-ref": "crypto-2", "type": "cryptographic-asset", "name": "untyped-asset" },
+    {
       "bom-ref": "component-1",
       "type": "microservice",
       "name": "webserver",

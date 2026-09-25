@@ -39,17 +39,25 @@ release diff, and quality reports.
   [BSI TR-03183-2](https://www.bsi.bund.de/dok/TR-03183) (field coverage, and the
   licence fields of section 6.1), the
   [OpenChain Automotive SBOM v1.1](https://github.com/OpenChain-Project/Automotive-SBOM)
-  mandatory fields, or the SBOM content of the
-  [FDA 524B guidance (02/2026)](https://www.fda.gov/regulatory-information/search-fda-guidance-documents/cybersecurity-medical-devices-quality-management-system-considerations-and-content-premarket).
+  mandatory fields, the SBOM content of the
+  [FDA 524B guidance (02/2026)](https://www.fda.gov/regulatory-information/search-fda-guidance-documents/cybersecurity-medical-devices-quality-management-system-considerations-and-content-premarket),
+  the [G7 SBOM for AI minimum elements](https://www.bsi.bund.de/SharedDocs/Downloads/EN/BSI/KI/SBOM-for-AI_minimum-elements.html)
+  (model and dataset meters scoped to those components), or, for a
+  CycloneDX CBOM, the cryptographic inventory the EU PQC roadmap asks for,
+  the DORA certificate register, PCI DSS 12.3.3 and the parameter tables of
+  BSI TR-02102-1 (2026-01).
   Each report links its requirement source; none states conformance.
 - **Your own compliance rules.** Drop a `.sbomlens/profile.json` into the
   workspace and every panel picks it up as a quality profile: thresholds,
   field patterns, coverage gates. Reports export as Markdown.
-- **VEX overlay.** Open an OpenVEX document next to your SBOMs and see what
-  the supplier communicates about known vulnerabilities: per-package
-  statements with status and justification, a VEX column and status filter
-  in the inventory, findings in the exports. Matched by package URL, newest
-  statement wins. A communication channel, not a scanner.
+- **VEX and advisory overlay.** Open an OpenVEX document or a CSAF advisory
+  (or a folder of them) next to your SBOMs and see what the supplier
+  communicates about known vulnerabilities: per-package statements with
+  status, justification and remediations, a VEX column and status filter in
+  the inventory, findings in the exports. Matched by package URL, CPE or
+  file hash, newest statement wins. Each CSAF document is measured against
+  the clauses of BSI TR-03191 a file can show, as facts with clause numbers.
+  A communication channel, not a scanner.
 - **Spec findings.** Every document is checked against the specification it
   claims to follow: relationship types outside the vocabulary, digests whose
   length cannot match their algorithm, license expressions that do not parse,
@@ -71,7 +79,7 @@ release diff, and quality reports.
 
 - **SPDX 2.x** (tag-value / JSON / YAML) in full; **SPDX 3.0.x** as JSON-LD
   with the core/software profiles mapped; **CycloneDX 1.x** as JSON or XML,
-  including BOM-Link cascades.
+  including BOM-Link cascades and CBOM cryptographic assets.
 - The **workspace scan skips files over 50 MB** (open those by hand). A
   single large SPDX document has no hard cap; parsing runs off the UI thread.
 - Compliance profiles are capped at 64 KB / 200 checks; up to 16 persist.

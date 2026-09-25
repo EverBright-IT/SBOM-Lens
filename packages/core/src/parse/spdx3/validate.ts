@@ -28,6 +28,8 @@ const ELEMENT_TYPES = new Set([
   'Sbom',
   'Bom',
   'Package',
+  'AIPackage',
+  'DatasetPackage',
   'File',
   'Snippet',
   'Relationship',

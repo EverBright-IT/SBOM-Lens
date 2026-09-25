@@ -1,15 +1,19 @@
 import { asArray, asString, isRecord } from '../util/narrow';
-import type { ComplianceProfile, ProfileSpecBaseline, DocumentField, PackageField, ProfileCheck } from './model';
+import type { ComplianceProfile, CryptoField, ProfileSpecBaseline, DocumentField, PackageField, ProfileCheck } from './model';
 import {
+  CRYPTO_FIELDS,
   LICENSE_PACKAGE_FIELDS,
   MAX_PROFILE_BYTES,
   PROFILE_SCHEMA_V1,
   PROFILE_SCHEMA_V2,
   PROFILE_SCHEMA_V3,
   PROFILE_SCHEMA_V4,
+  PROFILE_SCHEMA_V5,
+  STRING_CRYPTO_FIELDS,
   STRING_PACKAGE_FIELDS,
   V4_DOCUMENT_FIELDS,
   V4_PACKAGE_FIELDS,
+  V5_PACKAGE_FIELDS,
 } from './model';
 
 /**
@@ -48,6 +52,7 @@ const PACKAGE_FIELDS: readonly PackageField[] = [
   'copyright',
   'originator',
   ...V4_PACKAGE_FIELDS,
+  ...V5_PACKAGE_FIELDS,
 ];
 
 /** Schema generations, ordered; a feature introduced at level n needs schema >= n. */
@@ -56,7 +61,17 @@ const SCHEMA_LEVEL: Record<string, number> = {
   [PROFILE_SCHEMA_V2]: 2,
   [PROFILE_SCHEMA_V3]: 3,
   [PROFILE_SCHEMA_V4]: 4,
+  [PROFILE_SCHEMA_V5]: 5,
 };
+const KNOWN_SCHEMAS: readonly ComplianceProfile['schema'][] = [
+  PROFILE_SCHEMA_V1,
+  PROFILE_SCHEMA_V2,
+  PROFILE_SCHEMA_V3,
+  PROFILE_SCHEMA_V4,
+  PROFILE_SCHEMA_V5,
+];
+const isKnownSchema = (value: unknown): value is ComplianceProfile['schema'] =>
+  typeof value === 'string' && (KNOWN_SCHEMAS as readonly string[]).includes(value);
 
 export type ProfileValidation =
   | { ok: true; profile: ComplianceProfile }
@@ -68,11 +83,8 @@ export function validateProfile(raw: unknown): ProfileValidation {
 
   const schema = raw.schema;
   const level = typeof schema === 'string' ? SCHEMA_LEVEL[schema] : undefined;
-  if (
-    level === undefined ||
-    (schema !== PROFILE_SCHEMA_V1 && schema !== PROFILE_SCHEMA_V2 && schema !== PROFILE_SCHEMA_V3 && schema !== PROFILE_SCHEMA_V4)
-  ) {
-    const known = `${PROFILE_SCHEMA_V1}, ${PROFILE_SCHEMA_V2}, ${PROFILE_SCHEMA_V3}, and ${PROFILE_SCHEMA_V4}`;
+  if (level === undefined || !isKnownSchema(schema)) {
+    const known = `${KNOWN_SCHEMAS.slice(0, -1).join(', ')}, and ${KNOWN_SCHEMAS[KNOWN_SCHEMAS.length - 1]}`;
     return {
       ok: false,
       errors: [
@@ -222,20 +234,19 @@ function validateCheck(
         errors.push(`${at}: package field "${field}" requires schema "${PROFILE_SCHEMA_V4}"`);
         return null;
       }
+      if (level < 5 && V5_PACKAGE_FIELDS.includes(field)) {
+        errors.push(`${at}: package field "${field}" requires schema "${PROFILE_SCHEMA_V5}"`);
+        return null;
+      }
       if ((pattern || values) && !STRING_PACKAGE_FIELDS.includes(field)) {
         errors.push(`${at}: pattern/values do not apply to non-string field "${field}"`);
         return null;
       }
-      let threshold: number | undefined;
-      if (entry.threshold !== undefined) {
-        if (typeof entry.threshold !== 'number' || !Number.isFinite(entry.threshold) || entry.threshold < 0 || entry.threshold > 100) {
-          errors.push(`${at}: "threshold" must be a number in [0, 100]`);
-          return null;
-        }
-        threshold = entry.threshold;
-      }
+      const threshold = validateThreshold(entry.threshold, at, errors);
+      if (threshold === null) return null;
       const algorithms = validateAlgorithms(entry.algorithms, field, at, errors, level);
       const licence = validateLicenseIds(entry.licenseIds, entry.allowDeprecated, field, at, errors, level);
+      const purposes = validateStringList(entry.purposes, 'purposes', at, errors, level);
       return {
         ...base,
         type: 'package-coverage',
@@ -246,6 +257,38 @@ function validateCheck(
         ...(algorithms && { algorithms }),
         ...(licence?.licenseIds && { licenseIds: licence.licenseIds }),
         ...(licence?.allowDeprecated !== undefined && { allowDeprecated: licence.allowDeprecated }),
+        ...(purposes && { purposes }),
+      };
+    }
+    case 'crypto-coverage': {
+      if (level < 5) {
+        errors.push(`${at}: check type "crypto-coverage" requires schema "${PROFILE_SCHEMA_V5}"`);
+        return null;
+      }
+      const field = entry.field as CryptoField;
+      if (!CRYPTO_FIELDS.includes(field)) {
+        errors.push(`${at}: unknown crypto field "${String(entry.field)}"`);
+        return null;
+      }
+      if ((pattern || values) && !STRING_CRYPTO_FIELDS.includes(field)) {
+        errors.push(`${at}: pattern/values do not apply to non-string crypto field "${field}"`);
+        return null;
+      }
+      const threshold = validateThreshold(entry.threshold, at, errors);
+      if (threshold === null) return null;
+      const assetTypes = validateStringList(entry.assetTypes, 'assetTypes', at, errors, level);
+      const primitives = validateStringList(entry.primitives, 'primitives', at, errors, level);
+      const families = validateStringList(entry.families, 'families', at, errors, level);
+      return {
+        ...base,
+        type: 'crypto-coverage',
+        field,
+        ...(threshold !== undefined && { threshold }),
+        ...(pattern && { pattern }),
+        ...(values && { values }),
+        ...(assetTypes && { assetTypes }),
+        ...(primitives && { primitives }),
+        ...(families && { families }),
       };
     }
     default:
@@ -253,6 +296,16 @@ function validateCheck(
       errors.push(`${at}: unknown check type "${String(entry.type)}"`);
       return null;
   }
+}
+
+/** A coverage threshold in [0, 100]; null when invalid (error recorded), undefined when absent. */
+function validateThreshold(raw: unknown, at: string, errors: string[]): number | undefined | null {
+  if (raw === undefined) return undefined;
+  if (typeof raw !== 'number' || !Number.isFinite(raw) || raw < 0 || raw > 100) {
+    errors.push(`${at}: "threshold" must be a number in [0, 100]`);
+    return null;
+  }
+  return raw;
 }
 
 function validatePattern(raw: unknown, at: string, errors: string[]): string | undefined {
@@ -337,6 +390,35 @@ function validateLicenseIds(
     return undefined;
   }
   return { licenseIds: rawIds, ...(rawDeprecated !== undefined && { allowDeprecated: rawDeprecated }) };
+}
+
+const MAX_FILTER_ENTRIES = 16;
+const MAX_FILTER_LENGTH = 40;
+
+/**
+ * v5: the scope filters (`purposes` on package coverage; `assetTypes`,
+ * `primitives`, `families` on crypto coverage). Rejected below v5, because an
+ * older engine would drop a filter and measure everything where the author
+ * meant a subset.
+ */
+function validateStringList(raw: unknown, key: string, at: string, errors: string[], level: number): string[] | undefined {
+  if (raw === undefined) return undefined;
+  if (level < 5) {
+    errors.push(`${at}: "${key}" requires schema "${PROFILE_SCHEMA_V5}"`);
+    return undefined;
+  }
+  if (!Array.isArray(raw) || raw.length === 0 || raw.length > MAX_FILTER_ENTRIES) {
+    errors.push(`${at}: "${key}" must be a non-empty array of at most ${MAX_FILTER_ENTRIES} strings`);
+    return undefined;
+  }
+  const entries = raw.filter(
+    (v): v is string => typeof v === 'string' && v.trim().length > 0 && v.length <= MAX_FILTER_LENGTH,
+  );
+  if (entries.length !== raw.length) {
+    errors.push(`${at}: "${key}" entries must be non-empty strings of at most ${MAX_FILTER_LENGTH} characters`);
+    return undefined;
+  }
+  return entries;
 }
 
 /** v2+, checksum-only. Fail closed on anything else — see module header. */

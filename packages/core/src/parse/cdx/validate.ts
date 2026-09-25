@@ -1,5 +1,6 @@
 import type { Diagnostic } from '../../model/diagnostics';
-import { asRecordArray, asString, isRecord } from '../../util/narrow';
+import { canonicalCurve, isKnownCryptoFamily, isKnownCurve, resolveCryptoFamily } from '../../spec/cdx-crypto-registry';
+import { asRecordArray, asString, asStringArray, isRecord } from '../../util/narrow';
 import { checksumProblem, createLint, createTally, licenseExpressionError } from '../spec-lint';
 
 /**
@@ -31,6 +32,53 @@ const COMPONENT_TYPES = new Set([
 ]);
 
 const URN_UUID = /^urn:uuid:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+
+/**
+ * cryptoProperties vocabularies as of CycloneDX 1.7 (the 1.6 values are a
+ * subset). The registry-backed ones (algorithmFamily, ellipticCurve) live in
+ * spec/cdx-crypto-registry.ts.
+ */
+const CRYPTO_VOCAB: Record<string, ReadonlySet<string>> = {
+  assetType: new Set(['algorithm', 'certificate', 'protocol', 'related-crypto-material']),
+  primitive: new Set([
+    'drbg', 'mac', 'block-cipher', 'stream-cipher', 'signature', 'hash', 'pke', 'xof', 'kdf', 'key-agree', 'kem', 'ae',
+    'combiner', 'key-wrap', 'other', 'unknown',
+  ]),
+  executionEnvironment: new Set(['software-plain-ram', 'software-encrypted-ram', 'software-tee', 'hardware', 'other', 'unknown']),
+  implementationPlatform: new Set([
+    'generic', 'x86_32', 'x86_64', 'armv7-a', 'armv7-m', 'armv8-a', 'armv8-m', 'armv9-a', 'armv9-m', 's390x', 'ppc64',
+    'ppc64le', 'other', 'unknown',
+  ]),
+  mode: new Set(['cbc', 'ecb', 'ccm', 'gcm', 'cfb', 'ofb', 'ctr', 'other', 'unknown']),
+  padding: new Set(['pkcs5', 'pkcs7', 'pkcs1v15', 'oaep', 'raw', 'other', 'unknown']),
+  cryptoFunctions: new Set([
+    'generate', 'keygen', 'encrypt', 'decrypt', 'digest', 'tag', 'keyderive', 'sign', 'verify', 'encapsulate', 'decapsulate',
+    'other', 'unknown',
+  ]),
+  materialType: new Set([
+    'private-key', 'public-key', 'secret-key', 'key', 'ciphertext', 'signature', 'digest', 'initialization-vector', 'nonce',
+    'seed', 'salt', 'shared-secret', 'tag', 'additional-data', 'password', 'credential', 'token', 'other', 'unknown',
+  ]),
+  materialState: new Set(['pre-activation', 'active', 'suspended', 'deactivated', 'compromised', 'destroyed']),
+  protocolType: new Set(['tls', 'ssh', 'ipsec', 'ike', 'sstp', 'wpa', 'dtls', 'quic', 'eap-aka', 'eap-aka-prime', 'prins', '5g-aka', 'other', 'unknown']),
+};
+
+/** Fields 1.7 deprecated and what replaced them; a finding only on 1.7+ BOMs, where they are legal in 1.6. */
+const CRYPTO_DEPRECATED: ReadonlyArray<readonly [block: string, field: string, replacement: string]> = [
+  ['algorithmProperties', 'curve', 'ellipticCurve'],
+  ['certificateProperties', 'signatureAlgorithmRef', 'relatedCryptographicAssets'],
+  ['certificateProperties', 'subjectPublicKeyRef', 'relatedCryptographicAssets'],
+  ['certificateProperties', 'certificateExtension', 'certificateFileExtension'],
+  ['relatedCryptoMaterialProperties', 'algorithmRef', 'relatedCryptographicAssets'],
+  ['protocolProperties', 'cryptoRefArray', 'relatedCryptographicAssets'],
+];
+
+function specAtLeast(specVersion: string | undefined, major: number, minor: number): boolean {
+  const match = /^(\d+)\.(\d+)/.exec(specVersion ?? '');
+  if (!match) return false;
+  const [, a, b] = match;
+  return Number(a) > major || (Number(a) === major && Number(b) >= minor);
+}
 
 /** licenseAcknowledgementEnumeration, CycloneDX 1.6. */
 const ACKNOWLEDGEMENTS = new Set(['declared', 'concluded']);
@@ -66,6 +114,56 @@ export function validateCdxStructure(root: Record<string, unknown>): Diagnostic[
   const badAcknowledgement = createTally();
   const duplicateRef = createTally({ unique: true });
   const seenRefs = new Set<string>();
+  const cryptoMissingAssetType = createTally();
+  const cryptoBadVocabulary = createTally();
+  const cryptoUnknownFamily = createTally();
+  const cryptoUnknownCurve = createTally();
+  const cryptoDeprecated = createTally();
+  const deprecationApplies = specAtLeast(specVersion, 1, 7);
+
+  // CBOM: the asset kind is mandatory, the closed vocabularies are checked as
+  // such, and the two registry-backed names against the registry. 1.6 fields
+  // that 1.7 deprecated count only on 1.7+ BOMs.
+  const visitCrypto = (name: string, type: string | undefined, cp: Record<string, unknown> | undefined) => {
+    if (type !== 'cryptographic-asset' && !cp) return;
+    const assetType = cp ? asString(cp.assetType) : undefined;
+    if (assetType === undefined) cryptoMissingAssetType.add(name);
+    else if (!CRYPTO_VOCAB.assetType!.has(assetType)) cryptoBadVocabulary.add(`${name}: assetType=${assetType}`);
+    if (!cp) return;
+    const vocab = (block: Record<string, unknown> | undefined, field: string, set: string) => {
+      if (!block) return;
+      const values = Array.isArray(block[field]) ? asStringArray(block[field]) : asString(block[field]) !== undefined ? [asString(block[field])!] : [];
+      for (const value of values) if (!CRYPTO_VOCAB[set]!.has(value)) cryptoBadVocabulary.add(`${name}: ${field}=${value}`);
+    };
+    const ap = isRecord(cp.algorithmProperties) ? cp.algorithmProperties : undefined;
+    vocab(ap, 'primitive', 'primitive');
+    vocab(ap, 'executionEnvironment', 'executionEnvironment');
+    vocab(ap, 'implementationPlatform', 'implementationPlatform');
+    vocab(ap, 'mode', 'mode');
+    vocab(ap, 'padding', 'padding');
+    vocab(ap, 'cryptoFunctions', 'cryptoFunctions');
+    const family = ap ? asString(ap.algorithmFamily) : undefined;
+    if (family !== undefined && !isKnownCryptoFamily(family)) {
+      const known = resolveCryptoFamily(family);
+      cryptoUnknownFamily.add(`${name}: ${family}${known ? ` (registry spells it ${known.family})` : ''}`);
+    }
+    const curve = ap ? asString(ap.ellipticCurve) : undefined;
+    if (curve !== undefined && !isKnownCurve(curve)) {
+      const canonical = canonicalCurve(curve);
+      cryptoUnknownCurve.add(`${name}: ${curve}${canonical ? ` (registry: ${canonical})` : ''}`);
+    }
+    const mat = isRecord(cp.relatedCryptoMaterialProperties) ? cp.relatedCryptoMaterialProperties : undefined;
+    vocab(mat, 'type', 'materialType');
+    vocab(mat, 'state', 'materialState');
+    const proto = isRecord(cp.protocolProperties) ? cp.protocolProperties : undefined;
+    vocab(proto, 'type', 'protocolType');
+    if (deprecationApplies) {
+      for (const [block, field, replacement] of CRYPTO_DEPRECATED) {
+        const node = isRecord(cp[block]) ? cp[block] : undefined;
+        if (node && node[field] !== undefined) cryptoDeprecated.add(`${name}: ${block}.${field} (use ${replacement})`);
+      }
+    }
+  };
 
   const visit = (component: Record<string, unknown>) => {
     const name = asString(component.name) ?? '(unnamed component)';
@@ -91,6 +189,8 @@ export function validateCdxStructure(root: Record<string, unknown>): Diagnostic[
 
     const purl = asString(component.purl);
     if (purl !== undefined && !purl.startsWith('pkg:')) badPurl.add(`${name} (${purl})`);
+
+    visitCrypto(name, type, isRecord(component.cryptoProperties) ? component.cryptoProperties : undefined);
 
     for (const entry of asRecordArray(component.licenses)) {
       const expression = asString(entry.expression);
@@ -128,6 +228,31 @@ export function validateCdxStructure(root: Record<string, unknown>): Diagnostic[
     'CDX_SCHEMA_BAD_ACKNOWLEDGEMENT',
     badAcknowledgement,
     (count, list) => `${count} license acknowledgement(s) outside the CycloneDX 1.6 vocabulary (declared, concluded): ${list}.`,
+  );
+  lint.warnTally(
+    'CDX_SCHEMA_CRYPTO_MISSING_ASSET_TYPE',
+    cryptoMissingAssetType,
+    (count, list) => `${count} cryptographic asset(s) without cryptoProperties.assetType (algorithm, certificate, protocol, related-crypto-material): ${list}.`,
+  );
+  lint.warnTally(
+    'CDX_SCHEMA_CRYPTO_BAD_VOCABULARY',
+    cryptoBadVocabulary,
+    (count, list) => `${count} cryptoProperties value(s) outside the CycloneDX vocabulary: ${list}.`,
+  );
+  lint.warnTally(
+    'CDX_SCHEMA_CRYPTO_UNKNOWN_FAMILY',
+    cryptoUnknownFamily,
+    (count, list) => `${count} algorithmFamily value(s) not in the CycloneDX Cryptography Registry: ${list}.`,
+  );
+  lint.warnTally(
+    'CDX_SCHEMA_CRYPTO_UNKNOWN_CURVE',
+    cryptoUnknownCurve,
+    (count, list) => `${count} ellipticCurve value(s) not in the CycloneDX Cryptography Registry (expected category/name, e.g. nist/P-256): ${list}.`,
+  );
+  lint.warnTally(
+    'CDX_SCHEMA_CRYPTO_DEPRECATED_FIELD',
+    cryptoDeprecated,
+    (count, list) => `${count} cryptoProperties field(s) deprecated since CycloneDX 1.7 in a 1.7+ BOM: ${list}.`,
   );
 
   return lint.diagnostics;

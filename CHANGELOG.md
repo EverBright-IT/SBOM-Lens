@@ -4,6 +4,77 @@ All notable changes to SBOM Lens. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [SemVer](https://semver.org) (0.x: the API surface is the app itself).
 
+## [0.29.0] - 2026-09-25
+
+### Added
+- **Profile schema v5.** A `purposes` filter on package coverage scopes a
+  meter to components of a purpose (MODEL, DATA, LIBRARY, ...), with the
+  total counting only what is in scope, and a `description` package field.
+  Fail-closed below v5, because an older engine would drop the filter and
+  measure every package where the author meant a subset.
+- **G7 SBOM for AI preset** (schema v5): the machine-checkable elements of
+  *Software Bill of Materials for AI: Minimum Elements* (G7 Cybersecurity
+  Working Group, 12 May 2026; BSI, ACN, ANSSI, CSE, CISA, NCSC and NCO with
+  the EU Commission). 17 of the 50 elements measured, 6 by construction, 27
+  listed for manual review; model and dataset meters run only over their own
+  components. The paper calls its elements not mandatory, and the report
+  does not turn them into a verdict.
+- SPDX 3 `ai_AIPackage` and `dataset_DatasetPackage` map as packages with
+  purpose MODEL and DATA (their profile fields stay raw). CycloneDX
+  `manufacturer`, `authors` and `author` fill the originator, which the
+  CISA 2026 and G7 producer meters read.
+- **CSAF advisories, measured against BSI TR-03191.** Every CSAF document
+  shows the clauses of TR-03191 a file can show (CVE and CVSS per
+  vulnerability, Security Advisory or VEX profile, fixing versions next to
+  affected ones, TLP label, vendor/product_name/product_version tree,
+  enumerated versions, product hashes, current_release_date with revision
+  history) as facts with clause numbers, never as a verdict. Products
+  identified by file hashes now match the loaded elements by checksum,
+  remediations stay structured (category, link, date, restart requirement),
+  `product_groups` resolve, the profile, title, TLP and tracking status are
+  read, and the base and informational profiles load as documents without
+  statements. A CSAF folder can be opened before any SBOM: the loaded
+  advisories are listed with their measurement until an inventory arrives.
+  Five `CSAF_SCHEMA_*` spec findings cover the mandatory pieces the reader
+  relies on, including product ids a vulnerability references but the tree
+  never defines (mandatory test 6.1.1).
+
+### Fixed
+- A CSAF annotation aimed only at `group_ids` used to apply to every product
+  of the vulnerability; it now applies to the group's members, and an
+  unknown group to nobody.
+
+- **CBOM.** CycloneDX `cryptoProperties` (1.6 and 1.7) map into a crypto
+  extension on the element: algorithm family, primitive, parameter set,
+  curve, mode, execution environment, security levels; certificate subject,
+  issuer, validity, state, fingerprint; key material type, state, size,
+  expiration and storage mechanism; protocol type, version and cipher
+  suites; and every related-asset reference in one list. The XML
+  serialization maps to the same shape. `dependencies[].provides` becomes
+  a PROVIDES relationship. The element detail shows it all, with links to
+  the related assets.
+- **Five CBOM lint rules** against the CycloneDX vocabularies and the
+  [Cryptography Registry](https://cyclonedx.org/registry/cryptography/),
+  vendored as names only (98 families, 246 curves, Apache-2.0): missing
+  asset type, values outside a closed vocabulary, unknown family, unknown
+  curve (with the registry spelling when a bare name resolves), and the
+  1.6 fields 1.7 deprecated when they appear in a 1.7 or later BOM.
+- **`crypto-coverage` check type** (schema v5) and four CBOM presets:
+  *EU PQC roadmap: cryptographic inventory*, *DORA RTS Article 7(4):
+  certificate register*, *PCI DSS 12.3.3: cipher suite and protocol
+  inventory*, and *BSI TR-02102-1 (2026-01): recommended parameters*, whose
+  rows cite the TR's tables (RSA and DH moduli of at least 3000 bits, EC
+  orders of at least 250 bits and the brainpool curves, FrodoKEM, Classic
+  McEliece and ML-KEM parameter sets, AES key lengths and modes, SHA-2 and
+  SHA-3 output lengths, ML-DSA and SLH-DSA sets) and quote its horizons
+  (sole classical key agreement until the end of 2031, classical signatures
+  until the end of 2035). Every check counts what the BOM states; a match is
+  not a security verdict and an unmatched asset is not thereby insecure.
+
+### Changed
+- A coverage meter with nothing in scope reads "none in scope" instead of
+  "0/0 · 100%", in the report and in the Markdown export.
+
 ## [0.28.1] - 2026-09-25
 
 ### Changed

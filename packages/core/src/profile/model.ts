@@ -31,6 +31,16 @@ export const PROFILE_SCHEMA_V3 = 'sbomlens-profile/v3';
  * exists for the two modifiers, which an older engine would silently drop.
  */
 export const PROFILE_SCHEMA_V4 = 'sbomlens-profile/v4';
+/**
+ * v5 = v4 plus the `purposes` filter on package coverage, the `description`
+ * package field, and the `crypto-coverage` check over CycloneDX
+ * cryptographic assets (CBOM). The filter scopes a meter to packages of a
+ * given purpose (the G7 SBOM-for-AI profile measures models and datasets,
+ * not every library next to them). An older engine would drop the filter
+ * and measure every package, which misstates a subset meter, hence the id;
+ * the new check type is rejected outright by older engines.
+ */
+export const PROFILE_SCHEMA_V5 = 'sbomlens-profile/v5';
 
 /** Profiles larger than this are never sniffed or imported. */
 export const MAX_PROFILE_BYTES = 65536;
@@ -64,7 +74,9 @@ export type PackageField =
   | 'validUntil'
   | 'licenseDeclared'
   | 'licenseConcluded'
-  | 'properties';
+  | 'properties'
+  // v5
+  | 'description';
 
 /** Fields that exist only from schema v4 on; the validator rejects them below it. */
 export const V4_DOCUMENT_FIELDS: readonly DocumentField[] = ['sbomType', 'describes', 'externalDocumentRefs'];
@@ -76,6 +88,8 @@ export const V4_PACKAGE_FIELDS: readonly PackageField[] = [
   'licenseConcluded',
   'properties',
 ];
+/** Fields that exist only from schema v5 on. */
+export const V5_PACKAGE_FIELDS: readonly PackageField[] = ['description'];
 
 /** Package fields whose extracted value is a string (pattern/values apply). */
 export const STRING_PACKAGE_FIELDS: readonly PackageField[] = [
@@ -93,10 +107,82 @@ export const STRING_PACKAGE_FIELDS: readonly PackageField[] = [
   'licenseDeclared',
   'licenseConcluded',
   'properties',
+  'description',
 ];
 
 /** Licence fields that accept the v4 `licenseIds` / `allowDeprecated` modifiers. */
 export const LICENSE_PACKAGE_FIELDS: readonly PackageField[] = ['license', 'licenseDeclared', 'licenseConcluded'];
+
+/**
+ * v5: what a `crypto-coverage` check reads off a cryptographic asset
+ * (CycloneDX cryptoProperties). Boolean-valued fields answer "is it stated";
+ * string-valued ones carry the value so `pattern` / `values` can narrow it.
+ */
+export type CryptoField =
+  | 'assetType'
+  | 'primitive'
+  | 'family'
+  | 'parameterSet'
+  | 'curve'
+  | 'mode'
+  | 'padding'
+  | 'executionEnvironment'
+  | 'securityLevel'
+  | 'certificateSubject'
+  | 'certificateIssuer'
+  | 'certificateValidity'
+  | 'certificateState'
+  | 'certificateSignature'
+  | 'materialState'
+  | 'materialExpiration'
+  | 'materialSecuredBy'
+  | 'protocolVersion'
+  | 'cipherSuites'
+  | 'related'
+  | 'oid';
+
+export const CRYPTO_FIELDS: readonly CryptoField[] = [
+  'assetType',
+  'primitive',
+  'family',
+  'parameterSet',
+  'curve',
+  'mode',
+  'padding',
+  'executionEnvironment',
+  'securityLevel',
+  'certificateSubject',
+  'certificateIssuer',
+  'certificateValidity',
+  'certificateState',
+  'certificateSignature',
+  'materialState',
+  'materialExpiration',
+  'materialSecuredBy',
+  'protocolVersion',
+  'cipherSuites',
+  'related',
+  'oid',
+];
+
+/** Crypto fields whose extracted value is a string (pattern/values apply). */
+export const STRING_CRYPTO_FIELDS: readonly CryptoField[] = [
+  'assetType',
+  'primitive',
+  'family',
+  'parameterSet',
+  'curve',
+  'mode',
+  'padding',
+  'executionEnvironment',
+  'certificateSubject',
+  'certificateIssuer',
+  'certificateState',
+  'materialState',
+  'materialSecuredBy',
+  'protocolVersion',
+  'oid',
+];
 
 interface CheckBase {
   /** Stable id for reports; defaults to `${type}-${index}`. Unique when present. */
@@ -149,6 +235,35 @@ export type ProfileCheck =
       licenseIds?: 'known' | 'known-or-ref';
       /** v4, with `licenseIds`: whether deprecated identifiers still satisfy the check (default true). */
       allowDeprecated?: boolean;
+      /**
+       * v5: measure only packages whose purpose is one of these, compared
+       * case-insensitively against the model's purpose (MODEL, DATA,
+       * LIBRARY, ...). The meter's total is the number of packages in
+       * scope; with none in scope it reads 0/0 and passes.
+       */
+      purposes?: string[];
+    })
+  | (CheckBase & {
+      /**
+       * v5: the share of cryptographic assets (CycloneDX cryptoProperties)
+       * that state a field, optionally narrowed by `pattern` / `values` on
+       * string fields. The scope is every element carrying crypto data,
+       * filtered by asset type, primitive and algorithm family (all
+       * case-insensitive). 0 in scope reads 0/0 and passes. Measures what
+       * a BOM states; nothing here rates an algorithm.
+       */
+      type: 'crypto-coverage';
+      field: CryptoField;
+      /** algorithm, certificate, protocol, related-crypto-material */
+      assetTypes?: string[];
+      /** Algorithm primitives (hash, signature, kem, block-cipher, ...). */
+      primitives?: string[];
+      /** Registry family names (AES, ML-KEM, RSASSA-PSS, ...), matched case-insensitively against what the BOM states. */
+      families?: string[];
+      /** 0..100. Absent = informational meter, never gates. */
+      threshold?: number;
+      pattern?: string;
+      values?: string[];
     });
 
 /**
@@ -172,7 +287,12 @@ export interface ProfileRequires {
 }
 
 export interface ComplianceProfile {
-  schema: typeof PROFILE_SCHEMA_V1 | typeof PROFILE_SCHEMA_V2 | typeof PROFILE_SCHEMA_V3 | typeof PROFILE_SCHEMA_V4;
+  schema:
+    | typeof PROFILE_SCHEMA_V1
+    | typeof PROFILE_SCHEMA_V2
+    | typeof PROFILE_SCHEMA_V3
+    | typeof PROFILE_SCHEMA_V4
+    | typeof PROFILE_SCHEMA_V5;
   name: string;
   description?: string;
   /**

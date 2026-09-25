@@ -1,0 +1,152 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.7",
+  "serialNumber": "urn:uuid:c0ffee00-2222-4333-8444-555566667777",
+  "version": 1,
+  "metadata": {
+    "timestamp": "2026-06-01T10:00:00Z",
+    "authors": [{ "name": "ACME Security" }],
+    "component": { "type": "application", "bom-ref": "app", "name": "acme-vpn", "version": "4.2.0" }
+  },
+  "components": [
+    {
+      "type": "cryptographic-asset",
+      "bom-ref": "alg-aes",
+      "name": "AES-256-GCM",
+      "cryptoProperties": {
+        "assetType": "algorithm",
+        "algorithmProperties": {
+          "primitive": "ae",
+          "algorithmFamily": "AES",
+          "parameterSetIdentifier": "256",
+          "mode": "gcm",
+          "executionEnvironment": "software-plain-ram",
+          "implementationPlatform": "x86_64",
+          "cryptoFunctions": ["encrypt", "decrypt"],
+          "classicalSecurityLevel": 256,
+          "nistQuantumSecurityLevel": 5
+        },
+        "oid": "2.16.840.1.101.3.4.1.46"
+      }
+    },
+    {
+      "type": "cryptographic-asset",
+      "bom-ref": "alg-rsa",
+      "name": "RSA-PSS-3072",
+      "cryptoProperties": {
+        "assetType": "algorithm",
+        "algorithmProperties": {
+          "primitive": "signature",
+          "algorithmFamily": "RSASSA-PSS",
+          "parameterSetIdentifier": "3072",
+          "cryptoFunctions": ["sign", "verify"]
+        }
+      }
+    },
+    {
+      "type": "cryptographic-asset",
+      "bom-ref": "alg-ecdh",
+      "name": "ECDH-P256",
+      "cryptoProperties": {
+        "assetType": "algorithm",
+        "algorithmProperties": {
+          "primitive": "key-agree",
+          "algorithmFamily": "ECDH",
+          "ellipticCurve": "nist/P-256",
+          "parameterSetIdentifier": "256"
+        }
+      }
+    },
+    {
+      "type": "cryptographic-asset",
+      "bom-ref": "alg-mlkem",
+      "name": "ML-KEM-768",
+      "cryptoProperties": {
+        "assetType": "algorithm",
+        "algorithmProperties": {
+          "primitive": "kem",
+          "algorithmFamily": "ML-KEM",
+          "parameterSetIdentifier": "768",
+          "nistQuantumSecurityLevel": 3
+        }
+      }
+    },
+    {
+      "type": "cryptographic-asset",
+      "bom-ref": "alg-sha1",
+      "name": "SHA-1",
+      "cryptoProperties": {
+        "assetType": "algorithm",
+        "algorithmProperties": { "primitive": "hash", "algorithmFamily": "SHA-1", "parameterSetIdentifier": "160" }
+      }
+    },
+    {
+      "type": "cryptographic-asset",
+      "bom-ref": "cert-server",
+      "name": "vpn.acme.example",
+      "cryptoProperties": {
+        "assetType": "certificate",
+        "certificateProperties": {
+          "subjectName": "CN=vpn.acme.example",
+          "issuerName": "CN=ACME Issuing CA",
+          "notValidBefore": "2026-01-01T00:00:00Z",
+          "notValidAfter": "2027-01-01T00:00:00Z",
+          "certificateFormat": "X.509",
+          "certificateFileExtension": "pem",
+          "certificateState": [{ "state": "active" }],
+          "relatedCryptographicAssets": [
+            { "type": "signatureAlgorithm", "ref": "alg-rsa" },
+            { "type": "subjectPublicKey", "ref": "key-server" }
+          ]
+        }
+      }
+    },
+    {
+      "type": "cryptographic-asset",
+      "bom-ref": "key-server",
+      "name": "vpn server key",
+      "cryptoProperties": {
+        "assetType": "related-crypto-material",
+        "relatedCryptoMaterialProperties": {
+          "type": "private-key",
+          "id": "kid-42",
+          "state": "active",
+          "size": 3072,
+          "format": "PKCS#8",
+          "creationDate": "2026-01-01T00:00:00Z",
+          "expirationDate": "2027-01-01T00:00:00Z",
+          "securedBy": { "mechanism": "HSM", "algorithmRef": "alg-aes" },
+          "relatedCryptographicAssets": [{ "type": "algorithm", "ref": "alg-rsa" }]
+        }
+      }
+    },
+    {
+      "type": "cryptographic-asset",
+      "bom-ref": "proto-tls",
+      "name": "TLS 1.3",
+      "cryptoProperties": {
+        "assetType": "protocol",
+        "protocolProperties": {
+          "type": "tls",
+          "version": "1.3",
+          "cipherSuites": [
+            { "name": "TLS_AES_256_GCM_SHA384", "algorithms": ["alg-aes"], "identifiers": ["0x13", "0x02"] }
+          ],
+          "relatedCryptographicAssets": [{ "type": "certificate", "ref": "cert-server" }]
+        }
+      }
+    },
+    {
+      "type": "library",
+      "bom-ref": "lib-openssl",
+      "name": "openssl",
+      "version": "3.3.1",
+      "purl": "pkg:generic/openssl@3.3.1",
+      "hashes": [{ "alg": "SHA-256", "content": "aabb00112233445566778899aabbccddeeff00112233445566778899aabbccdd" }]
+    }
+  ],
+  "dependencies": [
+    { "ref": "app", "dependsOn": ["lib-openssl", "proto-tls"] },
+    { "ref": "lib-openssl", "provides": ["alg-aes", "alg-rsa", "alg-ecdh", "alg-mlkem", "alg-sha1"] }
+  ]
+}

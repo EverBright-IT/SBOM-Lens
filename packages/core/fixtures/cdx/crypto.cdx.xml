@@ -1,0 +1,176 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- XML twin of crypto.cdx.json: the same CBOM, which the parity test pins. -->
+<bom xmlns="http://cyclonedx.org/schema/bom/1.7" serialNumber="urn:uuid:c0ffee00-2222-4333-8444-555566667777" version="1">
+  <metadata>
+    <timestamp>2026-06-01T10:00:00Z</timestamp>
+    <authors>
+      <author><name>ACME Security</name></author>
+    </authors>
+    <component type="application" bom-ref="app">
+      <name>acme-vpn</name>
+      <version>4.2.0</version>
+    </component>
+  </metadata>
+  <components>
+    <component type="cryptographic-asset" bom-ref="alg-aes">
+      <name>AES-256-GCM</name>
+      <cryptoProperties>
+        <assetType>algorithm</assetType>
+        <algorithmProperties>
+          <primitive>ae</primitive>
+          <algorithmFamily>AES</algorithmFamily>
+          <parameterSetIdentifier>256</parameterSetIdentifier>
+          <mode>gcm</mode>
+          <executionEnvironment>software-plain-ram</executionEnvironment>
+          <implementationPlatform>x86_64</implementationPlatform>
+          <cryptoFunctions>
+            <cryptoFunction>encrypt</cryptoFunction>
+            <cryptoFunction>decrypt</cryptoFunction>
+          </cryptoFunctions>
+          <classicalSecurityLevel>256</classicalSecurityLevel>
+          <nistQuantumSecurityLevel>5</nistQuantumSecurityLevel>
+        </algorithmProperties>
+        <oid>2.16.840.1.101.3.4.1.46</oid>
+      </cryptoProperties>
+    </component>
+    <component type="cryptographic-asset" bom-ref="alg-rsa">
+      <name>RSA-PSS-3072</name>
+      <cryptoProperties>
+        <assetType>algorithm</assetType>
+        <algorithmProperties>
+          <primitive>signature</primitive>
+          <algorithmFamily>RSASSA-PSS</algorithmFamily>
+          <parameterSetIdentifier>3072</parameterSetIdentifier>
+          <cryptoFunctions>
+            <cryptoFunction>sign</cryptoFunction>
+            <cryptoFunction>verify</cryptoFunction>
+          </cryptoFunctions>
+        </algorithmProperties>
+      </cryptoProperties>
+    </component>
+    <component type="cryptographic-asset" bom-ref="alg-ecdh">
+      <name>ECDH-P256</name>
+      <cryptoProperties>
+        <assetType>algorithm</assetType>
+        <algorithmProperties>
+          <primitive>key-agree</primitive>
+          <algorithmFamily>ECDH</algorithmFamily>
+          <ellipticCurve>nist/P-256</ellipticCurve>
+          <parameterSetIdentifier>256</parameterSetIdentifier>
+        </algorithmProperties>
+      </cryptoProperties>
+    </component>
+    <component type="cryptographic-asset" bom-ref="alg-mlkem">
+      <name>ML-KEM-768</name>
+      <cryptoProperties>
+        <assetType>algorithm</assetType>
+        <algorithmProperties>
+          <primitive>kem</primitive>
+          <algorithmFamily>ML-KEM</algorithmFamily>
+          <parameterSetIdentifier>768</parameterSetIdentifier>
+          <nistQuantumSecurityLevel>3</nistQuantumSecurityLevel>
+        </algorithmProperties>
+      </cryptoProperties>
+    </component>
+    <component type="cryptographic-asset" bom-ref="alg-sha1">
+      <name>SHA-1</name>
+      <cryptoProperties>
+        <assetType>algorithm</assetType>
+        <algorithmProperties>
+          <primitive>hash</primitive>
+          <algorithmFamily>SHA-1</algorithmFamily>
+          <parameterSetIdentifier>160</parameterSetIdentifier>
+        </algorithmProperties>
+      </cryptoProperties>
+    </component>
+    <component type="cryptographic-asset" bom-ref="cert-server">
+      <name>vpn.acme.example</name>
+      <cryptoProperties>
+        <assetType>certificate</assetType>
+        <certificateProperties>
+          <subjectName>CN=vpn.acme.example</subjectName>
+          <issuerName>CN=ACME Issuing CA</issuerName>
+          <notValidBefore>2026-01-01T00:00:00Z</notValidBefore>
+          <notValidAfter>2027-01-01T00:00:00Z</notValidAfter>
+          <certificateFormat>X.509</certificateFormat>
+          <certificateFileExtension>pem</certificateFileExtension>
+          <certificateState>
+            <state>active</state>
+          </certificateState>
+          <relatedCryptographicAssets>
+            <relatedCryptographicAsset><type>signatureAlgorithm</type><ref>alg-rsa</ref></relatedCryptographicAsset>
+            <relatedCryptographicAsset><type>subjectPublicKey</type><ref>key-server</ref></relatedCryptographicAsset>
+          </relatedCryptographicAssets>
+        </certificateProperties>
+      </cryptoProperties>
+    </component>
+    <component type="cryptographic-asset" bom-ref="key-server">
+      <name>vpn server key</name>
+      <cryptoProperties>
+        <assetType>related-crypto-material</assetType>
+        <relatedCryptoMaterialProperties>
+          <type>private-key</type>
+          <id>kid-42</id>
+          <state>active</state>
+          <size>3072</size>
+          <format>PKCS#8</format>
+          <creationDate>2026-01-01T00:00:00Z</creationDate>
+          <expirationDate>2027-01-01T00:00:00Z</expirationDate>
+          <securedBy>
+            <mechanism>HSM</mechanism>
+            <algorithmRef>alg-aes</algorithmRef>
+          </securedBy>
+          <relatedCryptographicAssets>
+            <relatedCryptographicAsset><type>algorithm</type><ref>alg-rsa</ref></relatedCryptographicAsset>
+          </relatedCryptographicAssets>
+        </relatedCryptoMaterialProperties>
+      </cryptoProperties>
+    </component>
+    <component type="cryptographic-asset" bom-ref="proto-tls">
+      <name>TLS 1.3</name>
+      <cryptoProperties>
+        <assetType>protocol</assetType>
+        <protocolProperties>
+          <type>tls</type>
+          <version>1.3</version>
+          <cipherSuites>
+            <cipherSuite>
+              <name>TLS_AES_256_GCM_SHA384</name>
+              <algorithms>
+                <algorithm>alg-aes</algorithm>
+              </algorithms>
+              <identifiers>
+                <identifier>0x13</identifier>
+                <identifier>0x02</identifier>
+              </identifiers>
+            </cipherSuite>
+          </cipherSuites>
+          <relatedCryptographicAssets>
+            <relatedCryptographicAsset><type>certificate</type><ref>cert-server</ref></relatedCryptographicAsset>
+          </relatedCryptographicAssets>
+        </protocolProperties>
+      </cryptoProperties>
+    </component>
+    <component type="library" bom-ref="lib-openssl">
+      <name>openssl</name>
+      <version>3.3.1</version>
+      <hashes>
+        <hash alg="SHA-256">aabb00112233445566778899aabbccddeeff00112233445566778899aabbccdd</hash>
+      </hashes>
+      <purl>pkg:generic/openssl@3.3.1</purl>
+    </component>
+  </components>
+  <dependencies>
+    <dependency ref="app">
+      <dependency ref="lib-openssl"/>
+      <dependency ref="proto-tls"/>
+    </dependency>
+    <dependency ref="lib-openssl">
+      <provides ref="alg-aes"/>
+      <provides ref="alg-rsa"/>
+      <provides ref="alg-ecdh"/>
+      <provides ref="alg-mlkem"/>
+      <provides ref="alg-sha1"/>
+    </dependency>
+  </dependencies>
+</bom>

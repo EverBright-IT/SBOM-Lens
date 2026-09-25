@@ -38,7 +38,7 @@ field-level (presence, patterns): SBOM Lens does not do legal interpretation.
 | `document-field` | the field is present (and matches the modifiers) | `name`, `namespace`, `created`, `creators`, `dataLicense`, `comment`; v4: `sbomType`, `describes`, `externalDocumentRefs` |
 | `relationships` | the document has at least `minCount` (default 1) relationships | - |
 | `created-recency` | `created` parses and is at most `maxAgeDays` old (boundary inclusive) | - |
-| `package-coverage` | the share of packages satisfying the field (and modifiers) reaches `threshold` % | `version`, `supplier`, `purl`, `uniqueId`, `checksum`, `license`, `downloadLocation`, `purpose`, `copyright`, `originator`; v4: `fileName`, `supportLevel`, `validUntil`, `licenseDeclared`, `licenseConcluded`, `properties` |
+| `package-coverage` | the share of packages satisfying the field (and modifiers) reaches `threshold` % | `version`, `supplier`, `purl`, `uniqueId`, `checksum`, `license`, `downloadLocation`, `purpose`, `copyright`, `originator`; v4: `fileName`, `supportLevel`, `validUntil`, `licenseDeclared`, `licenseConcluded`, `properties`; v5: `description` |
 
 ### Modifiers and semantics
 
@@ -139,6 +139,47 @@ the earlier fields could not express:
 New field tokens are rejected below v4 by the whitelist; the schema id
 exists for the two modifiers, which an older engine would otherwise drop
 silently. v4 includes everything from v3.
+
+### Schema v5: purpose-scoped meters, description field
+
+`sbomlens-profile/v5` adds:
+
+- **`purposes`** on `package-coverage`: the meter runs only over packages
+  whose purpose is one of the listed values, compared case-insensitively
+  against the purpose the model carries (SPDX 2.3 `primaryPackagePurpose`,
+  SPDX 3 `primaryPurpose`, or the CycloneDX component type mapped onto them,
+  with `machine-learning-model` as `MODEL`; SPDX 3 `ai_AIPackage` and
+  `dataset_DatasetPackage` count as `MODEL` and `DATA` even without a stated
+  purpose). The total is the number of packages in scope. With none in scope
+  the meter reads 0/0 and passes, which the report shows as "none in scope":
+  a document without models cannot fail a model meter.
+- **Package field `description`**: the component description (SPDX
+  `description` or `summary`, CycloneDX `description`).
+- **`crypto-coverage`**: a meter over the cryptographic assets of a
+  CycloneDX CBOM (`cryptoProperties`), scoped by `assetTypes`, `primitives`
+  and `families` (all case-insensitive), reading one `field`: `assetType`,
+  `primitive`, `family`, `parameterSet`, `curve`, `mode`, `padding`,
+  `executionEnvironment`, `securityLevel`, `certificateSubject`,
+  `certificateIssuer`, `certificateValidity`, `certificateState`,
+  `certificateSignature`, `materialState`, `materialExpiration`,
+  `materialSecuredBy`, `protocolVersion`, `cipherSuites`, `related`, `oid`.
+  String fields take `pattern` / `values`; `threshold` gates like package
+  coverage. It measures what a BOM states and rates nothing: a row such as
+  "RSA modulus of at least 3000 bits" counts the RSA assets whose stated
+  parameter set matches, with the table it cites in the label.
+
+```json
+{ "schema": "sbomlens-profile/v5", "name": "models carry a hash, RSA keys are long",
+  "requires": { "spec": "cdx-1.6" },
+  "checks": [
+    { "type": "package-coverage", "field": "checksum", "purposes": ["MODEL"] },
+    { "type": "crypto-coverage", "field": "parameterSet", "assetTypes": ["algorithm"],
+      "families": ["RSASSA-PSS", "RSAES-OAEP"], "pattern": "^(3[0-9]{3}|[4-9][0-9]{3})$",
+      "label": "RSA modulus of at least 3000 bits" } ] }
+```
+
+An older engine would drop `purposes` and measure every package where the
+author meant a subset, hence the id. v5 includes everything from v4.
 
 ### Validation is fail-closed
 
@@ -243,6 +284,42 @@ component essentials for component descriptors), the dropdown offers:
   component name is satisfied by construction and not checked. The n-tier
   vehicle SBOM the specification is written for is what the cascade view
   resolves.
+- **[G7 SBOM for AI minimum elements](https://www.bsi.bund.de/SharedDocs/Downloads/EN/BSI/KI/SBOM-for-AI_minimum-elements.html)** (schema v5): the
+  machine-checkable elements of *Software Bill of Materials for AI: Minimum
+  Elements* (G7 Cybersecurity Working Group, 12 May 2026; published jointly
+  by BSI, ACN, ANSSI, CSE, CISA, NCSC and NCO with the EU Commission). Of
+  the 50 elements in seven clusters, 17 are measured, 6 hold by construction
+  in any parsed document, and 27 are free-text or organisational elements
+  the profile description lists for manual review. The model meters run only
+  over components with purpose `MODEL` and the dataset meters only over
+  `DATA`, so a library-heavy SBOM cannot hide a model without a hash; on
+  SPDX 2.x, which has no such purposes, they read "none in scope". The paper
+  states that its elements are not mandatory and create no requirements,
+  standards, or legislation, and the report does not turn them into a
+  verdict.
+- **Four CBOM presets** (schema v5, CycloneDX 1.6 or later as the format
+  baseline, every check a meter over the cryptographic assets):
+  **[EU PQC roadmap: cryptographic inventory](https://digital-strategy.ec.europa.eu/en/library/coordinated-implementation-roadmap-transition-post-quantum-cryptography)**
+  (how complete the inventory is that the Coordinated Implementation Roadmap
+  of 11 June 2025 asks Member States to start with by the end of 2026, plus
+  the quantum-safe share of KEMs and signatures),
+  **[DORA RTS Article 7(4): certificate register](https://eur-lex.europa.eu/eli/reg_del/2024/1774/oj/eng)**
+  (whether certificates and keys carry what a register under Commission
+  Delegated Regulation (EU) 2024/1774 needs: subject, issuer, validity end,
+  state, signature algorithm, storage mechanism),
+  **[PCI DSS 12.3.3: cipher suite and protocol inventory](https://www.pcisecuritystandards.org/document_library/)**
+  (protocols with version and cipher suites, algorithms with family and
+  parameter set), and
+  **[BSI TR-02102-1 (2026-01): recommended parameters](https://www.bsi.bund.de/SharedDocs/Downloads/EN/BSI/Publications/TechGuidelines/TG02102/BSI-TR-02102-1.html)**
+  (per mechanism class, how many assets state a parameter the TR
+  recommends, each row citing its table: RSA and DH moduli of at least 3000
+  bits, EC orders of at least 250 bits and the brainpool curves, the
+  quantum-safe KEM and signature parameter sets, AES key lengths and modes,
+  SHA-2 and SHA-3 output lengths; with the TR's horizons quoted: sole
+  classical key agreement until the end of 2031, classical signatures until
+  the end of 2035). A match means the stated parameter is within the cited
+  recommendation, nothing more; an unmatched asset is not thereby insecure,
+  and nothing gates except the format baseline.
 - **[BSI TR-03183-2 field coverage (approximation)](https://www.bsi.bund.de/dok/TR-03183)**: the machine-checkable
   field requirements of BSI TR-03183 part 2 v2.1.0, gated at 100%: SBOM
   creator with contact (email or URL, on a Person/Organization creator),

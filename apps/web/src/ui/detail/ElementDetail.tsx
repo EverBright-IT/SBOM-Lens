@@ -5,6 +5,7 @@ import { useAppStore } from '../../app/store';
 import { revealElement, selectTarget } from '../navigate';
 import { RevealIcon } from '../icons';
 import { CopyButton, FieldRow, Section } from './FieldRow';
+import { CryptoSection } from './CryptoSection';
 import { OcmElementSections } from './OcmSections';
 import { RelationshipList } from './RelationshipList';
 import { VexElementSection } from './VexSection';
@@ -62,6 +63,7 @@ export function ElementDetail({
 
       <VexElementSection elementId={element.id} />
       {isFile && <AcceptanceElementSection elementId={element.id} />}
+      {element.crypto && <CryptoSection crypto={element.crypto} loaded={loaded} />}
 
       {element.purl && (
         <Section title="Package URL">

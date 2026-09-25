@@ -1,5 +1,6 @@
 import type { DocumentId, ElementId } from './ids';
 import type { Diagnostic } from './diagnostics';
+import type { CryptoElementExt } from './crypto';
 import type { OcmDocumentExt, OcmElementExt, OcmReferenceExt } from './ocm';
 
 export type Serialization = 'json' | 'yaml' | 'tag-value' | 'xml';
@@ -100,6 +101,8 @@ export interface SbomElement {
   properties?: { name: string; value: string }[];
   /** OCM artifact extras (type, relation, access, digest, labels). */
   ocm?: OcmElementExt;
+  /** CycloneDX cryptoProperties (CBOM): present on cryptographic-asset components. */
+  crypto?: CryptoElementExt;
   raw: RawFields;
 }
 

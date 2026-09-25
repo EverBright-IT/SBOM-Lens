@@ -25,11 +25,34 @@ const VEX_STATUSES: ReadonlySet<string> = new Set([
   'under_investigation',
 ]);
 
+/** A file hash the advisory attaches to a product (CSAF product_identification_helper). */
+export interface VexProductHash {
+  algorithm: string;
+  value: string;
+}
+
 export interface VexProductRef {
-  /** purl or CPE of the product itself ("pkg:..."/"cpe:..." @id or identifiers). */
+  /**
+   * purl or CPE of the product itself ("pkg:..."/"cpe:..." @id or
+   * identifiers); for a CSAF product identified only by file hashes, a
+   * `hash:<algorithm>:<value>` pseudo-id, so the reference is never empty.
+   */
   id: string;
   /** purls/CPEs of affected subcomponents inside that product. */
   subcomponents: string[];
+  /** File hashes of the product; matched against element checksums (TR-03191 section 4.4). */
+  hashes?: VexProductHash[];
+}
+
+/** A CSAF remediation, kept structured so the reader sees kind, link and date. */
+export interface VexRemediation {
+  /** vendor_fix, mitigation, workaround, none_available, no_fix_planned, ... */
+  category: string;
+  details?: string;
+  url?: string;
+  date?: string;
+  /** CSAF restart_required.category, when stated. */
+  restartRequired?: string;
 }
 
 export interface VexStatement {
@@ -43,8 +66,21 @@ export interface VexStatement {
   justification?: string;
   impactStatement?: string;
   actionStatement?: string;
+  /** Structured remediations (CSAF); actionStatement stays the first details text. */
+  remediations?: VexRemediation[];
   /** Statement timestamp; absent means "inherit the document's". */
   timestamp?: string;
+}
+
+/** One measured requirement of BSI TR-03191 against a CSAF document. Facts, never a conformance verdict. */
+export interface CsafRequirementFinding {
+  id: string;
+  /** Section of TR-03191 the requirement comes from, e.g. "4.3". */
+  clause: string;
+  label: string;
+  pass: boolean;
+  /** What was observed, for the reader. */
+  actual?: string;
 }
 
 export interface VexDocument {
@@ -56,6 +92,16 @@ export interface VexDocument {
   author?: string;
   timestamp?: string;
   version?: number;
+  /** CSAF document.title. */
+  title?: string;
+  /** CSAF document.category: csaf_vex, csaf_security_advisory, csaf_base, ... */
+  category?: string;
+  /** CSAF document.distribution.tlp.label, e.g. TLP:CLEAR. */
+  tlp?: string;
+  /** CSAF tracking.status: draft, interim, final. */
+  status?: string;
+  /** CSAF only: the TR-03191 requirements measured on this document. */
+  tr03191?: CsafRequirementFinding[];
   statements: VexStatement[];
   diagnostics: Diagnostic[];
 }
@@ -68,6 +114,7 @@ export interface VexFinding {
   impactStatement?: string;
   actionStatement?: string;
   description?: string;
+  remediations?: VexRemediation[];
   /** @id (or file name) of the VEX document that said it. */
   source: string;
   /**
@@ -78,6 +125,8 @@ export interface VexFinding {
   sourceFile: string;
   /** The element matched a subcomponent entry, not the product itself. */
   viaSubcomponent: boolean;
+  /** Which identifier made the match: the purl, a CPE, or a file hash (CSAF). */
+  matchedBy: 'purl' | 'cpe' | 'hash';
   /** Timestamp that won the time rule (statement's, else document's). */
   timestamp?: string;
   /** How many statements for this (element, vulnerability) the time rule discarded. */
@@ -329,6 +378,17 @@ export function matchVex(
           order: order++,
           viaSubcomponent: false,
         });
+        // A file hash names exact bytes: no version dimension, no wildcard.
+        for (const hash of product.hashes ?? []) {
+          pushCandidate(index, hashKey(hash.algorithm, hash.value), {
+            statement,
+            source: doc.id,
+            sourceFile: doc.fileName,
+            ...(timestamp !== undefined ? { timestamp } : {}),
+            order: order++,
+            viaSubcomponent: false,
+          });
+        }
         for (const sub of product.subcomponents) {
           addCandidate(index, sub, {
             statement,
@@ -354,18 +414,18 @@ export function matchVex(
       // a versionless one covers every version. An element reachable through
       // both its purl and a CPE must not double-count one statement — the
       // Set collapses candidates that arrive via more than one key.
-      const applicable = new Set<IndexedStatement>();
+      const applicable = new Map<IndexedStatement, VexFinding['matchedBy']>();
       for (const key of keys) {
         for (const c of index.get(key.id) ?? []) {
           if (c.version === undefined || (key.version !== undefined && c.version === key.version)) {
-            applicable.add(c);
+            if (!applicable.has(c)) applicable.set(c, key.kind);
           }
         }
       }
       if (applicable.size === 0) continue;
 
       const byVuln = new Map<string, { winner: IndexedStatement; superseded: number }>();
-      for (const candidate of applicable) {
+      for (const candidate of applicable.keys()) {
         const existing = byVuln.get(candidate.statement.vulnerability);
         if (!existing) {
           byVuln.set(candidate.statement.vulnerability, { winner: candidate, superseded: 0 });
@@ -383,9 +443,11 @@ export function matchVex(
           ...(c.statement.impactStatement !== undefined ? { impactStatement: c.statement.impactStatement } : {}),
           ...(c.statement.actionStatement !== undefined ? { actionStatement: c.statement.actionStatement } : {}),
           ...(c.statement.description !== undefined ? { description: c.statement.description } : {}),
+          ...(c.statement.remediations !== undefined ? { remediations: c.statement.remediations } : {}),
           source: c.source,
           sourceFile: c.sourceFile,
           viaSubcomponent: c.viaSubcomponent,
+          matchedBy: applicable.get(c) ?? 'purl',
           ...(c.timestamp !== undefined ? { timestamp: c.timestamp } : {}),
           ...(superseded > 0 ? { supersededCount: superseded } : {}),
         }))
@@ -407,43 +469,66 @@ function addCandidate(
 ): void {
   const key = refMatchKey(ref);
   if (!key) return;
-  const list = index.get(key.id) ?? [];
-  list.push(key.version !== undefined ? { ...candidate, version: key.version } : candidate);
-  index.set(key.id, list);
+  pushCandidate(index, key.id, key.version !== undefined ? { ...candidate, version: key.version } : candidate);
+}
+
+function pushCandidate(index: Map<string, IndexedStatement[]>, id: string, candidate: IndexedStatement): void {
+  const list = index.get(id) ?? [];
+  list.push(candidate);
+  index.set(id, list);
 }
 
 interface MatchKey {
-  /** Index key: a purl package key, or a CPE key behind the `cpe|` prefix. */
+  /** Index key: a purl package key, a CPE key behind `cpe|`, or a file hash behind `hash|`. */
   id: string;
+  kind: 'purl' | 'cpe' | 'hash';
   version?: string;
 }
 
+/** `hash|SHA256:<lowercase hex>`: algorithm spellings differ between formats, the bytes do not. */
+function hashKey(algorithm: string, value: string): string {
+  return `hash|${algorithm.toUpperCase().replace(/[^A-Z0-9]/g, '')}:${value.toLowerCase()}`;
+}
+
 /**
- * One namespace for both identifier schemes. purl keys are
+ * One namespace for every identifier scheme. purl keys are
  * `type/namespace/name` (always contain a slash), CPE keys get a `cpe|`
- * prefix — the two can never collide.
+ * prefix, hash keys a `hash|` prefix — none can collide.
  */
 function refMatchKey(ref: string): MatchKey | undefined {
   const purl = purlMatchKey(ref);
-  if (purl) return purl.version !== undefined ? { id: purl.pkg, version: purl.version } : { id: purl.pkg };
+  if (purl) return purl.version !== undefined ? { id: purl.pkg, kind: 'purl', version: purl.version } : { id: purl.pkg, kind: 'purl' };
   const cpe = cpeMatchKey(ref);
-  if (cpe) return cpe.version !== undefined ? { id: `cpe|${cpe.key}`, version: cpe.version } : { id: `cpe|${cpe.key}` };
+  if (cpe) {
+    return cpe.version !== undefined
+      ? { id: `cpe|${cpe.key}`, kind: 'cpe', version: cpe.version }
+      : { id: `cpe|${cpe.key}`, kind: 'cpe' };
+  }
+  const hash = /^hash:([^:]+):([0-9a-fA-F]+)$/.exec(ref);
+  if (hash) return { id: hashKey(hash[1]!, hash[2]!), kind: 'hash' };
   return undefined;
 }
 
-/** Every key an inventory element can be matched by: its purl and its CPEs. */
+/** Every key an inventory element can be matched by: its purl, its CPEs, and its checksums. */
 function elementMatchKeys(element: SbomElement): MatchKey[] {
   const keys: MatchKey[] = [];
   if (element.purl) {
     const purl = purlMatchKey(element.purl);
-    if (purl) keys.push(purl.version !== undefined ? { id: purl.pkg, version: purl.version } : { id: purl.pkg });
+    if (purl) keys.push(purl.version !== undefined ? { id: purl.pkg, kind: 'purl', version: purl.version } : { id: purl.pkg, kind: 'purl' });
   }
   for (const ref of element.externalRefs ?? []) {
     if (!ref.locator.toLowerCase().startsWith('cpe:')) continue;
     const cpe = cpeMatchKey(ref.locator);
     if (cpe) {
-      keys.push(cpe.version !== undefined ? { id: `cpe|${cpe.key}`, version: cpe.version } : { id: `cpe|${cpe.key}` });
+      keys.push(
+        cpe.version !== undefined
+          ? { id: `cpe|${cpe.key}`, kind: 'cpe', version: cpe.version }
+          : { id: `cpe|${cpe.key}`, kind: 'cpe' },
+      );
     }
+  }
+  for (const checksum of element.checksums ?? []) {
+    keys.push({ id: hashKey(checksum.algorithm, checksum.value), kind: 'hash' });
   }
   return keys;
 }

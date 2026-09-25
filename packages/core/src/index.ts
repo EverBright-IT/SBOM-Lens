@@ -97,7 +97,17 @@ export type { CascadeDiff, DiffChange, DiffEntry, DiffReason, DiffSide } from '.
 export { diffCascades, diffToMarkdown, reachableDocs } from './analysis/diff';
 export type { QualityReport } from './analysis/quality';
 export { documentIssues, documentQuality } from './analysis/quality';
-export type { VexCoverage, VexDocument, VexFinding, VexProductRef, VexStatement, VexStatus } from './analysis/vex';
+export type {
+  CsafRequirementFinding,
+  VexCoverage,
+  VexDocument,
+  VexFinding,
+  VexProductHash,
+  VexProductRef,
+  VexRemediation,
+  VexStatement,
+  VexStatus,
+} from './analysis/vex';
 export {
   MAX_VEX_BYTES,
   VEX_STATUS_ORDER,
@@ -109,6 +119,7 @@ export {
   worstVexStatus,
 } from './analysis/vex';
 export { MAX_CSAF_BYTES, parseCsaf, sniffCsaf } from './analysis/csaf';
+export { lintCsafTr03191 } from './analysis/csaf-tr03191';
 export type { CpeMatchKey } from './analysis/cpe';
 export { cpeMatchKey } from './analysis/cpe';
 export type {
@@ -122,6 +133,7 @@ export { checkDelivery, deliveryAlgorithms, hasVerifiableFiles } from './analysi
 
 export type {
   ComplianceProfile,
+  CryptoField,
   DocumentField,
   PackageField,
   ProfileCheck,
@@ -132,6 +144,7 @@ export {
   PROFILE_SCHEMA_V2,
   PROFILE_SCHEMA_V3,
   PROFILE_SCHEMA_V4,
+  PROFILE_SCHEMA_V5,
 } from './profile/model';
 export type { ProfileValidation } from './profile/validate';
 export { sniffProfile, validateProfile } from './profile/validate';
@@ -143,6 +156,11 @@ export { CISA_2026_PROFILE } from './profile/cisa2026';
 export { AUTOMOTIVE_SBOM_PROFILE } from './profile/automotive';
 export { FDA_524B_PROFILE } from './profile/fda';
 export { BSI_LICENSING_PROFILE } from './profile/bsi-licensing';
+export { G7_AI_SBOM_PROFILE } from './profile/g7-ai';
+export { CRYPTO_EU_ROADMAP_PROFILE } from './profile/crypto-eu-roadmap';
+export { CRYPTO_DORA_PROFILE } from './profile/crypto-dora';
+export { CRYPTO_PCI_PROFILE } from './profile/crypto-pci';
+export { CRYPTO_BSI_TR02102_PROFILE } from './profile/crypto-bsi-tr02102';
 export { profileReportToMarkdown } from './profile/markdown';
 export { licenseIdsInExpression } from './parse/spec-lint';
 export type { LicenseIdKind, LicenseIdRow, LicenseInventory } from './analysis/licenses';
@@ -155,6 +173,22 @@ export {
   isKnownLicenseId,
 } from './spec/spdx-license-ids';
 
+export type {
+  CryptoAlgorithm,
+  CryptoCertificate,
+  CryptoCipherSuite,
+  CryptoElementExt,
+  CryptoMaterial,
+  CryptoProtocol,
+  CryptoRelatedAsset,
+} from './model/crypto';
+export {
+  CDX_CRYPTO_REGISTRY_SOURCE,
+  canonicalCurve,
+  isKnownCryptoFamily,
+  isKnownCurve,
+  resolveCryptoFamily,
+} from './spec/cdx-crypto-registry';
 export type { SpecFieldDoc } from './spec/spdx23-field-docs';
 export { SPDX23_DOCS } from './spec/spdx23-field-docs';
 export type { Spdx3FieldDoc } from './spec/spdx3-field-docs';
