@@ -31,10 +31,17 @@ release diff, and quality reports.
   continuous tree: release, component, sub-SBOM, package. Unresolved
   references become actionable placeholders.
 - **Analysis views.** A sortable cross-cascade inventory (CSV/JSON export via
-  the native save dialog), version-conflict detection, release-to-release
-  diffs, and a quality report per document against the NTIA minimum elements
-  (2021), the [CISA 2026 minimum elements](https://www.cisa.gov/resources-tools/resources/2026-minimum-elements-software-bill-materials-sbom) that replace them, or
-  [BSI TR-03183-2](https://www.bsi.bund.de/dok/TR-03183). Each report links its requirement source.
+  the native save dialog), a licence inventory (every SPDX identifier across
+  the cascade with its status on the SPDX License List, CSV/Markdown export),
+  version-conflict detection, release-to-release diffs, and a quality report
+  per document against the NTIA minimum elements (2021), the
+  [CISA 2026 minimum elements](https://www.cisa.gov/resources-tools/resources/2026-minimum-elements-software-bill-materials-sbom) that replace them,
+  [BSI TR-03183-2](https://www.bsi.bund.de/dok/TR-03183) (field coverage, and the
+  licence fields of section 6.1), the
+  [OpenChain Automotive SBOM v1.1](https://github.com/OpenChain-Project/Automotive-SBOM)
+  mandatory fields, or the SBOM content of the
+  [FDA 524B guidance (02/2026)](https://www.fda.gov/regulatory-information/search-fda-guidance-documents/cybersecurity-medical-devices-quality-management-system-considerations-and-content-premarket).
+  Each report links its requirement source; none states conformance.
 - **Your own compliance rules.** Drop a `.sbomlens/profile.json` into the
   workspace and every panel picks it up as a quality profile: thresholds,
   field patterns, coverage gates. Reports export as Markdown.
@@ -63,15 +70,16 @@ release diff, and quality reports.
 ## Limits
 
 - **SPDX 2.x** (tag-value / JSON / YAML) in full; **SPDX 3.0.x** as JSON-LD
-  with the core/software profiles mapped; **CycloneDX 1.x** as JSON,
+  with the core/software profiles mapped; **CycloneDX 1.x** as JSON or XML,
   including BOM-Link cascades.
 - The **workspace scan skips files over 50 MB** (open those by hand). A
   single large SPDX document has no hard cap; parsing runs off the UI thread.
 - Compliance profiles are capped at 64 KB / 200 checks; up to 16 persist.
 - No license-compliance judgement and no vulnerability overlays: license and
-  quality fields are shown, not interpreted. Spec findings check expression
-  GRAMMAR, never whether a license identifier is real; for authoritative
-  conformance verification use
+  quality fields are shown, counted and checked against the SPDX License List
+  (identifiers and deprecation flags only), never interpreted. Spec findings
+  check expression GRAMMAR, not whether an identifier is on the list; for
+  authoritative conformance verification use
   [spdx/tools-java](https://github.com/spdx/tools-java).
 - Documents are parsed locally and never uploaded; only preferences and
   imported profiles persist.

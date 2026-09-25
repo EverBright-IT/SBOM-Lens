@@ -4,6 +4,13 @@ All notable changes to SBOM Lens. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [SemVer](https://semver.org) (0.x: the API surface is the app itself).
 
+## [0.28.1] - 2026-09-25
+
+### Changed
+- The extension's store listing caught up with 0.28.0: CycloneDX as JSON or
+  XML, the three sector presets, the licence inventory, and the licence
+  identifier check against the SPDX License List. No code change.
+
 ## [0.28.0] - 2026-09-25
 
 ### Added

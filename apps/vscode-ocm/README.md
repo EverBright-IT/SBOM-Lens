@@ -32,7 +32,7 @@ and SBOMs stored in a delivery are extracted and linked automatically.
 
 - **Component hierarchies as one tree.** `componentReferences` resolve across
   everything you load; resources and sources appear with types, digests, and
-  `pkg:oci` package URLs. Embedded SPDX SBOMs connect underneath their
+  `pkg:oci` package URLs. Embedded SPDX and CycloneDX SBOMs connect underneath their
   resource automatically.
 - **See what the delivery physically ships, and whether it is intact.**
   Every artifact stored in a CTF or component archive shows its actual
