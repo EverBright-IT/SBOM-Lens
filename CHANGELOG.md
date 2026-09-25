@@ -4,6 +4,75 @@ All notable changes to SBOM Lens. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [SemVer](https://semver.org) (0.x: the API surface is the app itself).
 
+## [0.28.0] - 2026-09-25
+
+### Added
+- **CycloneDX XML.** A small built-in XML reader (no dependency; document
+  type declarations refused, so no entity expansion and no external
+  references) turns a CycloneDX XML BOM into the JSON shape the existing
+  mapper reads, so the spec lint covers both serializations. The spec
+  version comes from the schema namespace. Parity is pinned by test: the XML
+  and JSON twins of one BOM produce the same document. Every accept list
+  takes `*.cdx.xml` / `*.bom.xml`; the extension's folder glob, which knew
+  only SPDX, now matches its custom-editor selector (CycloneDX JSON was
+  missing there too).
+- **Profile schema v4.** New package fields `fileName`, `supportLevel`,
+  `validUntil`, `licenseDeclared`, `licenseConcluded`, `properties`; new
+  document fields `sbomType`, `describes`, `externalDocumentRefs`; an
+  `informational` flag that lets a boolean check report without gating;
+  and `licenseIds` / `allowDeprecated` on licence coverage, backed by a
+  generated list of SPDX License List identifiers (ids and deprecation
+  flags only, no texts, no obligations). All fail-closed below v4. The
+  parsers now populate the new fields where the formats carry them (SPDX
+  2.3 packageFileName / ValidUntilDate, SPDX 3.0.1 supportLevel /
+  validUntilTime / sbomType / packageUrl, CycloneDX properties and
+  lifecycles).
+- **Three presets on v4:** *OpenChain Automotive SBOM v1.1* (the thirteen
+  mandatory fields as meters; the requirement is contractual), *FDA 524B
+  cybersecurity (02/2026)* (NTIA baseline plus level of support and
+  end-of-support date, with the three field conventions it reads named),
+  and *BSI TR-03183-2 licence fields (6.1)* (distribution licence gated at
+  100 % as SPDX identifier or expression with the ScanCode LicenseRef
+  fallback, effective licence as a meter, TR format baseline leading).
+  None of them states conformance.
+- **Licenses view.** Every licence identifier the loaded documents name,
+  aggregated across the cascade: declared and concluded counts, packages
+  and documents per identifier, and whether the id is on the SPDX License
+  List, deprecated there, a `LicenseRef-`, or not on the list. Click an
+  identifier to see its packages in the inventory; export as CSV or
+  Markdown. Identifier facts and counts only: nothing here says what a
+  licence obliges or whether two are compatible.
+- **Three licence lint rules.** `SPDX2_SCHEMA_LICENSEREF_UNDEFINED` for a
+  `LicenseRef-` used in an expression but never defined in the document's
+  other licensing information (section 10; the tag-value parser now records
+  `LicenseID` blocks for this), `SPDX3_SCHEMA_BAD_LICENSE_EXPRESSION` for a
+  `LicenseExpression` element whose expression does not parse, and
+  `CDX_SCHEMA_BAD_ACKNOWLEDGEMENT` for a licence acknowledgement outside the
+  1.6 vocabulary. Grammar and definitions only; identifier validity stays a
+  profile question.
+
+### Fixed
+- SPDX 3 licence targets were mapped to whatever the licence node carried,
+  including the full licence text of a `CustomLicense`, which then read as
+  an unparseable expression everywhere. Custom licences now map to the
+  `LicenseRef-` form SPDX 2 uses, listed licences to their id, and the
+  3.0.1 `NoAssertionLicense` / `NoneLicense` individuals to `NOASSERTION` /
+  `NONE`. Those well-known spdx.org IRIs also no longer count as dangling
+  relationship ends.
+- CycloneDX 1.6 `acknowledgement` was read with a misspelling and at the
+  wrong level, so real BOMs never populated the concluded licence.
+- SPDX 3 `software_packageUrl` was not read; the purl came only from
+  `externalIdentifier`.
+- `documentQuality` counted a `NONE` supplier while the profile engine did
+  not; both now treat it as absent, and the parity test covers it.
+
+### Security
+- Dev-dependency advisories cleared before tagging, so the blocking OSV gate
+  stays green on the first run: fast-uri 3.1.8, js-yaml 4.3.2, qs 6.16.0,
+  vitest 4.1.11, browserslist 4.29.1, baseline-browser-mapping 2.11.26. All
+  build-time only; nothing shipped in the app or the extensions carried them.
+  Verified with osv-scanner 2.4.0 locally: no issues found.
+
 ## [0.27.1] - 2026-08-20
 
 ### Security

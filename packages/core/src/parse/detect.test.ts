@@ -33,6 +33,11 @@ describe('detect', () => {
     expect(result).toMatchObject({ format: 'cdx-json', serialization: 'json' });
   });
 
+  it('routes CycloneDX XML to the same cdx parser, in JSON shape', () => {
+    const result = detect(loadFixture('cdx/minimal.cdx.xml'));
+    expect(result).toMatchObject({ format: 'cdx-json', serialization: 'xml' });
+  });
+
   it('recognizes Trivy-native JSON (even when named *.spdx.json)', () => {
     const result = detect(loadFixture('negative/trivy-native.json'));
     expect(result).toMatchObject({ format: 'unsupported', code: 'TRIVY_NATIVE_NOT_SUPPORTED' });

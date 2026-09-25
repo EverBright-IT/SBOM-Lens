@@ -157,7 +157,7 @@ export function PlaceholderDetail({ ws, target }: { ws: WorkspaceState; target: 
             type="file"
             hidden
             multiple
-            accept=".spdx,.json,.yaml,.yml,.tar,.tgz,.gz,.ctf"
+            accept=".spdx,.json,.yaml,.yml,.xml,.tar,.tgz,.gz,.ctf"
             onChange={(e) => {
               const files = [...(e.target.files ?? [])];
               e.target.value = '';

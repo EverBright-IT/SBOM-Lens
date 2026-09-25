@@ -1,0 +1,67 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.6",
+  "serialNumber": "urn:uuid:c0ffee00-1111-4222-8333-444455556666",
+  "version": 3,
+  "metadata": {
+    "timestamp": "2026-06-01T10:00:00Z",
+    "tools": {
+      "components": [
+        { "type": "application", "name": "acme-gen", "version": "2.0" }
+      ]
+    },
+    "authors": [
+      { "name": "ACME Security" }
+    ],
+    "component": {
+      "type": "application",
+      "bom-ref": "root",
+      "supplier": { "name": "ACME Corp" },
+      "name": "acme-web",
+      "version": "1.0.0"
+    }
+  },
+  "components": [
+    {
+      "type": "library",
+      "bom-ref": "lib-a",
+      "supplier": { "name": "Left Pad Authors" },
+      "name": "left-pad",
+      "version": "1.3.0",
+      "hashes": [
+        { "alg": "SHA-256", "content": "abababababababababababababababababababababababababababababababab" }
+      ],
+      "licenses": [
+        { "license": { "id": "MIT" } },
+        { "expression": "Apache-2.0", "acknowledgement": "concluded" }
+      ],
+      "copyright": "(c) 2026 Left Pad Authors",
+      "cpe": "cpe:2.3:a:acme:left-pad:1.3.0:*:*:*:*:*:*:*",
+      "purl": "pkg:npm/left-pad@1.3.0",
+      "externalReferences": [
+        { "type": "website", "url": "https://acme.example/left-pad" }
+      ],
+      "properties": [
+        { "name": "acme:tier", "value": "2" }
+      ],
+      "components": [
+        { "type": "library", "bom-ref": "lib-a-inner", "name": "inner", "version": "0.1.0" }
+      ]
+    },
+    {
+      "type": "file",
+      "bom-ref": "f-1",
+      "name": "./src/app.js",
+      "hashes": [
+        { "alg": "SHA-1", "content": "cccccccccccccccccccccccccccccccccccccccc" }
+      ]
+    }
+  ],
+  "externalReferences": [
+    { "type": "bom", "url": "urn:cdx:aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee/1#comp-x" }
+  ],
+  "dependencies": [
+    { "ref": "root", "dependsOn": ["lib-a"] },
+    { "ref": "lib-a", "dependsOn": ["urn:cdx:aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee/1"] }
+  ]
+}

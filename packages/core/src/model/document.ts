@@ -2,7 +2,7 @@ import type { DocumentId, ElementId } from './ids';
 import type { Diagnostic } from './diagnostics';
 import type { OcmDocumentExt, OcmElementExt, OcmReferenceExt } from './ocm';
 
-export type Serialization = 'json' | 'yaml' | 'tag-value';
+export type Serialization = 'json' | 'yaml' | 'tag-value' | 'xml';
 
 export interface SpecInfo {
   model: 'spdx-2' | 'spdx-3' | 'cyclonedx' | 'ocm';
@@ -81,6 +81,23 @@ export interface SbomElement {
   comment?: string;
   checksums?: Checksum[];
   externalRefs?: ExternalRef[];
+  /** SPDX packageFileName / SPDX 3 software_packageFileName: the artifact as delivered. */
+  fileName?: string;
+  /**
+   * Support status as the producer states it. SPDX 3.0.1 `supportLevel`
+   * vocabulary (support, limitedSupport, endOfSupport, noSupport,
+   * development, deployed, noAssertion) kept verbatim; other formats carry
+   * it only through conventions the parsers name explicitly.
+   */
+  supportLevel?: string;
+  /**
+   * SPDX 2.3 ValidUntilDate (end of the support period, §7.27) or SPDX 3.0.1
+   * validUntilTime (when the data should be reassessed). The two are not the
+   * same statement; profiles that care say which one they read.
+   */
+  validUntil?: string;
+  /** CycloneDX `properties[]` (name/value), verbatim; SPDX has no equivalent. */
+  properties?: { name: string; value: string }[];
   /** OCM artifact extras (type, relation, access, digest, labels). */
   ocm?: OcmElementExt;
   raw: RawFields;
@@ -110,6 +127,15 @@ export interface SbomDocument {
   /** SPDXIDs of root elements (documentDescribes ∪ DESCRIBES relationships). */
   describes: string[];
   externalDocumentRefs: ExternalDocumentRef[];
+  /**
+   * What kind of SBOM this is, as the producer declared it: SPDX 3.0.1
+   * `software_sbomType` (design, source, build, analyzed, deployed, runtime)
+   * or, for CycloneDX, the first `metadata.lifecycles[].phase`. SPDX 2.x has
+   * no field for it.
+   */
+  sbomType?: string;
+  /** CycloneDX `metadata.lifecycles[].phase` in order, when present. */
+  lifecycles?: string[];
   /** Packages and files, flat. */
   elements: SbomElement[];
   relationships: Relationship[];

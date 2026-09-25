@@ -1,14 +1,15 @@
 import type { Diagnostic } from '../../model/diagnostics';
 import { asRecordArray, asString, isRecord } from '../../util/narrow';
 import type { Tally } from '../spec-lint';
-import { checksumProblem, createLint, createTally, isAbsoluteUri } from '../spec-lint';
+import { checksumProblem, createLint, createTally, isAbsoluteUri, licenseExpressionError } from '../spec-lint';
 
 /**
  * Spec lint for SPDX 3.0.x documents. Deliberately limited to the JSON-LD
  * level — node shape, identifier form, creation info, hashes, relationship
- * completeness, and references that point nowhere. The full 3.x model is
- * expressed in SHACL; reimplementing it would be a second product, and every
- * rule that cannot be checked cheaply would only produce noise.
+ * completeness, references that point nowhere, and the grammar of
+ * LicenseExpression elements. The full 3.x model is expressed in SHACL;
+ * reimplementing it would be a second product, and every rule that cannot be
+ * checked cheaply would only produce noise.
  *
  * One vocabulary is deliberately NOT checked: relationshipType. SPDX 3 defines
  * its own (camelCase) set, we vendor no list of it, and reusing the 2.3
@@ -61,6 +62,7 @@ export function validateSpdx3Structure(
   const missingCreationInfo = createTally();
   const badHash = createTally();
   const incompleteRelationship = createTally();
+  const badLicense = createTally();
 
   for (const node of graph) {
     const type = localType(node);
@@ -84,6 +86,16 @@ export function validateSpdx3Structure(
       const missing = ['from', 'relationshipType'].filter((field) => node[field] === undefined);
       if (missing.length > 0) incompleteRelationship.add(`${label} (no ${missing.join('/')})`);
     }
+
+    // SimpleLicensing: a LicenseExpression element carries the expression as
+    // a string in the SPDX expression syntax (Annex D of 2.3, unchanged in
+    // 3.x). Grammar only; whether an id is on the license list is a profile
+    // question, see parse/spec-lint.ts.
+    if (type === 'LicenseExpression') {
+      const expression = asString(node.simplelicensing_licenseExpression);
+      const problem = expression === undefined ? 'no simplelicensing_licenseExpression' : licenseExpressionError(expression);
+      if (problem) badLicense.add(`${label}: ${problem}`);
+    }
   }
 
   lint.warnTally('SPDX3_SCHEMA_MISSING_TYPE', missingType, (count, list) => `${count} graph node(s) without a type: ${list}.`);
@@ -98,6 +110,11 @@ export function validateSpdx3Structure(
     'SPDX3_SCHEMA_INCOMPLETE_RELATIONSHIP',
     incompleteRelationship,
     (count, list) => `${count} relationship(s) without from/relationshipType: ${list}.`,
+  );
+  lint.warnTally(
+    'SPDX3_SCHEMA_BAD_LICENSE_EXPRESSION',
+    badLicense,
+    (count, list) => `${count} LicenseExpression element(s) whose expression does not parse as an SPDX license expression: ${list}.`,
   );
 
   validateSpecVersion(graph, warn);
@@ -139,7 +156,7 @@ function validateReferences(
   }
 
   const dangling = createTally({ unique: true });
-  const resolves = (ref: string) => ref.startsWith('_:') || byId.has(ref) || imported.has(ref);
+  const resolves = (ref: string) => ref.startsWith('_:') || byId.has(ref) || imported.has(ref) || isWellKnownIri(ref);
 
   for (const node of graph) {
     const type = localType(node);
@@ -155,6 +172,17 @@ function validateReferences(
     dangling,
     (count, list) => `${count} relationship end(s) point at an spdxId that is neither in the graph nor imported: ${list}.`,
   );
+}
+
+/**
+ * IRIs no document defines and none needs to import: the SPDX License List
+ * (`https://spdx.org/licenses/<id>`, the spdxId of every ListedLicense) and
+ * the vocabulary individuals such as NoAssertionLicense and NoneLicense
+ * (`https://spdx.org/rdf/3.x/terms/...`). A licence relationship pointing at
+ * one of them is the normal case, not a dangling reference.
+ */
+function isWellKnownIri(ref: string): boolean {
+  return /^https?:\/\/spdx\.org\/(licenses\/|rdf\/3\.\d+(\.\d+)?\/terms\/)/.test(ref);
 }
 
 /** `to` is a list in 3.x, but single-value shorthand appears in the wild. */

@@ -1,11 +1,13 @@
 import { isRecord } from '../util/narrow';
+import { bomObjectFromXml } from './cdx/xml';
+import { XmlError, parseXml } from './xml/tokenizer';
 
 export type Detection =
   | { format: 'spdx2-json'; parsed: Record<string, unknown>; serialization: 'json' | 'yaml' }
   | { format: 'spdx2-tag-value' }
   | { format: 'spdx3-json'; parsed: Record<string, unknown>; serialization: 'json' | 'yaml' }
   | { format: 'ocm-cd'; parsed: Record<string, unknown>; serialization: 'json' | 'yaml' }
-  | { format: 'cdx-json'; parsed: Record<string, unknown>; serialization: 'json' | 'yaml' }
+  | { format: 'cdx-json'; parsed: Record<string, unknown>; serialization: 'json' | 'yaml' | 'xml' }
   | { format: 'unsupported'; code: string; reason: string };
 
 /**
@@ -38,6 +40,33 @@ export function detect(text: string): Detection {
     return classifyObject(parsed, 'json');
   }
 
+  // XML: CycloneDX only. SPDX RDF/XML is recognized just far enough to say
+  // so; the XML is turned into the JSON shape and shares the JSON mapper.
+  if (trimmed.startsWith('<')) {
+    if (/<rdf:RDF[\s>]/.test(head)) {
+      return unsupported(
+        'RDF_NOT_SUPPORTED',
+        'SPDX RDF/XML is not supported: convert the document to SPDX JSON or tag-value.',
+      );
+    }
+    let root;
+    try {
+      root = parseXml(text);
+    } catch (e) {
+      return e instanceof XmlError
+        ? unsupported(e.code, e.message)
+        : unsupported('XML_INVALID', `Not valid XML: ${(e as Error).message}`);
+    }
+    const bom = bomObjectFromXml(root);
+    if (!bom) {
+      return unsupported(
+        'XML_NOT_CYCLONEDX',
+        'XML document is not a CycloneDX BOM: expected <bom xmlns="http://cyclonedx.org/schema/bom/1.x">.',
+      );
+    }
+    return { format: 'cdx-json', parsed: bom, serialization: 'xml' };
+  }
+
   // Tag-value uses `SPDXVersion:` (capital S); YAML serialization uses
   // `spdxVersion:` — the case difference keeps the two unambiguous.
   if (/(^|\n)[ \t]*SPDXVersion:[ \t]*SPDX-/.test(head)) {
@@ -62,7 +91,7 @@ export function detect(text: string): Detection {
 
   return unsupported(
     'UNRECOGNIZED_FORMAT',
-    'Unrecognized file format: expected SPDX 2.x as tag-value (*.spdx), JSON, or YAML.',
+    'Unrecognized file format: expected SPDX as tag-value (*.spdx), JSON, or YAML, or CycloneDX as JSON or XML.',
   );
 }
 

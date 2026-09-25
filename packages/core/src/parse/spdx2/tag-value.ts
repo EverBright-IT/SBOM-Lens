@@ -44,6 +44,8 @@ interface ElementDraft {
   purpose?: string;
   description?: string;
   comment?: string;
+  fileName?: string;
+  validUntil?: string;
   checksums: Checksum[];
   externalRefs: ExternalRef[];
 }
@@ -76,6 +78,8 @@ const ELEMENT_STRING_TAGS: Record<string, keyof ElementDraft> = {
   PackageDescription: 'description',
   PackageComment: 'comment',
   FileComment: 'comment',
+  PackageFileName: 'fileName',
+  ValidUntilDate: 'validUntil',
 };
 
 export function parseSpdx2TagValue(input: SourceInput): ParseResult {
@@ -99,6 +103,9 @@ export function parseSpdx2TagValue(input: SourceInput): ParseResult {
   let current: ElementDraft | null = null;
   let context: 'document' | 'element' | 'skip' = 'document';
   const skipped = { snippets: 0, licenses: 0, annotations: 0 };
+  // LicenseID blocks are not displayed, but their identifiers are what the
+  // spec lint checks LicenseRef- expressions against (§ 10).
+  const extractedLicenseIds: string[] = [];
   const orphanTags = new Set<string>();
 
   const closeElement = () => {
@@ -169,8 +176,10 @@ export function parseSpdx2TagValue(input: SourceInput): ParseResult {
       closeElement();
       context = 'skip';
       if (tag === 'SnippetSPDXID') skipped.snippets++;
-      else if (tag === 'LicenseID') skipped.licenses++;
-      else skipped.annotations++;
+      else if (tag === 'LicenseID') {
+        skipped.licenses++;
+        extractedLicenseIds.push(value);
+      } else skipped.annotations++;
       continue;
     }
 
@@ -317,6 +326,8 @@ export function parseSpdx2TagValue(input: SourceInput): ParseResult {
       comment: draft.comment,
       checksums: draft.checksums.length > 0 ? draft.checksums : undefined,
       externalRefs: draft.externalRefs.length > 0 ? draft.externalRefs : undefined,
+      fileName: draft.fileName,
+      validUntil: draft.validUntil,
       raw: { kind: 'tv', pairs: draft.pairs },
     };
   });
@@ -337,6 +348,7 @@ export function parseSpdx2TagValue(input: SourceInput): ParseResult {
         namespace: doc.namespace,
         created: doc.created,
         creators: doc.creators,
+        extractedLicenseIds,
       },
       drafts.map((d) => ({
         kind: d.kind,

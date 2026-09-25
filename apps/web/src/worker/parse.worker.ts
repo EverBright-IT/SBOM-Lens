@@ -56,8 +56,8 @@ function rejectBinary(container: ContainerKind): { code: string; message: string
     return {
       code: 'UNRECOGNIZED_BINARY',
       message: HAS_DELIVERIES
-        ? 'Unrecognized binary file: expected a component descriptor, a tar/tar.gz delivery, or SPDX text.'
-        : 'Unrecognized binary file: expected an SPDX document as text, JSON, or YAML.',
+        ? 'Unrecognized binary file: expected a component descriptor, a tar/tar.gz delivery, or an SBOM as text.'
+        : 'Unrecognized binary file: expected an SPDX document as text, JSON, or YAML, or a CycloneDX BOM as JSON or XML.',
     };
   }
   return null;

@@ -182,8 +182,13 @@ describe('validateSpdx2Structure', () => {
   });
 
   describe('license expressions', () => {
+    // Grammar only: the LicenseRef the list uses is defined, so the section-10
+    // rule below stays out of these cases.
     const withLicense = (expr: string) =>
-      clean({ packages: [{ SPDXID: 'SPDXRef-a', name: 'a', downloadLocation: 'NONE', licenseDeclared: expr }] });
+      clean({
+        packages: [{ SPDXID: 'SPDXRef-a', name: 'a', downloadLocation: 'NONE', licenseDeclared: expr }],
+        hasExtractedLicensingInfos: [{ licenseId: 'LicenseRef-acme-internal', extractedText: 'internal use only' }],
+      });
 
     it.each([
       'MIT',
@@ -208,6 +213,39 @@ describe('validateSpdx2Structure', () => {
       ['MIT AND NOASSERTION', 'cannot be combined'],
     ])('reports %s', (expr, reason) => {
       expect(messageFor(withLicense(expr), 'SPDX2_SCHEMA_BAD_LICENSE_EXPRESSION')).toContain(reason);
+    });
+  });
+
+  describe('LicenseRef definitions (section 10)', () => {
+    const withRefs = (expressions: string[], defined: string[]) =>
+      clean({
+        packages: expressions.map((licenseDeclared, i) => ({
+          SPDXID: `SPDXRef-p${i}`,
+          name: `p${i}`,
+          downloadLocation: 'NONE',
+          licenseDeclared,
+        })),
+        hasExtractedLicensingInfos: defined.map((licenseId) => ({ licenseId, extractedText: 'text' })),
+      });
+
+    it('accepts a LicenseRef that hasExtractedLicensingInfos defines', () => {
+      expect(codes(withRefs(['LicenseRef-acme-eula AND MIT'], ['LicenseRef-acme-eula']))).toEqual([]);
+    });
+
+    it('reports an undefined one once per identifier, however many packages use it', () => {
+      const root = withRefs(['LicenseRef-acme-eula', 'MIT OR LicenseRef-acme-eula', 'LicenseRef-other'], []);
+      expect(codes(root)).toEqual(['SPDX2_SCHEMA_LICENSEREF_UNDEFINED']);
+      const message = messageFor(root, 'SPDX2_SCHEMA_LICENSEREF_UNDEFINED');
+      expect(message).toContain('2 LicenseRef identifier(s)');
+      expect(message).toContain('LicenseRef-acme-eula, LicenseRef-other');
+    });
+
+    it('leaves DocumentRef-…:LicenseRef-… to the other document', () => {
+      expect(codes(withRefs(['DocumentRef-other:LicenseRef-vendor'], []))).toEqual([]);
+    });
+
+    it('does not double-report an expression the grammar already rejected', () => {
+      expect(codes(withRefs(['LicenseRef-acme-eula AND'], []))).toEqual(['SPDX2_SCHEMA_BAD_LICENSE_EXPRESSION']);
     });
   });
 

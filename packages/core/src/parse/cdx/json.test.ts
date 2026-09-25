@@ -40,9 +40,12 @@ describe('parseCdxJson', () => {
           cpe: 'cpe:2.3:a:acme:left-pad:1.3.0:*:*:*:*:*:*:*',
           supplier: { name: 'ACME Corp' },
           hashes: [{ alg: 'SHA-256', content: 'AB'.repeat(32) }],
+          // Both placements the 1.6 schema allows for `acknowledgement`:
+          // beside `expression`, and inside the `license` object.
           licenses: [
             { license: { id: 'MIT' } },
-            { expression: 'Apache-2.0', acknowledgment: 'concluded' },
+            { expression: 'Apache-2.0', acknowledgement: 'concluded' },
+            { license: { id: 'BSD-3-Clause', acknowledgement: 'concluded' } },
           ],
           description: 'padding',
         },
@@ -69,7 +72,7 @@ describe('parseCdxJson', () => {
       supplier: 'ACME Corp',
       purpose: 'LIBRARY',
       licenseDeclared: 'MIT',
-      licenseConcluded: 'Apache-2.0',
+      licenseConcluded: 'Apache-2.0 AND BSD-3-Clause',
     });
     expect(lib.checksums).toEqual([{ algorithm: 'SHA256', value: 'ab'.repeat(32) }]);
     // The CPE lands as a SECURITY external reference — the VEX overlay's

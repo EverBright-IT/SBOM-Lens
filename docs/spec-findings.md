@@ -32,9 +32,9 @@ Findings carry a stable code with a `_SCHEMA_` infix, prefixed by the format:
 
 | Prefix | Format | Rules |
 |---|---|---|
-| `SPDX2_SCHEMA_*` | SPDX 2.x (JSON, YAML, tag-value) | 13 |
-| `SPDX3_SCHEMA_*` | SPDX 3.0.x (JSON-LD) | 7 |
-| `CDX_SCHEMA_*` | CycloneDX 1.x (JSON) | 8 |
+| `SPDX2_SCHEMA_*` | SPDX 2.x (JSON, YAML, tag-value) | 14 |
+| `SPDX3_SCHEMA_*` | SPDX 3.0.x (JSON-LD) | 8 |
+| `CDX_SCHEMA_*` | CycloneDX 1.x (JSON, XML) | 9 |
 | `OCM_SCHEMA_*` | OCM component descriptors | 9 |
 
 **SPDX 2.x**: the version literal, `dataLicense` (the spec mandates CC0-1.0),
@@ -43,7 +43,11 @@ URI without a fragment, the UTC form of `created`, the
 `Person:`/`Organization:`/`Tool:` creator prefix, the mandatory
 `downloadLocation`, checksum algorithms and their hex lengths, package
 verification codes, purl-typed external references, `primaryPackagePurpose`,
-the 45-value relationship vocabulary, and license expression grammar.
+the 45-value relationship vocabulary, license expression grammar, and
+`LicenseRef-` identifiers that the document uses but never defines in its
+other licensing information (`hasExtractedLicensingInfos`, or a `LicenseID`
+block in tag-value; section 10). References into another document
+(`DocumentRef-…:LicenseRef-…`) are that document's business and stay silent.
 
 Both serializations run the same rules. Tag-value documents are checked on the
 parser's intermediates, with two exceptions that the parser reports better
@@ -52,14 +56,18 @@ itself: checksums (`TV_BAD_CHECKSUM`) and external document references
 
 **SPDX 3.0.x**: nodes without a type, identifiers that are neither an absolute
 IRI nor a blank node, elements without `creationInfo`, `specVersion`, hash
-shape, relationships without `from`/`relationshipType`, and relationship ends
+shape, relationships without `from`/`relationshipType`, relationship ends
 pointing at an id that is neither in the graph nor imported through an
-ExternalMap.
+ExternalMap (the SPDX License List IRIs and the vocabulary individuals such as
+`NoAssertionLicense` count as known), and `LicenseExpression` elements whose
+expression does not parse.
 
 **CycloneDX 1.x**: unknown `specVersion`, `serialNumber` that is not a
 `urn:uuid:`, non-positive `version`, component types outside the vocabulary,
-duplicate `bom-ref`s, hash shape, purls without a `pkg:` scheme, and license
-entries that are malformed or carry both an `id` and a `name`.
+duplicate `bom-ref`s, hash shape, purls without a `pkg:` scheme, license
+entries that are malformed or carry both an `id` and a `name`, and a license
+`acknowledgement` outside the 1.6 vocabulary (`declared`, `concluded`). The XML
+serialization is mapped onto the JSON shape first, so both run the same rules.
 
 Findings of one kind are aggregated into a single entry per rule, with a count
 and the first three subjects, so a BOM with thousands of components stays
@@ -68,9 +76,15 @@ readable and the cost of checking does not grow with the number of offenders.
 ## What is deliberately not checked
 
 - **License identifiers.** Expressions are checked for *grammar* only —
-  operators, parentheses, `LicenseRef-` shape. Whether `MIT` is a real license
-  id is not checked; no SPDX license list is vendored, and rating licenses is
-  a stated non-goal.
+  operators, parentheses, `LicenseRef-` shape. Whether `MIT` is on the SPDX
+  License List is not a spec finding: the list grows with every SPDX release,
+  and a document may legitimately use an id newer than the snapshot a build
+  carries, so a warning here would age into a false positive. Identifier
+  validity is measured where the list version is stated next to the result:
+  the compliance profiles (`licenseIds` modifier, schema v4) and the Licenses
+  tab, both backed by a generated list of ids and deprecation flags only. No
+  license texts and no obligations are vendored; rating licenses is a stated
+  non-goal.
 - **SPDX 3 relationship types.** SPDX 3 defines its own vocabulary, no list is
   vendored, and reusing the 2.3 one would flag legal types like
   `hasDeclaredLicense`. A wrong warning is worse than a missing one.

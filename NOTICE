@@ -18,6 +18,12 @@ specification (https://spdx.dev, https://github.com/spdx/spdx-spec),
 Copyright The Linux Foundation and SPDX contributors, licensed under
 the Creative Commons Attribution License 3.0 (CC-BY-3.0).
 
+This product includes the list of SPDX License List identifiers
+(https://spdx.org/licenses/), as packaged by spdx-license-ids (CC0-1.0)
+and spdx-exceptions, Copyright the SPDX contributors and the package
+authors, licensed under the Creative Commons Attribution License 3.0
+(CC-BY-3.0). Identifiers and deprecation flags only; no licence texts.
+
 This product includes field documentation paraphrased from the Open
 Component Model specification
 (https://ocm.software, https://github.com/open-component-model/ocm-spec),

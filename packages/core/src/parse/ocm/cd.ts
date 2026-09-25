@@ -393,9 +393,10 @@ function ociPurl(access: Record<string, unknown>, version?: string): string | un
 
 export function isSbomResource(raw: Record<string, unknown>, access: Record<string, unknown>): boolean {
   const type = asString(raw.type)?.toLowerCase();
-  if (type === 'sbom' || type === 'spdx') return true;
+  if (type === 'sbom' || type === 'spdx' || type === 'cyclonedx' || type === 'cdx') return true;
+  // application/spdx+json, application/vnd.cyclonedx+json, application/vnd.cyclonedx+xml
   const mediaType = asString(access.mediaType)?.toLowerCase() ?? '';
-  return mediaType.includes('spdx');
+  return mediaType.includes('spdx') || mediaType.includes('cyclonedx');
 }
 
 function sanitizeSpdxId(candidate: string, existing: SbomElement[]): string {

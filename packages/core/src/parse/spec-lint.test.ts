@@ -22,11 +22,14 @@ import { sha1Hex } from '../util/sha1';
  * where most people meet it first.
  */
 
-async function findings(fixture: string): Promise<string[]> {
-  const text = loadFixture(fixture);
+async function findingsIn(fileName: string, text: string): Promise<string[]> {
   const sha1 = await sha1Hex(new TextEncoder().encode(text).buffer as ArrayBuffer);
-  const result = await parseDocument({ fileName: fixture, text, sha1, byteSize: text.length });
+  const result = await parseDocument({ fileName, text, sha1, byteSize: text.length });
   return result.diagnostics.filter((d) => isSpecFinding(d.code)).map((d) => d.code);
+}
+
+async function findings(fixture: string): Promise<string[]> {
+  return findingsIn(fixture, loadFixture(fixture));
 }
 
 describe('spec lint, end to end', () => {
@@ -49,6 +52,7 @@ describe('spec lint, end to end', () => {
         'SPDX2_SCHEMA_BAD_LICENSE_EXPRESSION',
         'SPDX2_SCHEMA_BAD_VERIFICATION_CODE',
         'SPDX2_SCHEMA_BAD_PURL_REF',
+        'SPDX2_SCHEMA_LICENSEREF_UNDEFINED',
         'SPDX2_SCHEMA_UNKNOWN_RELATIONSHIP',
       ]),
     );
@@ -64,6 +68,7 @@ describe('spec lint, end to end', () => {
         'SPDX3_SCHEMA_INCOMPLETE_RELATIONSHIP',
         'SPDX3_SCHEMA_BAD_SPEC_VERSION',
         'SPDX3_SCHEMA_DANGLING_REF',
+        'SPDX3_SCHEMA_BAD_LICENSE_EXPRESSION',
       ]),
     );
   });
@@ -79,12 +84,24 @@ describe('spec lint, end to end', () => {
         'CDX_SCHEMA_BAD_HASH',
         'CDX_SCHEMA_BAD_PURL',
         'CDX_SCHEMA_BAD_LICENSE_EXPRESSION',
+        'CDX_SCHEMA_BAD_ACKNOWLEDGEMENT',
       ]),
     );
   });
 
-  it('loads all three despite the findings', async () => {
-    for (const fixture of ['spec-lint/broken.spdx.json', 'spec-lint/broken.spdx3.json', 'spec-lint/broken.cdx.json']) {
+  it('reports the same CycloneDX rules from the XML serialization', async () => {
+    expect(new Set(await findings('spec-lint/broken.cdx.xml'))).toEqual(
+      new Set(await findings('spec-lint/broken.cdx.json')),
+    );
+  });
+
+  it('loads all of them despite the findings', async () => {
+    for (const fixture of [
+      'spec-lint/broken.spdx.json',
+      'spec-lint/broken.spdx3.json',
+      'spec-lint/broken.cdx.json',
+      'spec-lint/broken.cdx.xml',
+    ]) {
       const text = loadFixture(fixture);
       const sha1 = await sha1Hex(new TextEncoder().encode(text).buffer as ArrayBuffer);
       const result = await parseDocument({ fileName: fixture, text, sha1, byteSize: text.length });
@@ -101,6 +118,9 @@ describe('spec lint, end to end', () => {
       'minimal.spdx.yaml',
       'spdx3/webstack.spdx3.json',
       'cdx/minimal.cdx.json',
+      'cdx/minimal.cdx.xml',
+      'cdx/parity.cdx.json',
+      'cdx/parity.cdx.xml',
       'ocm/cd-v2.yaml',
     ]) {
       expect(await findings(fixture), `${fixture} must produce no spec findings`).toEqual([]);
@@ -124,6 +144,7 @@ describe('spec lint, end to end', () => {
         'SPDX2_SCHEMA_MISSING_DOWNLOAD_LOCATION',
         'SPDX2_SCHEMA_BAD_PACKAGE_PURPOSE',
         'SPDX2_SCHEMA_BAD_LICENSE_EXPRESSION',
+        'SPDX2_SCHEMA_LICENSEREF_UNDEFINED',
         'SPDX2_SCHEMA_UNKNOWN_RELATIONSHIP',
       ]),
     );
@@ -133,6 +154,82 @@ describe('spec lint, end to end', () => {
     // TV_BAD_CHECKSUM carries a line number; repeating it as a spec finding
     // would be a worse version of the same message.
     expect(await findings('spec-lint/broken.spdx')).not.toContain('SPDX2_SCHEMA_BAD_CHECKSUM');
+  });
+
+  /**
+   * SPDX 2.3 section 10: a LicenseRef- used in an expression is defined in the
+   * document's own other-licensing-information section. Defined ones and
+   * DocumentRef-…:LicenseRef-… (another document's business) stay silent;
+   * only an undefined in-document reference is a finding, and the two
+   * serializations agree.
+   */
+  describe('LicenseRef definitions', () => {
+    const jsonDoc = (extracted: boolean) =>
+      JSON.stringify({
+        spdxVersion: 'SPDX-2.3',
+        dataLicense: 'CC0-1.0',
+        SPDXID: 'SPDXRef-DOCUMENT',
+        name: 'licenserefs',
+        documentNamespace: 'https://acme.example/spdxdocs/licenserefs',
+        creationInfo: { created: '2026-06-01T10:00:00Z', creators: ['Organization: ACME'] },
+        packages: [
+          {
+            SPDXID: 'SPDXRef-a',
+            name: 'a',
+            downloadLocation: 'NOASSERTION',
+            licenseDeclared: 'LicenseRef-acme-eula AND MIT',
+            licenseConcluded: 'DocumentRef-other:LicenseRef-x',
+          },
+        ],
+        ...(extracted
+          ? { hasExtractedLicensingInfos: [{ licenseId: 'LicenseRef-acme-eula', extractedText: 'ACME end user licence agreement' }] }
+          : {}),
+        relationships: [{ spdxElementId: 'SPDXRef-DOCUMENT', relationshipType: 'DESCRIBES', relatedSpdxElement: 'SPDXRef-a' }],
+      });
+
+    const tagValueDoc = (extracted: boolean) =>
+      [
+        'SPDXVersion: SPDX-2.3',
+        'DataLicense: CC0-1.0',
+        'SPDXID: SPDXRef-DOCUMENT',
+        'DocumentName: licenserefs',
+        'DocumentNamespace: https://acme.example/spdxdocs/licenserefs',
+        'Creator: Organization: ACME',
+        'Created: 2026-06-01T10:00:00Z',
+        '',
+        'PackageName: a',
+        'SPDXID: SPDXRef-a',
+        'PackageDownloadLocation: NOASSERTION',
+        'PackageLicenseDeclared: LicenseRef-acme-eula AND MIT',
+        'PackageLicenseConcluded: DocumentRef-other:LicenseRef-x',
+        '',
+        ...(extracted
+          ? ['LicenseID: LicenseRef-acme-eula', 'ExtractedText: <text>ACME end user licence agreement</text>', 'LicenseName: ACME EULA', '']
+          : []),
+        'Relationship: SPDXRef-DOCUMENT DESCRIBES SPDXRef-a',
+        '',
+      ].join('\n');
+
+    it('stays silent when the LicenseRef is defined (JSON and tag-value)', async () => {
+      expect(await findingsIn('defined.spdx.json', jsonDoc(true))).toEqual([]);
+      expect(await findingsIn('defined.spdx', tagValueDoc(true))).toEqual([]);
+    });
+
+    it('reports an undefined in-document LicenseRef, but not the DocumentRef one', async () => {
+      for (const [fileName, text] of [
+        ['undefined.spdx.json', jsonDoc(false)],
+        ['undefined.spdx', tagValueDoc(false)],
+      ] as const) {
+        const sha1 = await sha1Hex(new TextEncoder().encode(text).buffer as ArrayBuffer);
+        const result = await parseDocument({ fileName, text, sha1, byteSize: text.length });
+        const finding = result.diagnostics.find((d) => d.code === 'SPDX2_SCHEMA_LICENSEREF_UNDEFINED');
+        expect(finding, fileName).toBeDefined();
+        expect(finding!.message).toContain('1 LicenseRef identifier(s)');
+        expect(finding!.message).toContain('LicenseRef-acme-eula');
+        expect(finding!.message).not.toContain('LicenseRef-x');
+        expect(result.diagnostics.map((d) => d.code)).not.toContain('SPDX2_SCHEMA_BAD_LICENSE_EXPRESSION');
+      }
+    });
   });
 
   it('the shipped example cascade is spec-clean in both serializations', async () => {
@@ -156,8 +253,11 @@ describe('spec lint, end to end', () => {
   describe('isSpecFinding partitions the codes we ship', () => {
     it.each([
       'SPDX2_SCHEMA_BAD_VERSION',
+      'SPDX2_SCHEMA_LICENSEREF_UNDEFINED',
       'SPDX3_SCHEMA_MISSING_TYPE',
+      'SPDX3_SCHEMA_BAD_LICENSE_EXPRESSION',
       'CDX_SCHEMA_BAD_PURL',
+      'CDX_SCHEMA_BAD_ACKNOWLEDGEMENT',
       'OCM_SCHEMA_BAD_NAME',
     ])('%s is a spec finding', (code) => {
       expect(isSpecFinding(code)).toBe(true);
@@ -190,6 +290,12 @@ describe('spec lint, end to end', () => {
       'CDX_COMPONENT_MALFORMED',
       'CDX_DEPENDENCIES_UNMAPPED',
       'CDX_NESTING_CAPPED',
+      // xml (detection-level: about the file, never about the BOM)
+      'XML_INVALID',
+      'XML_DOCTYPE_REJECTED',
+      'XML_TOO_DEEP',
+      'XML_NOT_CYCLONEDX',
+      'RDF_NOT_SUPPORTED',
       // ocm
       'OCM_V3ALPHA1',
       'OCM_DIGEST_MISMATCH',
@@ -199,7 +305,13 @@ describe('spec lint, end to end', () => {
 
     it('holds for every code the fixtures actually emit', async () => {
       const emitted = new Set<string>();
-      for (const fixture of ['spec-lint/broken.spdx.json', 'spec-lint/broken.spdx3.json', 'spec-lint/broken.cdx.json', 'quirks.spdx']) {
+      for (const fixture of [
+        'spec-lint/broken.spdx.json',
+        'spec-lint/broken.spdx3.json',
+        'spec-lint/broken.cdx.json',
+        'spec-lint/broken.cdx.xml',
+        'quirks.spdx',
+      ]) {
         const text = loadFixture(fixture);
         const sha1 = await sha1Hex(new TextEncoder().encode(text).buffer as ArrayBuffer);
         const result = await parseDocument({ fileName: fixture, text, sha1, byteSize: text.length });

@@ -86,6 +86,9 @@ export function parseSpdx2Json(
       comment: asString(pkg.comment),
       checksums: readChecksums(pkg.checksums),
       externalRefs,
+      fileName: asString(pkg.packageFileName),
+      // 7.27: "end of the support period ... from the supplier".
+      validUntil: asString(pkg.validUntilDate),
       raw: { kind: 'json', value: pkg },
     });
   }

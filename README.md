@@ -140,6 +140,7 @@ documents** without nagging you to resolve them.
 | **Explore** | "What does this release contain?" The cascading tree, detail pane, and raw source. Shift+click a chevron (or press `*`) to expand an entire subtree including resolved sub-SBOMs; the funnel next to the search box filters the tree in place, leaving matches plus their ancestors and hiding everything else |
 | **Map** | "How is this cascade wired?" The document topology as a collapsible left-to-right tree: documents as nodes, resolved references as method-styled edges, missing documents as dashed stubs. Nodes fold their subtree behind a `+N` badge (large workspaces start folded), search force-reveals matches, pan/zoom, click selects, double-click jumps into Explore |
 | **Inventory** | "Give me the parts list as a file." One sortable table across all documents, filtered by the same search + facet chips (documents, kinds, purposes, licenses), exportable as CSV/JSON |
+| **Licenses** | "Which licence identifiers does this release name, and are they real ones?" Every SPDX identifier across the cascade with declared/concluded counts, packages and documents, and whether it is on the SPDX License List, deprecated there, a `LicenseRef-`, or not on the list; click through to the packages, export as CSV/Markdown. Identifier facts and counts only, no judgement about what a licence obliges |
 | **Conflicts** | "Which packages ship in more than one version?" Grouped by purl identity across the whole cascade, each occurrence one click from its place in the tree |
 | **Diff** | "What changed between these two releases?" Added, removed and version-changed packages between two cascades (each side is a document plus everything reachable through its resolved references), copyable as Markdown for release notes |
 
@@ -150,8 +151,14 @@ IDs, checksums, and licenses. A **CISA 2026 minimum elements** preset measures
 the same document against the [successor](https://www.cisa.gov/resources-tools/resources/2026-minimum-elements-software-bill-materials-sbom) published on 29 July 2026 by
 CISA, NSA, FBI and 16 international partners, which replaces the 2021 document,
 and a **[BSI TR-03183-2](https://www.bsi.bund.de/dok/TR-03183)** preset approximates the German technical
-requirement. Every report names its requirement source and links it, so the
-mapping can be checked against the standard rather than trusted.
+requirement. Three sector presets measure field coverage the same way:
+**[OpenChain Automotive SBOM v1.1](https://github.com/OpenChain-Project/Automotive-SBOM)**
+(the thirteen mandatory fields), **[FDA 524B cybersecurity (02/2026)](https://www.fda.gov/regulatory-information/search-fda-guidance-documents/cybersecurity-medical-devices-quality-management-system-considerations-and-content-premarket)**
+(the 2021 baseline plus level of support and end-of-support date), and
+**BSI TR-03183-2 licence fields (6.1)** (distribution and effective licence as
+SPDX identifiers, checked against the SPDX License List). Every report names
+its requirement source and links it, so the mapping can be checked against the
+standard rather than trusted. None of them states conformance.
 Factual numbers, no invented score. Organizations can go further with
 **custom compliance profiles**: a small JSON file with your own minimum
 elements (field presence, patterns, coverage thresholds, recency) that imports
@@ -223,10 +230,13 @@ Known boundaries, stated plainly so nothing surprises you:
 
 - **Format scope.** SPDX 2.x in full; SPDX 3.0.x as JSON-LD with the
   core/software profiles mapped (other profiles are counted, not rendered);
-  CycloneDX 1.x as JSON (services, compositions, embedded VEX data, and XML
+  CycloneDX 1.x as JSON or XML (services, compositions and embedded VEX data
   are out of scope; a YAML-serialized BOM is read tolerantly but is not a
-  CycloneDX serialization). Trivy-native JSON is recognized with a conversion
-  hint, not parsed. Detection is content-based.
+  CycloneDX serialization). XML is read by a small built-in reader that
+  refuses document type declarations (no entity expansion, no external
+  references) and expects UTF-8; SPDX RDF/XML is recognized only far enough
+  to say so. Trivy-native JSON is recognized with a conversion hint, not
+  parsed. Detection is content-based.
 - **HTTPS or localhost required.** Cascade resolution hashes file bytes with
   `crypto.subtle`, which browsers expose only in secure contexts. Over plain
   HTTP on a non-localhost host, hashing (and therefore checksum-based
@@ -247,9 +257,10 @@ Known boundaries, stated plainly so nothing surprises you:
   preferences and imported profiles are persisted (locally); loaded documents
   are not. Deep links therefore need addressable sources (a catalog entry or
   a URL-loaded document), not dropped files.
-- **Not in scope by design.** No license-compliance judgement (license fields
-  are shown, not interpreted) and no vulnerability or VEX overlays in the
-  core model.
+- **Not in scope by design.** No license-compliance judgement (license
+  identifiers are shown, counted and checked against the SPDX License List,
+  never interpreted: nothing says what a licence obliges or whether two are
+  compatible) and no vulnerability or VEX overlays in the core model.
 
 ## Self-hosting
 

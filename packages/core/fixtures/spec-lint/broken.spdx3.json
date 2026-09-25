@@ -49,6 +49,20 @@
       "to": ["https://acme.example/pkg/ghost"]
     },
     {
+      "type": "simplelicensing_LicenseExpression",
+      "spdxId": "https://acme.example/license/broken",
+      "creationInfo": "_:creationinfo",
+      "simplelicensing_licenseExpression": "MIT AND"
+    },
+    {
+      "type": "Relationship",
+      "spdxId": "https://acme.example/rel/license",
+      "creationInfo": "_:creationinfo",
+      "from": "https://acme.example/pkg/webserver",
+      "relationshipType": "hasDeclaredLicense",
+      "to": ["https://acme.example/license/broken"]
+    },
+    {
       "type": "Relationship",
       "spdxId": "https://acme.example/rel/incomplete",
       "creationInfo": "_:creationinfo",

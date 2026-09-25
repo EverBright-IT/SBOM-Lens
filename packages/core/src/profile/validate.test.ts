@@ -41,11 +41,13 @@ describe('validateProfile', () => {
   });
 
   it('rejects wrong or newer schemas with a precise message', () => {
-    expect(errorsOf({ ...minimal, schema: 'sbomlens-profile/v4' })[0]).toContain('unsupported profile schema');
+    expect(errorsOf({ ...minimal, schema: 'sbomlens-profile/v5' })[0]).toContain('unsupported profile schema');
     expect(errorsOf({ ...minimal, schema: undefined })[0]).toContain('missing or invalid "schema"');
     expect(errorsOf('nope')[0]).toContain('must be a JSON object');
-    // v2 is understood since the algorithms modifier landed.
-    expect(validateProfile({ ...minimal, schema: 'sbomlens-profile/v2' }).ok).toBe(true);
+    // Every generation this engine understands accepts the minimal profile.
+    for (const schema of ['sbomlens-profile/v2', 'sbomlens-profile/v3', 'sbomlens-profile/v4']) {
+      expect(validateProfile({ ...minimal, schema }).ok, schema).toBe(true);
+    }
   });
 
   it('fails closed on unknown check types and fields', () => {

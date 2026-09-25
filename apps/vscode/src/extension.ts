@@ -7,8 +7,12 @@ export function activate(context: vscode.ExtensionContext): void {
     viewType: 'sbomlens.viewer',
     commandPrefix: 'sbomlens',
     displayName: 'SBOM Lens',
-    fileGlob: '{**/*.spdx,**/*.spdx.json,**/*.spdx.yaml,**/*.spdx.yml}',
-    filesNoun: 'SPDX files',
+    // Folder open and workspace scan walk this glob; it must agree with the
+    // customEditors selector in package.json, or a file the editor opens is
+    // one the scan never finds.
+    fileGlob:
+      '{**/*.spdx,**/*.spdx.json,**/*.spdx.yaml,**/*.spdx.yml,**/*.cdx.json,**/*.bom.json,**/*.cdx.xml,**/*.bom.xml}',
+    filesNoun: 'SBOM files',
     prefPrefix: 'sbomlens.',
     profileDir: '.sbomlens',
     defaultFileName: 'document.spdx',

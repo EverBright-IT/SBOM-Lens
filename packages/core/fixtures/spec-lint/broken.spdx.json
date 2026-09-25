@@ -30,6 +30,7 @@
       "name": "libssl",
       "versionInfo": "3.0.11",
       "licenseConcluded": "(MIT OR Apache-2.0",
+      "licenseDeclared": "LicenseRef-acme-eula",
       "packageVerificationCode": { "packageVerificationCodeValue": "not-a-hash" }
     }
   ],

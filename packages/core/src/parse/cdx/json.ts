@@ -55,7 +55,7 @@ const PURPOSE_BY_TYPE: Record<string, string> = {
 export function parseCdxJson(
   input: SourceInput,
   root: Record<string, unknown>,
-  serialization: 'json' | 'yaml',
+  serialization: 'json' | 'yaml' | 'xml',
 ): ParseResult {
   const diagnostics: Diagnostic[] = [];
   const specVersion = asString(root.specVersion) ?? 'unknown';
@@ -154,6 +154,7 @@ export function parseCdxJson(
       description: asString(node.description),
       checksums: readHashes(node.hashes),
       externalRefs: readExternalRefs(node),
+      properties: readProperties(node.properties),
       raw: { kind: 'json', value: node },
     });
     if (parentSpdxId) {
@@ -247,6 +248,7 @@ export function parseCdxJson(
   // what the BOM itself gets wrong. It loads either way.
   diagnostics.push(...validateCdxStructure(root));
 
+  const lifecycles = readLifecycles(metadata);
   const document: SbomDocument = {
     id: documentId,
     spec,
@@ -260,6 +262,9 @@ export function parseCdxJson(
     elements,
     relationships,
     diagnostics,
+    // CycloneDX has no sbomType; the first lifecycle phase is the closest
+    // statement of "what kind of BOM this is" and is reported as such.
+    ...(lifecycles ? { lifecycles, sbomType: lifecycles[0] } : {}),
   };
   return { document, diagnostics };
 }
@@ -307,10 +312,31 @@ function supplierName(value: unknown): string | undefined {
   return isRecord(value) ? asString(value.name) : undefined;
 }
 
+/** `properties[]` name/value pairs, verbatim; entries without both are dropped. */
+function readProperties(value: unknown): { name: string; value: string }[] | undefined {
+  const out: { name: string; value: string }[] = [];
+  for (const p of asRecordArray(value)) {
+    const name = asString(p.name);
+    const v = typeof p.value === 'string' ? p.value : undefined;
+    if (name && v !== undefined) out.push({ name, value: v });
+  }
+  return out.length > 0 ? out : undefined;
+}
+
+/** `metadata.lifecycles[].phase` (1.5+), in order. */
+function readLifecycles(metadata: Record<string, unknown>): string[] | undefined {
+  const phases = asRecordArray(metadata.lifecycles)
+    .map((l) => asString(l.phase) ?? asString(l.name))
+    .filter((p): p is string => p !== undefined);
+  return phases.length > 0 ? phases : undefined;
+}
+
 /**
  * Licenses: expressions and id/name entries, joined. CycloneDX 1.6 marks an
- * entry's `acknowledgment` as declared or concluded; unmarked entries count
- * as declared (the overwhelmingly common case in generator output).
+ * entry as declared or concluded via `acknowledgement`, which sits next to
+ * `expression` in the expression form and inside the `license` object in
+ * the id/name form (bom-1.6.schema.json). Unmarked entries count as
+ * declared (the overwhelmingly common case in generator output).
  * CycloneDX leaves the aggregate semantics of a multi-entry license list
  * undefined; joining with AND shows every named license rather than
  * guessing a weaker OR - display, not legal interpretation.
@@ -318,11 +344,12 @@ function supplierName(value: unknown): string | undefined {
 function licenseParts(value: unknown, which: 'declared' | 'concluded'): string | undefined {
   const parts: string[] = [];
   for (const entry of asRecordArray(value)) {
-    const ack = asString(entry.acknowledgment) ?? 'declared';
+    const license = isRecord(entry.license) ? entry.license : null;
+    const ack =
+      asString(entry.acknowledgement) ?? (license ? asString(license.acknowledgement) : undefined) ?? 'declared';
     if (ack !== which) continue;
     const expression = asString(entry.expression);
     if (expression) parts.push(expression);
-    const license = isRecord(entry.license) ? entry.license : null;
     const idOrName = license ? (asString(license.id) ?? asString(license.name)) : undefined;
     if (idOrName) parts.push(idOrName);
   }

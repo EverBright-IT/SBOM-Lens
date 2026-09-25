@@ -58,7 +58,7 @@ interface AppState {
   refFetch: { done: number; total: number } | null;
   failures: IngestFailure[];
 
-  view: 'explore' | 'map' | 'inventory' | 'conflicts' | 'diff';
+  view: 'explore' | 'map' | 'inventory' | 'licenses' | 'conflicts' | 'diff';
   selection: Selection | null;
   expanded: ReadonlySet<string>;
   detailTab: 'overview' | 'source';
@@ -131,6 +131,8 @@ interface AppState {
     toggleFacetKind(kind: 'package' | 'file'): void;
     toggleFacetPurpose(purpose: string): void;
     toggleFacetLicense(license: string): void;
+    /** Replace the licence facet wholesale (null clears); the Licenses view drills down with it. */
+    setFacetLicenses(licenses: ReadonlySet<string> | null): void;
     clearFacets(): void;
 
     parsingBegin(count: number): void;
@@ -379,6 +381,9 @@ export const useAppStore = create<AppState>()((set, get) => ({
     },
     toggleFacetLicense(license) {
       set((s) => ({ facetLicenses: toggleInSet(s.facetLicenses, license) }));
+    },
+    setFacetLicenses(licenses) {
+      set({ facetLicenses: licenses && licenses.size > 0 ? licenses : null });
     },
     clearFacets() {
       set({ facetDocs: null, facetKinds: null, facetPurposes: null, facetLicenses: null });

@@ -46,7 +46,9 @@ export function documentQuality(ws: WorkspaceState, loaded: LoadedDocument): Qua
     if (element.kind !== 'package') continue;
     packages.total++;
     if (element.version) packages.withVersion++;
-    if (element.supplier && element.supplier !== 'NOASSERTION') packages.withSupplier++;
+    // NONE is as empty as NOASSERTION here; the profile engine's supplier
+    // extractor treats both the same, and the parity test pins the two.
+    if (element.supplier && element.supplier !== 'NOASSERTION' && element.supplier !== 'NONE') packages.withSupplier++;
     if (element.purl || (element.externalRefs?.length ?? 0) > 0) packages.withUniqueId++;
     if ((element.checksums?.length ?? 0) > 0) packages.withChecksum++;
     if (effectiveLicense(element)) packages.withLicense++;

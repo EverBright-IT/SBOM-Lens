@@ -66,19 +66,36 @@ export function parseSpdx3Json(input: SourceInput, root: Record<string, unknown>
     return `${prefix}: ${name}`;
   };
 
-  /** hasDeclaredLicense/hasConcludedLicense targets resolve to expressions. */
+  /**
+   * hasDeclaredLicense/hasConcludedLicense targets resolve to the expression
+   * form the rest of the model speaks (the same string an SPDX 2 document
+   * would carry), never to a licence TEXT: a text is not an expression, and
+   * the lint, the profiles, and the Licenses tab would all report it as
+   * unparseable.
+   *
+   *   LicenseExpression element          -> its simplelicensing_licenseExpression
+   *   ListedLicense (by IRI or element)  -> the id, the tail of spdx.org/licenses/<id>
+   *   NoAssertionLicense / NoneLicense   -> NOASSERTION / NONE (3.0.1 individuals)
+   *   CustomLicense element              -> LicenseRef-<idstring>, as 2.x spells it
+   *   structured sets (AND/OR/WITH elements) -> not mapped
+   */
   const licenseText = (ref: unknown): string | undefined => {
     if (typeof ref !== 'string') return undefined;
-    if (ref.includes('/licenses/') || ref.startsWith('spdx.org/licenses/')) {
-      return ref.slice(ref.lastIndexOf('/') + 1); // ListedLicense IRI
-    }
+    if (ref.endsWith('/NoAssertionLicense')) return 'NOASSERTION';
+    if (ref.endsWith('/NoneLicense')) return 'NONE';
     const node = byId.get(ref);
-    if (!node) return noAssertion(ref);
-    return (
-      asString(node.simplelicensing_licenseExpression) ??
-      asString(node.simplelicensing_licenseText) ??
-      asString(node.name)
-    );
+    if (node) {
+      const type = nodeType(node);
+      if (type.endsWith('NoAssertionLicense')) return 'NOASSERTION';
+      if (type.endsWith('NoneLicense')) return 'NONE';
+      const expression = asString(node.simplelicensing_licenseExpression);
+      if (expression !== undefined) return expression;
+      if (type.endsWith('ListedLicense')) return iriTail(ref);
+      if (type.endsWith('CustomLicense')) return customLicenseRef(ref, node);
+      return undefined;
+    }
+    if (ref.includes('/licenses/') || ref.startsWith('spdx.org/licenses/')) return iriTail(ref); // ListedLicense IRI
+    return noAssertion(ref);
   };
 
   // --- document identity ------------------------------------------------------
@@ -160,7 +177,10 @@ export function parseSpdx3Json(input: SourceInput, root: Record<string, unknown>
       const name = asString(node.name) ?? `(unnamed ${kind})`;
       const spdxId = asString(node.spdxId) ?? `SPDXRef-sbomlens-anonymous-${++anonCounter}`;
       const externalRefs = readExternalIdentifiers(node.externalIdentifier);
-      const purl = externalRefs?.find((r) => r.type === 'purl')?.locator;
+      // SPDX 3.0.1 carries the purl as its own property on software_Package
+      // (software_packageUrl); generators that use the externalIdentifier
+      // form instead are read through readExternalIdentifiers.
+      const purl = asString(node.software_packageUrl) ?? externalRefs?.find((r) => r.type === 'purl')?.locator;
       elements.push({
         id: makeElementId(documentId, spdxId),
         documentId,
@@ -178,6 +198,12 @@ export function parseSpdx3Json(input: SourceInput, root: Record<string, unknown>
         comment: asString(node.comment),
         checksums: readHashes(node.verifiedUsing),
         externalRefs,
+        fileName: asString(node.software_packageFileName),
+        // Core/Artifact: supportLevel is a list of SupportType; the first
+        // entry is what a coverage meter can act on. validUntilTime means
+        // "reassess after", not "end of support" - profiles that read it say so.
+        supportLevel: asString(node.supportLevel) ?? asStringArray(node.supportLevel)[0],
+        validUntil: asString(node.validUntilTime),
         raw: { kind: 'json', value: node },
       });
       continue;
@@ -283,8 +309,16 @@ export function parseSpdx3Json(input: SourceInput, root: Record<string, unknown>
     elements: dedupeBySpdxId(elements, diagnostics),
     relationships,
     diagnostics,
+    // software_Sbom.sbomType (design, source, build, analyzed, deployed,
+    // runtime) - a list in the model; the first entry names the kind.
+    ...(sbomType(sbomNode) ? { sbomType: sbomType(sbomNode) } : {}),
   };
   return { document, diagnostics };
+}
+
+function sbomType(sbomNode: Record<string, unknown> | undefined): string | undefined {
+  if (!sbomNode) return undefined;
+  return asString(sbomNode.software_sbomType) ?? asStringArray(sbomNode.software_sbomType)[0];
 }
 
 /** SPDX 3 hash algorithm ids are lowercase ('sha256'); our display uppercases. */
@@ -324,6 +358,25 @@ function noAssertion(value: string | undefined): string | undefined {
   if (value.endsWith('NoAssertion')) return 'NOASSERTION';
   if (value.endsWith('/None') || value === 'None') return 'NONE';
   return value;
+}
+
+/** The last path or fragment segment of an IRI. */
+function iriTail(iri: string): string {
+  return iri.slice(Math.max(iri.lastIndexOf('/'), iri.lastIndexOf('#')) + 1);
+}
+
+/**
+ * A CustomLicense has no expression form of its own; SPDX 2 spells the same
+ * thing LicenseRef-<idstring> (Annex D), and that is what the profiles and the
+ * Licenses tab count as a reference rather than as text. Generators that
+ * follow the 3.0.1 examples already end the IRI in LicenseRef-…; for the
+ * rest, the IRI tail (or the name) becomes the idstring.
+ */
+function customLicenseRef(iri: string, node: Record<string, unknown>): string {
+  const tail = iriTail(iri);
+  if (/^LicenseRef-[A-Za-z0-9.-]+$/.test(tail)) return tail;
+  const stem = (tail || asString(node.name) || 'custom').replace(/[^A-Za-z0-9.-]+/g, '-').replace(/^-+|-+$/g, '');
+  return `LicenseRef-${stem || 'custom'}`;
 }
 
 function versionFromContext(root: Record<string, unknown>): string | undefined {

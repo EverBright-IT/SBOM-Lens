@@ -35,10 +35,10 @@ field-level (presence, patterns): SBOM Lens does not do legal interpretation.
 
 | Type | Checks | Fields |
 | --- | --- | --- |
-| `document-field` | the field is present (and matches the modifiers) | `name`, `namespace`, `created`, `creators`, `dataLicense`, `comment` |
+| `document-field` | the field is present (and matches the modifiers) | `name`, `namespace`, `created`, `creators`, `dataLicense`, `comment`; v4: `sbomType`, `describes`, `externalDocumentRefs` |
 | `relationships` | the document has at least `minCount` (default 1) relationships | - |
 | `created-recency` | `created` parses and is at most `maxAgeDays` old (boundary inclusive) | - |
-| `package-coverage` | the share of packages satisfying the field (and modifiers) reaches `threshold` % | `version`, `supplier`, `purl`, `uniqueId`, `checksum`, `license`, `downloadLocation`, `purpose`, `copyright`, `originator` |
+| `package-coverage` | the share of packages satisfying the field (and modifiers) reaches `threshold` % | `version`, `supplier`, `purl`, `uniqueId`, `checksum`, `license`, `downloadLocation`, `purpose`, `copyright`, `originator`; v4: `fileName`, `supportLevel`, `validUntil`, `licenseDeclared`, `licenseConcluded`, `properties` |
 
 ### Modifiers and semantics
 
@@ -96,6 +96,49 @@ all-green report for a format the requirement source does not accept.
 The same fail-closed reasoning applies as for v2: an older engine would
 ignore `requires` and silently under-check, so the field demands the `v3`
 schema id. v3 includes everything from v2.
+
+### Schema v4: lifecycle and licensing fields, informational checks
+
+`sbomlens-profile/v4` adds what the 2026 requirement sources ask for and
+the earlier fields could not express:
+
+- **Package fields** `fileName` (SPDX packageFileName), `supportLevel`
+  (SPDX 3 supportLevel, or a CycloneDX property named `support-level`,
+  optionally prefixed `fda:lifecycle:`), `validUntil` (SPDX 2.3
+  ValidUntilDate, SPDX 3 validUntilTime, or a CycloneDX property named
+  `end-of-support` / `eol` / `eos` / `valid-until`), `licenseDeclared` and
+  `licenseConcluded` (the two licence fields separately; `license` remains
+  "concluded, else declared"), and `properties` (CycloneDX `properties[]`
+  rendered as `name=value` lines so a `pattern` can target one property).
+- **Document fields** `sbomType` (SPDX 3 sbomType or the first CycloneDX
+  lifecycle phase; absent in SPDX 2.x), `describes` (a primary component
+  is declared), `externalDocumentRefs` (other SBOMs are referenced).
+- **`informational: true`** on `document-field`, `relationships` and
+  `created-recency`: the check reports pass or fail but never counts as a
+  gate. Before v4 every boolean check gated by construction; guidance
+  documents describe facts worth showing without turning them into a
+  verdict. (Coverage checks stay informational by omitting `threshold`.)
+- **`licenseIds`** on `license`, `licenseDeclared` and `licenseConcluded`:
+  `"known"` requires every identifier in the expression to be on the SPDX
+  License List; `"known-or-ref"` also accepts `LicenseRef-...` (the form
+  BSI TR-03183-2 prescribes for the ScanCode LicenseDB fallback). The
+  exception after `WITH` is not a licence and is not checked. The list is
+  generated from `spdx-license-ids` and carries identifiers and their
+  deprecation flag, nothing else: whether a licence is acceptable is not a
+  question this engine answers. **`allowDeprecated: false`** additionally
+  fails identifiers the list marks deprecated (default: they count).
+
+```json
+{ "schema": "sbomlens-profile/v4", "name": "licence identifiers",
+  "checks": [
+    { "type": "package-coverage", "field": "licenseDeclared", "threshold": 100,
+      "licenseIds": "known-or-ref" },
+    { "type": "document-field", "field": "sbomType", "informational": true } ] }
+```
+
+New field tokens are rejected below v4 by the whitelist; the schema id
+exists for the two modifiers, which an older engine would otherwise drop
+silently. v4 includes everything from v3.
 
 ### Validation is fail-closed
 
@@ -158,6 +201,48 @@ component essentials for component descriptors), the dropdown offers:
   check, with one note: the **Coverage** element explicitly accepts
   linking to separate SBOM documents, which is what the workspace
   resolves and reports as a cascade.
+- **[BSI TR-03183-2 licence fields (6.1)](https://www.bsi.bund.de/dok/TR-03183)** (schema v4): the
+  licence fields section 6.1 of the TR requires per component. The
+  distribution licence (SPDX `licenseDeclared`, CycloneDX licences not
+  acknowledged as concluded) is **gated at 100 %** and must be an SPDX
+  identifier or expression whose identifiers are on the SPDX License List
+  or are `LicenseRef-...` (the TR names the ScanCode LicenseDB,
+  `LicenseRef-scancode-*`, as the fallback); the effective licence
+  (`licenseConcluded`) is a meter under the same identifier rule.
+  Deprecated identifiers still count as identifiers; NOASSERTION and NONE
+  count as absent; a licence text in place of an identifier is the
+  expression grammar lint's finding, not this profile's. The TR format
+  baseline (SPDX 3.0.1+ or CycloneDX 1.6+) leads, as in the field-coverage
+  preset. The profile says nothing about which licence is acceptable, what
+  it obliges, or whether two licences are compatible.
+- **[FDA 524B cybersecurity (02/2026)](https://www.fda.gov/regulatory-information/search-fda-guidance-documents/cybersecurity-medical-devices-quality-management-system-considerations-and-content-premarket)** (schema v4): the SBOM content the FDA guidance
+  *Cybersecurity in Medical Devices* (final, February 2026) asks for under
+  section 524B of the FD&C Act. The NTIA baseline checks reuse the NTIA
+  preset's ids, so the two reports compare line by line; on top, **level
+  of support** and **end-of-support date** are coverage meters. The
+  guidance is nonbinding (the legal lever is refuse-to-accept at
+  submission), so nothing gates and a complete report is not a statement
+  of acceptability. Exactly three field conventions are read: SPDX 2.3
+  `ValidUntilDate` (end of the support period from the supplier), SPDX
+  3.0.1 `supportLevel` / `validUntilTime` (the latter means "reassess
+  after", close to but not the same as end of support), and CycloneDX
+  properties named `support-level` / `end-of-support` (optionally
+  prefixed `fda:lifecycle:`), because CycloneDX has no normative field for
+  either. An addendum file is not read. Known vulnerabilities are the
+  VEX/CSAF overlay's job and are not scored.
+- **[OpenChain Automotive SBOM v1.1](https://github.com/OpenChain-Project/Automotive-SBOM)** (schema v4): the
+  thirteen mandatory fields of the OpenChain Automotive SBOM Specification
+  (CC0-1.0), which maps each onto SPDX and CycloneDX. The requirement is
+  contractual (OEMs pass UNECE R155/R156 obligations down the tier chain),
+  so package fields are meters and nothing gates. **SBOM type** and
+  **external document references** are informational document facts: SPDX
+  2.x cannot express a type at all, and a leaf SBOM references nothing.
+  File name is SPDX `packageFileName` (CycloneDX has no field), concluded
+  licence is `licenseConcluded`, copyright is read where the formats carry
+  it, hashes are optional in the specification and shown as a meter, and
+  component name is satisfied by construction and not checked. The n-tier
+  vehicle SBOM the specification is written for is what the cascade view
+  resolves.
 - **[BSI TR-03183-2 field coverage (approximation)](https://www.bsi.bund.de/dok/TR-03183)**: the machine-checkable
   field requirements of BSI TR-03183 part 2 v2.1.0, gated at 100%: SBOM
   creator with contact (email or URL, on a Person/Organization creator),

@@ -1,6 +1,16 @@
 import { asArray, asString, isRecord } from '../util/narrow';
 import type { ComplianceProfile, ProfileSpecBaseline, DocumentField, PackageField, ProfileCheck } from './model';
-import { MAX_PROFILE_BYTES, PROFILE_SCHEMA_V1, PROFILE_SCHEMA_V2, PROFILE_SCHEMA_V3, STRING_PACKAGE_FIELDS } from './model';
+import {
+  LICENSE_PACKAGE_FIELDS,
+  MAX_PROFILE_BYTES,
+  PROFILE_SCHEMA_V1,
+  PROFILE_SCHEMA_V2,
+  PROFILE_SCHEMA_V3,
+  PROFILE_SCHEMA_V4,
+  STRING_PACKAGE_FIELDS,
+  V4_DOCUMENT_FIELDS,
+  V4_PACKAGE_FIELDS,
+} from './model';
 
 /**
  * Fail-closed validation — deliberately NOT the catalog's silent tolerance.
@@ -24,6 +34,7 @@ const DOCUMENT_FIELDS: readonly DocumentField[] = [
   'creators',
   'dataLicense',
   'comment',
+  ...V4_DOCUMENT_FIELDS,
 ];
 const PACKAGE_FIELDS: readonly PackageField[] = [
   'version',
@@ -36,7 +47,16 @@ const PACKAGE_FIELDS: readonly PackageField[] = [
   'purpose',
   'copyright',
   'originator',
+  ...V4_PACKAGE_FIELDS,
 ];
+
+/** Schema generations, ordered; a feature introduced at level n needs schema >= n. */
+const SCHEMA_LEVEL: Record<string, number> = {
+  [PROFILE_SCHEMA_V1]: 1,
+  [PROFILE_SCHEMA_V2]: 2,
+  [PROFILE_SCHEMA_V3]: 3,
+  [PROFILE_SCHEMA_V4]: 4,
+};
 
 export type ProfileValidation =
   | { ok: true; profile: ComplianceProfile }
@@ -47,24 +67,29 @@ export function validateProfile(raw: unknown): ProfileValidation {
   if (!isRecord(raw)) return { ok: false, errors: ['profile must be a JSON object'] };
 
   const schema = raw.schema;
-  if (schema !== PROFILE_SCHEMA_V1 && schema !== PROFILE_SCHEMA_V2 && schema !== PROFILE_SCHEMA_V3) {
+  const level = typeof schema === 'string' ? SCHEMA_LEVEL[schema] : undefined;
+  if (
+    level === undefined ||
+    (schema !== PROFILE_SCHEMA_V1 && schema !== PROFILE_SCHEMA_V2 && schema !== PROFILE_SCHEMA_V3 && schema !== PROFILE_SCHEMA_V4)
+  ) {
+    const known = `${PROFILE_SCHEMA_V1}, ${PROFILE_SCHEMA_V2}, ${PROFILE_SCHEMA_V3}, and ${PROFILE_SCHEMA_V4}`;
     return {
       ok: false,
       errors: [
         typeof schema === 'string' && schema.startsWith('sbomlens-profile/')
-          ? `unsupported profile schema "${schema}": this build understands ${PROFILE_SCHEMA_V1}, ${PROFILE_SCHEMA_V2}, and ${PROFILE_SCHEMA_V3}`
-          : `missing or invalid "schema": expected "${PROFILE_SCHEMA_V1}", "${PROFILE_SCHEMA_V2}", or "${PROFILE_SCHEMA_V3}"`,
+          ? `unsupported profile schema "${schema}": this build understands ${known}`
+          : `missing or invalid "schema": expected one of ${known}`,
       ],
     };
   }
 
   // `requires` gates the whole profile, so it validates fail-closed: only
-  // the shapes this engine can enforce are accepted, and only under v3 (an
+  // the shapes this engine can enforce are accepted, and only from v3 on (an
   // older engine would ignore the field and silently under-check).
   let requires: ComplianceProfile['requires'];
   if (raw.requires !== undefined) {
-    if (schema !== PROFILE_SCHEMA_V3) {
-      errors.push(`"requires" needs schema "${PROFILE_SCHEMA_V3}"`);
+    if (level < 3) {
+      errors.push(`"requires" needs schema "${PROFILE_SCHEMA_V3}" or later`);
     } else if (!isRecord(raw.requires)) {
       errors.push('"requires" must be an object');
     } else {
@@ -97,7 +122,7 @@ export function validateProfile(raw: unknown): ProfileValidation {
   const checks: ProfileCheck[] = [];
   const seenIds = new Set<string>();
   checksRaw.slice(0, MAX_CHECKS).forEach((entry, index) => {
-    const check = validateCheck(entry, index, errors, seenIds, schema !== PROFILE_SCHEMA_V1);
+    const check = validateCheck(entry, index, errors, seenIds, level);
     if (check) checks.push(check);
   });
 
@@ -120,7 +145,7 @@ function validateCheck(
   index: number,
   errors: string[],
   seenIds: Set<string>,
-  v2: boolean,
+  level: number,
 ): ProfileCheck | null {
   const at = `checks[${index}]`;
   if (!isRecord(entry)) {
@@ -139,6 +164,7 @@ function validateCheck(
 
   const pattern = validatePattern(entry.pattern, at, errors);
   const values = validateValues(entry.values, at, errors);
+  const informational = validateInformational(entry.informational, entry.type, at, errors, level);
 
   switch (entry.type) {
     case 'document-field': {
@@ -147,7 +173,18 @@ function validateCheck(
         errors.push(`${at}: unknown document field "${String(entry.field)}"`);
         return null;
       }
-      return { ...base, type: 'document-field', field, ...(pattern && { pattern }), ...(values && { values }) };
+      if (level < 4 && V4_DOCUMENT_FIELDS.includes(field)) {
+        errors.push(`${at}: document field "${field}" requires schema "${PROFILE_SCHEMA_V4}"`);
+        return null;
+      }
+      return {
+        ...base,
+        type: 'document-field',
+        field,
+        ...(pattern && { pattern }),
+        ...(values && { values }),
+        ...(informational && { informational }),
+      };
     }
     case 'relationships': {
       let minCount: number | undefined;
@@ -159,7 +196,12 @@ function validateCheck(
         minCount = entry.minCount as number;
       }
       if (pattern || values) errors.push(`${at}: pattern/values do not apply to "relationships"`);
-      return { ...base, type: 'relationships', ...(minCount !== undefined && { minCount }) };
+      return {
+        ...base,
+        type: 'relationships',
+        ...(minCount !== undefined && { minCount }),
+        ...(informational && { informational }),
+      };
     }
     case 'created-recency': {
       const days = entry.maxAgeDays;
@@ -168,12 +210,16 @@ function validateCheck(
         return null;
       }
       if (pattern || values) errors.push(`${at}: pattern/values do not apply to "created-recency"`);
-      return { ...base, type: 'created-recency', maxAgeDays: days };
+      return { ...base, type: 'created-recency', maxAgeDays: days, ...(informational && { informational }) };
     }
     case 'package-coverage': {
       const field = entry.field as PackageField;
       if (!PACKAGE_FIELDS.includes(field)) {
         errors.push(`${at}: unknown package field "${String(entry.field)}"`);
+        return null;
+      }
+      if (level < 4 && V4_PACKAGE_FIELDS.includes(field)) {
+        errors.push(`${at}: package field "${field}" requires schema "${PROFILE_SCHEMA_V4}"`);
         return null;
       }
       if ((pattern || values) && !STRING_PACKAGE_FIELDS.includes(field)) {
@@ -188,7 +234,8 @@ function validateCheck(
         }
         threshold = entry.threshold;
       }
-      const algorithms = validateAlgorithms(entry.algorithms, field, at, errors, v2);
+      const algorithms = validateAlgorithms(entry.algorithms, field, at, errors, level);
+      const licence = validateLicenseIds(entry.licenseIds, entry.allowDeprecated, field, at, errors, level);
       return {
         ...base,
         type: 'package-coverage',
@@ -197,6 +244,8 @@ function validateCheck(
         ...(pattern && { pattern }),
         ...(values && { values }),
         ...(algorithms && { algorithms }),
+        ...(licence?.licenseIds && { licenseIds: licence.licenseIds }),
+        ...(licence?.allowDeprecated !== undefined && { allowDeprecated: licence.allowDeprecated }),
       };
     }
     default:
@@ -229,16 +278,77 @@ function validatePattern(raw: unknown, at: string, errors: string[]): string | u
 const MAX_ALGORITHMS = 8;
 const MAX_ALGORITHM_LENGTH = 32;
 
-/** v2-only, checksum-only. Fail closed on anything else — see module header. */
+/**
+ * v4: `informational` on a boolean check. Rejected below v4 (an older engine
+ * would drop the flag and gate a check the author meant as a meter) and on
+ * coverage checks (there, "no threshold" already means informational).
+ */
+function validateInformational(
+  raw: unknown,
+  type: unknown,
+  at: string,
+  errors: string[],
+  level: number,
+): boolean | undefined {
+  if (raw === undefined) return undefined;
+  if (typeof raw !== 'boolean') {
+    errors.push(`${at}: "informational" must be a boolean`);
+    return undefined;
+  }
+  if (level < 4) {
+    errors.push(`${at}: "informational" requires schema "${PROFILE_SCHEMA_V4}"`);
+    return undefined;
+  }
+  if (type === 'package-coverage') {
+    errors.push(`${at}: "informational" does not apply to "package-coverage" (omit "threshold" instead)`);
+    return undefined;
+  }
+  return raw ? true : undefined;
+}
+
+/** v4, licence fields only: identifier validity against the SPDX License List. */
+function validateLicenseIds(
+  rawIds: unknown,
+  rawDeprecated: unknown,
+  field: PackageField,
+  at: string,
+  errors: string[],
+  level: number,
+): { licenseIds?: 'known' | 'known-or-ref'; allowDeprecated?: boolean } | undefined {
+  if (rawIds === undefined && rawDeprecated === undefined) return undefined;
+  if (level < 4) {
+    errors.push(`${at}: "licenseIds"/"allowDeprecated" require schema "${PROFILE_SCHEMA_V4}"`);
+    return undefined;
+  }
+  if (!LICENSE_PACKAGE_FIELDS.includes(field)) {
+    errors.push(`${at}: "licenseIds"/"allowDeprecated" only apply to licence fields`);
+    return undefined;
+  }
+  if (rawIds === undefined) {
+    errors.push(`${at}: "allowDeprecated" needs "licenseIds"`);
+    return undefined;
+  }
+  if (rawIds !== 'known' && rawIds !== 'known-or-ref') {
+    errors.push(`${at}: "licenseIds" must be "known" or "known-or-ref"`);
+    return undefined;
+  }
+  if (rawDeprecated !== undefined && typeof rawDeprecated !== 'boolean') {
+    errors.push(`${at}: "allowDeprecated" must be a boolean`);
+    return undefined;
+  }
+  return { licenseIds: rawIds, ...(rawDeprecated !== undefined && { allowDeprecated: rawDeprecated }) };
+}
+
+/** v2+, checksum-only. Fail closed on anything else — see module header. */
 function validateAlgorithms(
   raw: unknown,
   field: PackageField,
   at: string,
   errors: string[],
-  v2: boolean,
+  level: number,
 ): string[] | undefined {
   if (raw === undefined) return undefined;
-  if (!v2) {
+  if (level < 2) {
     errors.push(`${at}: "algorithms" requires schema "sbomlens-profile/v2" or later`);
     return undefined;
   }

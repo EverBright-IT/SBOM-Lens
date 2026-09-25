@@ -21,6 +21,16 @@ export const PROFILE_SCHEMA_V2 = 'sbomlens-profile/v2';
  * matter — exactly the overstatement the field exists to prevent.
  */
 export const PROFILE_SCHEMA_V3 = 'sbomlens-profile/v3';
+/**
+ * v4 = v3 plus the lifecycle and licensing fields the 2026 requirement
+ * sources ask for (FDA 524B support level and end-of-support date, the
+ * OpenChain Automotive file name and concluded licence, BSI TR-03183-2 §6.1
+ * declared/original licences), the `informational` flag on boolean checks,
+ * and the `licenseIds` / `allowDeprecated` modifiers on licence coverage.
+ * New field tokens are already fail-closed through the whitelist; the id
+ * exists for the two modifiers, which an older engine would silently drop.
+ */
+export const PROFILE_SCHEMA_V4 = 'sbomlens-profile/v4';
 
 /** Profiles larger than this are never sniffed or imported. */
 export const MAX_PROFILE_BYTES = 65536;
@@ -31,7 +41,11 @@ export type DocumentField =
   | 'created'
   | 'creators'
   | 'dataLicense'
-  | 'comment';
+  | 'comment'
+  // v4
+  | 'sbomType'
+  | 'describes'
+  | 'externalDocumentRefs';
 
 export type PackageField =
   | 'version'
@@ -43,7 +57,25 @@ export type PackageField =
   | 'downloadLocation'
   | 'purpose'
   | 'copyright'
-  | 'originator';
+  | 'originator'
+  // v4
+  | 'fileName'
+  | 'supportLevel'
+  | 'validUntil'
+  | 'licenseDeclared'
+  | 'licenseConcluded'
+  | 'properties';
+
+/** Fields that exist only from schema v4 on; the validator rejects them below it. */
+export const V4_DOCUMENT_FIELDS: readonly DocumentField[] = ['sbomType', 'describes', 'externalDocumentRefs'];
+export const V4_PACKAGE_FIELDS: readonly PackageField[] = [
+  'fileName',
+  'supportLevel',
+  'validUntil',
+  'licenseDeclared',
+  'licenseConcluded',
+  'properties',
+];
 
 /** Package fields whose extracted value is a string (pattern/values apply). */
 export const STRING_PACKAGE_FIELDS: readonly PackageField[] = [
@@ -55,7 +87,16 @@ export const STRING_PACKAGE_FIELDS: readonly PackageField[] = [
   'purpose',
   'copyright',
   'originator',
+  'fileName',
+  'supportLevel',
+  'validUntil',
+  'licenseDeclared',
+  'licenseConcluded',
+  'properties',
 ];
+
+/** Licence fields that accept the v4 `licenseIds` / `allowDeprecated` modifiers. */
+export const LICENSE_PACKAGE_FIELDS: readonly PackageField[] = ['license', 'licenseDeclared', 'licenseConcluded'];
 
 interface CheckBase {
   /** Stable id for reports; defaults to `${type}-${index}`. Unique when present. */
@@ -64,17 +105,27 @@ interface CheckBase {
   label?: string;
 }
 
+/**
+ * v4: a boolean check that reports pass/fail but never gates. Guidance
+ * documents describe facts worth showing without turning them into a
+ * verdict; before v4 every boolean check gated by construction.
+ */
+interface Informational {
+  informational?: boolean;
+}
+
 export type ProfileCheck =
-  | (CheckBase & {
-      type: 'document-field';
-      field: DocumentField;
-      /** Regex the value must match (RegExp.test — anchor with ^…$ for full match). */
-      pattern?: string;
-      /** Exact-match allow-list; combined with pattern via AND. */
-      values?: string[];
-    })
-  | (CheckBase & { type: 'relationships'; minCount?: number })
-  | (CheckBase & { type: 'created-recency'; maxAgeDays: number })
+  | (CheckBase &
+      Informational & {
+        type: 'document-field';
+        field: DocumentField;
+        /** Regex the value must match (RegExp.test — anchor with ^…$ for full match). */
+        pattern?: string;
+        /** Exact-match allow-list; combined with pattern via AND. */
+        values?: string[];
+      })
+  | (CheckBase & Informational & { type: 'relationships'; minCount?: number })
+  | (CheckBase & Informational & { type: 'created-recency'; maxAgeDays: number })
   | (CheckBase & {
       type: 'package-coverage';
       field: PackageField;
@@ -88,6 +139,16 @@ export type ProfileCheck =
        * insensitive, e.g. "SHA512" or "SHA-512").
        */
       algorithms?: string[];
+      /**
+       * v4, licence fields only: every licence identifier in the expression
+       * must be on the SPDX License List ('known'), or on the list OR a
+       * `LicenseRef-` ('known-or-ref'). Identifier validity, nothing more:
+       * the list carries ids and their deprecation flag, no texts, no
+       * obligations, no judgement.
+       */
+      licenseIds?: 'known' | 'known-or-ref';
+      /** v4, with `licenseIds`: whether deprecated identifiers still satisfy the check (default true). */
+      allowDeprecated?: boolean;
     });
 
 /**
@@ -111,7 +172,7 @@ export interface ProfileRequires {
 }
 
 export interface ComplianceProfile {
-  schema: typeof PROFILE_SCHEMA_V1 | typeof PROFILE_SCHEMA_V2 | typeof PROFILE_SCHEMA_V3;
+  schema: typeof PROFILE_SCHEMA_V1 | typeof PROFILE_SCHEMA_V2 | typeof PROFILE_SCHEMA_V3 | typeof PROFILE_SCHEMA_V4;
   name: string;
   description?: string;
   /**

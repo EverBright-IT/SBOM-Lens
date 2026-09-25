@@ -398,7 +398,7 @@ async function emitCd(
         diag(
           'warning',
           'OCM_SBOM_FORMAT_UNSUPPORTED',
-          `SBOM resource "${asString(resource.name) ?? '?'}" is not SPDX (${asString(access.mediaType) ?? 'unknown media type'}): skipped.`,
+          `SBOM resource "${asString(resource.name) ?? '?'}" is neither SPDX nor CycloneDX (${asString(access.mediaType) ?? 'unknown media type'}): skipped.`,
         ),
       );
       continue;
@@ -406,8 +406,12 @@ async function emitCd(
     const copy = new Uint8Array(blob); // detach from the archive buffer
     const sha1 = await sha1Hex(copy.buffer as ArrayBuffer);
     sbomChecksums.set(localReference, sha1);
+    // Detection is by content; the suffix only keeps the tree honest about
+    // what the resource is.
+    const mediaType = asString(access.mediaType)?.toLowerCase() ?? '';
+    const suffix = mediaType.includes('cyclonedx') ? (mediaType.includes('xml') ? '.cdx.xml' : '.cdx.json') : '.spdx';
     result.extracted.push({
-      fileName: `${archiveName}!${asString(resource.name) ?? localReference}.spdx`,
+      fileName: `${archiveName}!${asString(resource.name) ?? localReference}${suffix}`,
       bytes: copy,
     });
   }

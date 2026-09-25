@@ -75,6 +75,62 @@ describe('SPDX 3 mapping', () => {
     expect(document!.relationships.some((r) => r.type.includes('LICENSE'))).toBe(false);
   });
 
+  it('maps licence targets to expressions: listed ids, LicenseRef for custom licences, NOASSERTION/NONE individuals', () => {
+    // A licence TEXT must never land in a licence field: downstream it would
+    // read as an unparseable expression. CustomLicense becomes the
+    // LicenseRef- form SPDX 2 uses for the same thing.
+    const ci = '_:ci';
+    const graph = JSON.stringify({
+      '@context': 'https://spdx.org/rdf/3.0.1/spdx-context.jsonld',
+      '@graph': [
+        { type: 'CreationInfo', '@id': ci, specVersion: '3.0.1', created: '2026-06-01T10:00:00Z', createdBy: ['https://acme.example/agent/acme'] },
+        { type: 'Organization', spdxId: 'https://acme.example/agent/acme', creationInfo: ci, name: 'ACME Corp' },
+        { type: 'SpdxDocument', spdxId: 'https://acme.example/doc/licences', creationInfo: ci, name: 'licences', rootElement: ['https://acme.example/pkg/a'] },
+        { type: 'software_Package', spdxId: 'https://acme.example/pkg/a', creationInfo: ci, name: 'a' },
+        { type: 'software_Package', spdxId: 'https://acme.example/pkg/b', creationInfo: ci, name: 'b' },
+        { type: 'software_Package', spdxId: 'https://acme.example/pkg/c', creationInfo: ci, name: 'c' },
+        {
+          type: 'expandedlicensing_CustomLicense',
+          spdxId: 'https://acme.example/licenses/LicenseRef-acme-eula',
+          creationInfo: ci,
+          name: 'ACME EULA',
+          simplelicensing_licenseText: 'Permission is granted to ACME customers only, and to nobody else.',
+        },
+        {
+          type: 'expandedlicensing_CustomLicense',
+          spdxId: 'https://acme.example/eula#v2026',
+          creationInfo: ci,
+          name: 'ACME EULA 2026',
+          simplelicensing_licenseText: 'The 2026 edition of the same text.',
+        },
+        rel('a', 'hasDeclaredLicense', 'https://acme.example/licenses/LicenseRef-acme-eula'),
+        rel('b', 'hasDeclaredLicense', 'https://spdx.org/rdf/3.0.1/terms/ExpandedLicensing/NoAssertionLicense'),
+        rel('b', 'hasConcludedLicense', 'https://spdx.org/rdf/3.0.1/terms/ExpandedLicensing/NoneLicense'),
+        rel('c', 'hasDeclaredLicense', 'https://spdx.org/licenses/MIT'),
+        rel('c', 'hasConcludedLicense', 'https://acme.example/eula#v2026'),
+      ],
+    });
+    function rel(from: string, relationshipType: string, to: string) {
+      return {
+        type: 'Relationship',
+        spdxId: `https://acme.example/rel/${from}-${relationshipType}`,
+        creationInfo: ci,
+        from: `https://acme.example/pkg/${from}`,
+        relationshipType,
+        to: [to],
+      };
+    }
+    const result = parseDocument({ fileName: 'licences.spdx3.json', text: graph, sha1: 'b'.repeat(40), byteSize: graph.length });
+    const byName = Object.fromEntries(result.document!.elements.map((e) => [e.name, e]));
+    expect(byName.a!.licenseDeclared).toBe('LicenseRef-acme-eula');
+    expect(byName.b!.licenseDeclared).toBe('NOASSERTION');
+    expect(byName.b!.licenseConcluded).toBe('NONE');
+    expect(byName.c!.licenseDeclared).toBe('MIT');
+    expect(byName.c!.licenseConcluded).toBe('LicenseRef-v2026');
+    // Listed-licence IRIs and the vocabulary individuals are well known, not dangling.
+    expect(result.diagnostics.map((d) => d.code)).not.toContain('SPDX3_SCHEMA_DANGLING_REF');
+  });
+
   it('expands multi-target relationships and converts camelCase types', () => {
     const { document } = parse();
     const contains = document!.relationships.filter((r) => r.type === 'CONTAINS');

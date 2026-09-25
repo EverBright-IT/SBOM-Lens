@@ -205,6 +205,18 @@ describe('NTIA profile parity with documentQuality', () => {
     expect(resultById(report, 'pkg-checksum').coverage?.satisfied).toBe(quality.packages.withChecksum);
     expect(resultById(report, 'pkg-license').coverage?.satisfied).toBe(quality.packages.withLicense);
   });
+
+  it('treats NONE and NOASSERTION suppliers as absent on both sides', () => {
+    // The two implementations once disagreed on NONE (quality counted it,
+    // the engine did not) and no fixture exercised it. Pinned here.
+    const { ws, loaded } = docFrom({
+      packages: [{ supplier: 'Organization: ACME' }, { supplier: 'NONE' }, { supplier: 'NOASSERTION' }],
+    });
+    const quality = documentQuality(ws, loaded);
+    const report = evaluateProfile(ws, loaded, NTIA_PROFILE);
+    expect(quality.packages.withSupplier).toBe(1);
+    expect(resultById(report, 'pkg-supplier').coverage?.satisfied).toBe(1);
+  });
 });
 
 describe('profileReportToMarkdown', () => {

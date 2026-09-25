@@ -24,6 +24,7 @@ import { WorkspaceTree } from './tree/WorkspaceTree';
 import { ConflictsView } from './views/ConflictsView';
 import { DiffView } from './views/DiffView';
 import { InventoryView } from './views/InventoryView';
+import { LicensesView } from './views/LicensesView';
 import { MapView } from './views/MapView';
 
 const SIDEBAR_KEY = pref('sidebarWidth');
@@ -159,6 +160,8 @@ function ActiveView() {
       return <MapView />;
     case 'inventory':
       return <InventoryView />;
+    case 'licenses':
+      return <LicensesView />;
     case 'conflicts':
       return <ConflictsView />;
     case 'diff':
@@ -172,6 +175,7 @@ const VIEWS = [
   ['explore', 'Explore'],
   ['map', 'Map'],
   ['inventory', 'Inventory'],
+  ['licenses', 'Licenses'],
   ['conflicts', 'Conflicts'],
   ['diff', 'Diff'],
 ] as const;

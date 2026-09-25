@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- XML twin of broken.cdx.json: every CDX spec-lint rule fires once. -->
+<bom xmlns="http://cyclonedx.org/schema/bom/1.9" serialNumber="3e671687-395b-41f5-a30f-a58921a69b79" version="0">
+  <metadata>
+    <component type="product">
+      <name>acme-platform</name>
+      <version>1.0.0</version>
+    </component>
+  </metadata>
+  <components>
+    <component type="library" bom-ref="component-1">
+      <name>libssl</name>
+      <version>3.0.11</version>
+      <hashes>
+        <hash alg="SHA-256">b1946ac9</hash>
+      </hashes>
+      <purl>generic/libssl@3.0.11</purl>
+    </component>
+    <component type="microservice" bom-ref="component-1">
+      <name>webserver</name>
+      <version>1.4.2</version>
+      <licenses>
+        <expression>MIT AND</expression>
+      </licenses>
+      <components>
+        <component type="library" bom-ref="component-2">
+          <name>nested-lib</name>
+          <licenses>
+            <license>
+              <id>MIT</id>
+              <name>MIT License</name>
+            </license>
+            <license acknowledgement="asserted">
+              <id>Apache-2.0</id>
+            </license>
+          </licenses>
+        </component>
+      </components>
+    </component>
+  </components>
+</bom>

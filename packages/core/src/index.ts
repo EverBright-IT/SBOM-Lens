@@ -126,7 +126,13 @@ export type {
   PackageField,
   ProfileCheck,
 } from './profile/model';
-export { MAX_PROFILE_BYTES, PROFILE_SCHEMA_V1, PROFILE_SCHEMA_V2 } from './profile/model';
+export {
+  MAX_PROFILE_BYTES,
+  PROFILE_SCHEMA_V1,
+  PROFILE_SCHEMA_V2,
+  PROFILE_SCHEMA_V3,
+  PROFILE_SCHEMA_V4,
+} from './profile/model';
 export type { ProfileValidation } from './profile/validate';
 export { sniffProfile, validateProfile } from './profile/validate';
 export type { CoverageStat, ProfileCheckResult, ProfileReport } from './profile/evaluate';
@@ -134,7 +140,20 @@ export { evaluateProfile } from './profile/evaluate';
 export { NTIA_PROFILE } from './profile/ntia';
 export { BSI_TR_03183_PROFILE } from './profile/bsi';
 export { CISA_2026_PROFILE } from './profile/cisa2026';
+export { AUTOMOTIVE_SBOM_PROFILE } from './profile/automotive';
+export { FDA_524B_PROFILE } from './profile/fda';
+export { BSI_LICENSING_PROFILE } from './profile/bsi-licensing';
 export { profileReportToMarkdown } from './profile/markdown';
+export { licenseIdsInExpression } from './parse/spec-lint';
+export type { LicenseIdKind, LicenseIdRow, LicenseInventory } from './analysis/licenses';
+export { kindOf as licenseIdKind, licenseInventory, licenseInventoryToCsv, licenseInventoryToMarkdown } from './analysis/licenses';
+export {
+  SPDX_LICENSE_LIST_SOURCE,
+  isDeprecatedExceptionId,
+  isDeprecatedLicenseId,
+  isKnownExceptionId,
+  isKnownLicenseId,
+} from './spec/spdx-license-ids';
 
 export type { SpecFieldDoc } from './spec/spdx23-field-docs';
 export { SPDX23_DOCS } from './spec/spdx23-field-docs';

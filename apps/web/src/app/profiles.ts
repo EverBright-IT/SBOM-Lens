@@ -1,7 +1,10 @@
 import type { ComplianceProfile, SpecInfo } from '@sbomlens/core';
 import {
+  AUTOMOTIVE_SBOM_PROFILE,
+  BSI_LICENSING_PROFILE,
   BSI_TR_03183_PROFILE,
   CISA_2026_PROFILE,
+  FDA_524B_PROFILE,
   MAX_PROFILE_BYTES,
   NTIA_PROFILE,
   validateProfile,
@@ -188,6 +191,9 @@ export function extraBuiltinProfiles(model: SpecInfo['model']): { id: string; pr
   return [
     { id: 'builtin:cisa-2026', profile: CISA_2026_PROFILE },
     { id: 'builtin:bsi-tr-03183', profile: BSI_TR_03183_PROFILE },
+    { id: 'builtin:bsi-licensing', profile: BSI_LICENSING_PROFILE },
+    { id: 'builtin:fda-524b', profile: FDA_524B_PROFILE },
+    { id: 'builtin:automotive-sbom', profile: AUTOMOTIVE_SBOM_PROFILE },
   ];
 }
 

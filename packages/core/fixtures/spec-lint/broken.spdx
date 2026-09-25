@@ -17,6 +17,7 @@ PackageName: libssl
 SPDXID: SPDXRef-Package-libssl
 PackageVersion: 3.0.11
 PackageLicenseConcluded: (MIT OR Apache-2.0
+PackageLicenseDeclared: LicenseRef-acme-eula
 
 FileName: ./etc/acme.conf
 SPDXID: SPDXRef-File-config

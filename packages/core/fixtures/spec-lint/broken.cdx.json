@@ -26,7 +26,10 @@
           "bom-ref": "component-2",
           "type": "library",
           "name": "nested-lib",
-          "licenses": [{ "license": { "id": "MIT", "name": "MIT License" } }]
+          "licenses": [
+            { "license": { "id": "MIT", "name": "MIT License" } },
+            { "license": { "id": "Apache-2.0", "acknowledgement": "asserted" } }
+          ]
         }
       ]
     }

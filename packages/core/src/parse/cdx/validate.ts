@@ -32,6 +32,9 @@ const COMPONENT_TYPES = new Set([
 
 const URN_UUID = /^urn:uuid:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
 
+/** licenseAcknowledgementEnumeration, CycloneDX 1.6. */
+const ACKNOWLEDGEMENTS = new Set(['declared', 'concluded']);
+
 export function validateCdxStructure(root: Record<string, unknown>): Diagnostic[] {
   const lint = createLint();
   const { warn } = lint;
@@ -60,6 +63,7 @@ export function validateCdxStructure(root: Record<string, unknown>): Diagnostic[
   const badHash = createTally();
   const badPurl = createTally();
   const badLicense = createTally();
+  const badAcknowledgement = createTally();
   const duplicateRef = createTally({ unique: true });
   const seenRefs = new Set<string>();
 
@@ -95,8 +99,16 @@ export function validateCdxStructure(root: Record<string, unknown>): Diagnostic[
         if (problem) badLicense.add(`${name}: ${problem}`);
       }
       // license is either an id or a name, never both (the schema says oneOf).
-      if (isRecord(entry.license) && asString(entry.license.id) && asString(entry.license.name)) {
+      const license = isRecord(entry.license) ? entry.license : undefined;
+      if (license && asString(license.id) && asString(license.name)) {
         badLicense.add(`${name}: license carries both id and name`);
+      }
+      // 1.6: acknowledgement says whether the entry is declared or concluded.
+      // It sits on the license object, or next to an expression; the parser
+      // reads both places, so the lint checks both.
+      const acknowledgement = asString(entry.acknowledgement) ?? (license ? asString(license.acknowledgement) : undefined);
+      if (acknowledgement !== undefined && !ACKNOWLEDGEMENTS.has(acknowledgement)) {
+        badAcknowledgement.add(`${name} (${acknowledgement})`);
       }
     }
 
@@ -111,7 +123,12 @@ export function validateCdxStructure(root: Record<string, unknown>): Diagnostic[
   lint.warnTally('CDX_SCHEMA_DUPLICATE_BOM_REF', duplicateRef, (count, list) => `${count} bom-ref(s) are used more than once, which makes references ambiguous: ${list}.`);
   lint.warnTally('CDX_SCHEMA_BAD_HASH', badHash, (count, list) => `${count} hash(es) do not match their algorithm: ${list}.`);
   lint.warnTally('CDX_SCHEMA_BAD_PURL', badPurl, (count, list) => `${count} purl(s) do not start with "pkg:": ${list}.`);
-  lint.warnTally('CDX_SCHEMA_BAD_LICENSE_EXPRESSION', badLicense, (count, list) => `${count} license entr(y|ies) are malformed: ${list}.`);
+  lint.warnTally('CDX_SCHEMA_BAD_LICENSE_EXPRESSION', badLicense, (count, list) => `${count} license ${count === 1 ? 'entry is' : 'entries are'} malformed: ${list}.`);
+  lint.warnTally(
+    'CDX_SCHEMA_BAD_ACKNOWLEDGEMENT',
+    badAcknowledgement,
+    (count, list) => `${count} license acknowledgement(s) outside the CycloneDX 1.6 vocabulary (declared, concluded): ${list}.`,
+  );
 
   return lint.diagnostics;
 }

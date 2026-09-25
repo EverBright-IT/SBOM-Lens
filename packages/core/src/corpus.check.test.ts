@@ -17,7 +17,7 @@ const corpusDir = process.env.SBOM_CORPUS_DIR;
 
 describe.skipIf(!corpusDir)('private corpus', () => {
   it('parses every SPDX file in the corpus', () => {
-    const files = walk(corpusDir!).filter((f) => /\.(spdx|json)$/i.test(f));
+    const files = walk(corpusDir!).filter((f) => /\.(spdx|json|xml)$/i.test(f));
     expect(files.length).toBeGreaterThan(0);
 
     const stats = { parsed: 0, unsupported: 0, failed: [] as string[] };

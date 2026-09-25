@@ -122,7 +122,7 @@ export function FilePickers({
   };
   return (
     <>
-      <input ref={filesRef} type="file" hidden multiple accept=".spdx,.json,.yaml,.yml,.tar,.tgz,.gz,.ctf" onChange={onChange} />
+      <input ref={filesRef} type="file" hidden multiple accept=".spdx,.json,.yaml,.yml,.xml,.tar,.tgz,.gz,.ctf" onChange={onChange} />
       <input ref={folderRef} type="file" hidden onChange={onChange} {...({ webkitdirectory: '' } as object)} />
       {profileRef && <input ref={profileRef} type="file" hidden accept=".json" onChange={onChange} />}
     </>

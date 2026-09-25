@@ -1,5 +1,7 @@
 import type { SbomDocument, SbomElement } from '../model/document';
 import { effectiveLicense } from '../model/document';
+import { licenseIdsInExpression } from '../parse/spec-lint';
+import { isDeprecatedLicenseId, isKnownLicenseId } from '../spec/spdx-license-ids';
 import type { LoadedDocument, WorkspaceState } from '../workspace/workspace';
 import type { ComplianceProfile, DocumentField, PackageField, ProfileCheck, ProfileSpecBaseline } from './model';
 
@@ -26,6 +28,8 @@ export interface ProfileCheckResult {
   /** Boolean checks: the observed value, truncated, for tooltips/reports. */
   actual?: string;
   coverage?: CoverageStat;
+  /** v4: a boolean check the profile marked as a meter; reported, never gated. */
+  informational?: boolean;
 }
 
 export interface ProfileReport {
@@ -78,12 +82,13 @@ export function evaluateProfile(
     const id = check.id ?? `${check.type}-${index}`;
     const label = check.label ?? defaultLabel(check);
 
+    const meter = 'informational' in check && check.informational ? { informational: true } : {};
     switch (check.type) {
       case 'document-field': {
         const value = extractDocumentField(doc, check.field);
         const present = Array.isArray(value) ? value.length > 0 : Boolean(value);
         const pass = present && matchesModifiers(value, check.pattern, check.values);
-        return { id, label, kind: 'boolean', pass, actual: renderActual(value) };
+        return { id, label, kind: 'boolean', pass, actual: renderActual(value), ...meter };
       }
       case 'relationships': {
         const count = doc.relationships.length;
@@ -93,12 +98,13 @@ export function evaluateProfile(
           kind: 'boolean',
           pass: count >= (check.minCount ?? 1),
           actual: String(count),
+          ...meter,
         };
       }
       case 'created-recency': {
         const created = doc.created ? Date.parse(doc.created) : Number.NaN;
         const pass = Number.isFinite(created) && now - created <= check.maxAgeDays * MS_PER_DAY;
-        return { id, label, kind: 'boolean', pass, actual: doc.created ?? 'missing' };
+        return { id, label, kind: 'boolean', pass, actual: doc.created ?? 'missing', ...meter };
       }
       case 'package-coverage': {
         let satisfied = 0;
@@ -108,7 +114,13 @@ export function evaluateProfile(
               ? hasChecksumAlgorithm(element, check.algorithms)
               : extractPackageField(element, check.field);
           const present = typeof value === 'boolean' ? value : Boolean(value);
-          if (present && matchesModifiers(value, check.pattern, check.values)) satisfied++;
+          if (
+            present &&
+            matchesModifiers(value, check.pattern, check.values) &&
+            licenseIdsSatisfied(value, check.licenseIds, check.allowDeprecated)
+          ) {
+            satisfied++;
+          }
         }
         const total = packages.length;
         const percent = total === 0 ? 100 : Math.round((satisfied / total) * 100);
@@ -131,7 +143,7 @@ export function evaluateProfile(
   let gatedFailed = 0;
   let informational = 0;
   for (const result of results) {
-    const gated = result.kind === 'boolean' || result.coverage?.threshold !== undefined;
+    const gated = (result.kind === 'boolean' && !result.informational) || result.coverage?.threshold !== undefined;
     if (!gated) informational++;
     else if (result.pass) gatedPassed++;
     else gatedFailed++;
@@ -167,10 +179,51 @@ function extractDocumentField(
       return doc.dataLicense;
     case 'comment':
       return doc.comment;
+    // v4
+    case 'sbomType':
+      return doc.sbomType;
+    case 'describes':
+      return doc.describes;
+    case 'externalDocumentRefs':
+      return doc.externalDocumentRefs.map((ref) => ref.uri);
   }
 }
 
 const EMPTYISH = new Set(['NOASSERTION', 'NONE']);
+
+/**
+ * CycloneDX property names accepted as the FDA lifecycle fields. CycloneDX
+ * has no normative field for either (taxonomy issue #104 is still open), so
+ * these are the conventions this engine reads, spelled out in the FDA
+ * profile description. Matched on the property name, case-insensitively.
+ */
+const SUPPORT_LEVEL_PROPERTY = /^(?:fda:)?(?:lifecycle:)?support[-_]?level$/i;
+const END_OF_SUPPORT_PROPERTY = /^(?:fda:)?(?:lifecycle:)?(?:end[-_]?of[-_]?(?:support|life)|eos|eol|valid[-_]?until)$/i;
+
+function propertyValue(element: SbomElement, name: RegExp): string | undefined {
+  return element.properties?.find((p) => name.test(p.name) && p.value.trim() !== '')?.value;
+}
+
+/**
+ * v4 `licenseIds`: every identifier in the expression must be on the SPDX
+ * License List ('known') or on the list or a LicenseRef ('known-or-ref');
+ * deprecated identifiers fail unless `allowDeprecated` (default true).
+ * Non-string values (booleans, absent) are not this modifier's business.
+ */
+function licenseIdsSatisfied(
+  value: string | boolean | undefined,
+  licenseIds: 'known' | 'known-or-ref' | undefined,
+  allowDeprecated: boolean | undefined,
+): boolean {
+  if (licenseIds === undefined || typeof value !== 'string') return true;
+  const ids = licenseIdsInExpression(value);
+  if (ids.length === 0) return false; // NOASSERTION/NONE or nothing parseable
+  return ids.every((id) => {
+    if (/^(DocumentRef-[^:]+:)?LicenseRef-/.test(id)) return licenseIds === 'known-or-ref';
+    if (!isKnownLicenseId(id)) return false;
+    return allowDeprecated !== false || !isDeprecatedLicenseId(id);
+  });
+}
 
 /** v2 `algorithms` modifier: only a checksum in the allow-list satisfies. */
 function hasChecksumAlgorithm(element: SbomElement, algorithms: string[]): boolean {
@@ -214,6 +267,28 @@ function extractPackageField(
     case 'originator':
       return element.originator && !EMPTYISH.has(element.originator)
         ? element.originator
+        : undefined;
+    // v4
+    case 'fileName':
+      return element.fileName;
+    case 'supportLevel': {
+      // The model field (SPDX 3 supportLevel) first; CycloneDX has no
+      // normative field, so the documented property names are read as the
+      // fallback. Anything spelled differently is deliberately not guessed.
+      const level = element.supportLevel ?? propertyValue(element, SUPPORT_LEVEL_PROPERTY);
+      return level && level.toLowerCase() !== 'noassertion' ? level : undefined;
+    }
+    case 'validUntil':
+      return element.validUntil ?? propertyValue(element, END_OF_SUPPORT_PROPERTY);
+    case 'licenseDeclared':
+      return element.licenseDeclared && !EMPTYISH.has(element.licenseDeclared) ? element.licenseDeclared : undefined;
+    case 'licenseConcluded':
+      return element.licenseConcluded && !EMPTYISH.has(element.licenseConcluded) ? element.licenseConcluded : undefined;
+    case 'properties':
+      // Rendered as "name=value" lines so a pattern can target one property,
+      // e.g. ^fda:lifecycle:support-level=.
+      return element.properties && element.properties.length > 0
+        ? element.properties.map((p) => `${p.name}=${p.value}`).join('\n')
         : undefined;
   }
 }

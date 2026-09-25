@@ -172,11 +172,13 @@ const LOWERCASE_OPERATORS = new Set(['and', 'or', 'with']);
 const ID_TOKEN = /^[A-Za-z0-9.\-+]+$/;
 
 /**
- * Grammar of an SPDX license expression (Annex D) — deliberately WITHOUT the
- * SPDX license list: we check that the expression can be parsed at all
- * (operators, parentheses, LicenseRef shape), never whether an identifier is a
- * real license. Rating licenses is a stated non-goal, and a vendored list
- * would go stale between releases.
+ * Grammar of an SPDX license expression (Annex D): can the expression be
+ * parsed at all (operators, parentheses, LicenseRef shape). Whether an
+ * identifier is on the SPDX License List is NOT a spec-lint question — a
+ * spec-valid expression may use any idstring — so this stays grammar only.
+ * Identifier validity lives in the v4 profile modifier `licenseIds`, backed
+ * by the generated id list in spec/spdx-license-ids.ts (ids and deprecation
+ * flags, no texts, no obligations). Rating licenses remains a non-goal.
  *
  * Returns a human reason, or undefined when the expression parses.
  */
@@ -243,4 +245,33 @@ export function licenseExpressionError(raw: string): string | undefined {
   if (expectOperand) return 'expression ends with an operator';
   if (depth !== 0) return 'unbalanced parentheses';
   return undefined;
+}
+
+/**
+ * The licence identifiers an expression names: operands other than the
+ * exception after WITH, with the "or later" `+` stripped, in order and
+ * deduplicated. Empty for NONE/NOASSERTION and for anything the grammar
+ * rejects, so callers never validate ids of an expression that is not one.
+ * LicenseRef-/DocumentRef- forms are returned verbatim; callers decide
+ * whether a reference counts.
+ */
+export function licenseIdsInExpression(raw: string): string[] {
+  const expr = raw.trim();
+  if (expr === '' || LICENSE_LITERALS.has(expr) || licenseExpressionError(expr) !== undefined) return [];
+  const out: string[] = [];
+  let afterWith = false;
+  for (const token of expr.replace(/\(/g, ' ( ').replace(/\)/g, ' ) ').split(/\s+/)) {
+    if (token === '' || token === '(' || token === ')') continue;
+    if (OPERATORS.has(token)) {
+      afterWith = token === 'WITH';
+      continue;
+    }
+    if (afterWith) {
+      afterWith = false; // the exception identifier, not a licence
+      continue;
+    }
+    const id = token.endsWith('+') ? token.slice(0, -1) : token;
+    if (!out.includes(id)) out.push(id);
+  }
+  return out;
 }

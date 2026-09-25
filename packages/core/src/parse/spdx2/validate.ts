@@ -2,7 +2,7 @@ import type { Diagnostic } from '../../model/diagnostics';
 import { SPDX23_DOCS } from '../../spec/spdx23-field-docs';
 import { asRecordArray, asString, asStringArray, isRecord } from '../../util/narrow';
 import type { SpecLint, Tally } from '../spec-lint';
-import { checksumProblem, createLint, createTally, isAbsoluteUri, licenseExpressionError } from '../spec-lint';
+import { checksumProblem, createLint, createTally, isAbsoluteUri, licenseExpressionError, licenseIdsInExpression } from '../spec-lint';
 import { normalizeRelType } from './common';
 
 /**
@@ -72,6 +72,7 @@ interface Tallies {
   badLicense: Tally;
   badVerificationCode: Tally;
   badPurl: Tally;
+  undefinedLicenseRef: Tally;
   unknownRelationship: Tally;
 }
 
@@ -84,6 +85,7 @@ function createTallies(): Tallies {
     badLicense: createTally(),
     badVerificationCode: createTally(),
     badPurl: createTally(),
+    undefinedLicenseRef: createTally({ unique: true }),
     unknownRelationship: createTally({ unique: true }),
   };
 }
@@ -102,9 +104,16 @@ export function validateSpdx2Structure(root: Record<string, unknown>): Diagnosti
     creators: asStringArray(creationInfo.creators),
   });
 
+  // § 10: the LicenseRef- identifiers this document defines itself.
+  const definedLicenseRefs = new Set(
+    asRecordArray(root.hasExtractedLicensingInfos)
+      .map((info) => asString(info.licenseId))
+      .filter((id): id is string => id !== undefined),
+  );
+
   checkId(tallies, asString(root.SPDXID));
-  for (const pkg of asRecordArray(root.packages)) checkElement(tallies, packageFacts(pkg));
-  for (const file of asRecordArray(root.files)) checkElement(tallies, fileFacts(file));
+  for (const pkg of asRecordArray(root.packages)) checkElement(tallies, packageFacts(pkg), definedLicenseRefs);
+  for (const file of asRecordArray(root.files)) checkElement(tallies, fileFacts(file), definedLicenseRefs);
   for (const rel of asRecordArray(root.relationships)) checkRelationship(tallies, asString(rel.relationshipType));
 
   emit(lint, tallies);
@@ -125,6 +134,8 @@ export function validateSpdx2TagValue(
     namespace?: string;
     created?: string;
     creators: string[];
+    /** LicenseID values of the LicenseID blocks, § 10 in tag-value form. */
+    extractedLicenseIds: string[];
   },
   elements: {
     kind: 'package' | 'file';
@@ -148,16 +159,21 @@ export function validateSpdx2TagValue(
     creators: doc.creators,
   });
 
+  const definedLicenseRefs = new Set(doc.extractedLicenseIds);
   checkId(tallies, doc.spdxId);
   for (const element of elements) {
-    checkElement(tallies, {
-      kind: element.kind,
-      label: element.name,
-      spdxId: element.spdxId,
-      downloadLocation: element.downloadLocation,
-      purpose: element.purpose,
-      licenses: [element.licenseConcluded, element.licenseDeclared].filter((l): l is string => l !== undefined),
-    });
+    checkElement(
+      tallies,
+      {
+        kind: element.kind,
+        label: element.name,
+        spdxId: element.spdxId,
+        downloadLocation: element.downloadLocation,
+        purpose: element.purpose,
+        licenses: [element.licenseConcluded, element.licenseDeclared].filter((l): l is string => l !== undefined),
+      },
+      definedLicenseRefs,
+    );
   }
   for (const type of relationshipTypes) checkRelationship(tallies, type);
 
@@ -210,7 +226,7 @@ function checkId(tallies: Tallies, id: string | undefined): void {
   if (id !== undefined && !SPDX_ID.test(id)) tallies.badId.add(id);
 }
 
-function checkElement(tallies: Tallies, facts: ElementFacts): void {
+function checkElement(tallies: Tallies, facts: ElementFacts, definedLicenseRefs: ReadonlySet<string>): void {
   checkId(tallies, facts.spdxId);
 
   // § 7.7: downloadLocation is mandatory on packages — NOASSERTION/NONE are the
@@ -232,6 +248,14 @@ function checkElement(tallies: Tallies, facts: ElementFacts): void {
   for (const expression of facts.licenses) {
     const problem = licenseExpressionError(expression);
     if (problem) tallies.badLicense.add(`${facts.label}: ${problem}`);
+    // § 10 / Annex D: a LicenseRef- names an entry in this document's other
+    // licensing information; without one, no consumer can tell what the
+    // licence is. DocumentRef-…:LicenseRef-… points at another document and
+    // is that document's business. Grammar failures yield no ids, so an
+    // expression is never reported twice.
+    for (const id of licenseIdsInExpression(expression)) {
+      if (id.startsWith('LicenseRef-') && !definedLicenseRefs.has(id)) tallies.undefinedLicenseRef.add(id);
+    }
   }
 
   // § 7.9: the verification code is a SHA-1 over the package's files.
@@ -264,6 +288,11 @@ function emit(lint: SpecLint, t: Tallies): void {
   lint.warnTally('SPDX2_SCHEMA_BAD_LICENSE_EXPRESSION', t.badLicense, (count, list) => `${count} license expression(s) do not parse as SPDX expressions: ${list}.`);
   lint.warnTally('SPDX2_SCHEMA_BAD_VERIFICATION_CODE', t.badVerificationCode, (count, list) => `${count} package(s) with a packageVerificationCodeValue that is not 40 hex characters: ${list}.`);
   lint.warnTally('SPDX2_SCHEMA_BAD_PURL_REF', t.badPurl, (count, list) => `${count} external reference(s) typed purl whose locator does not start with "pkg:": ${list}.`);
+  lint.warnTally(
+    'SPDX2_SCHEMA_LICENSEREF_UNDEFINED',
+    t.undefinedLicenseRef,
+    (count, list) => `${count} LicenseRef identifier(s) used in license expressions but not defined in the document's other licensing information (hasExtractedLicensingInfos, or a LicenseID block; SPDX 2.3 section 10): ${list}.`,
+  );
   lint.warnTally('SPDX2_SCHEMA_UNKNOWN_RELATIONSHIP', t.unknownRelationship, (count, list) => `${count} relationship type(s) outside the SPDX 2.3 vocabulary: ${list}.`);
 }
 
