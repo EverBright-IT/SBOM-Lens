@@ -9,7 +9,7 @@ Markdown export; nothing else in the app changes.
 Profiles are pure data. There is no code execution, and license checks stay
 field-level (presence, patterns): SBOM Lens does not do legal interpretation.
 
-## Format (`sbomlens-profile/v1`, `v2`)
+## Format (`sbomlens-profile/v1` to `v5`)
 
 ```json
 {
@@ -39,6 +39,7 @@ field-level (presence, patterns): SBOM Lens does not do legal interpretation.
 | `relationships` | the document has at least `minCount` (default 1) relationships | - |
 | `created-recency` | `created` parses and is at most `maxAgeDays` old (boundary inclusive) | - |
 | `package-coverage` | the share of packages satisfying the field (and modifiers) reaches `threshold` % | `version`, `supplier`, `purl`, `uniqueId`, `checksum`, `license`, `downloadLocation`, `purpose`, `copyright`, `originator`; v4: `fileName`, `supportLevel`, `validUntil`, `licenseDeclared`, `licenseConcluded`, `properties`; v5: `description` |
+| `crypto-coverage` | v5: the share of cryptographic assets in scope (CycloneDX `cryptoProperties`, filtered by `assetTypes`, `primitives`, `families`) satisfying the field (and modifiers) reaches `threshold` % | `name`, `assetType`, `primitive`, `family`, `parameterSet`, `curve`, `mode`, `padding`, `executionEnvironment`, `securityLevel`, `certificateSubject`, `certificateIssuer`, `certificateValidity`, `certificateState`, `certificateSignature`, `materialState`, `materialExpiration`, `materialSecuredBy`, `protocolVersion`, `cipherSuites`, `related`, `oid` |
 
 ### Modifiers and semantics
 
@@ -103,13 +104,16 @@ schema id. v3 includes everything from v2.
 the earlier fields could not express:
 
 - **Package fields** `fileName` (SPDX packageFileName), `supportLevel`
-  (SPDX 3 supportLevel, or a CycloneDX property named `support-level`,
-  optionally prefixed `fda:lifecycle:`), `validUntil` (SPDX 2.3
-  ValidUntilDate, SPDX 3 validUntilTime, or a CycloneDX property named
-  `end-of-support` / `eol` / `eos` / `valid-until`), `licenseDeclared` and
-  `licenseConcluded` (the two licence fields separately; `license` remains
-  "concluded, else declared"), and `properties` (CycloneDX `properties[]`
-  rendered as `name=value` lines so a `pattern` can target one property).
+  (SPDX 3 supportLevel, or a CycloneDX property named `support-level` or
+  `support_level`, optionally prefixed `fda:lifecycle:` or either prefix
+  alone), `validUntil` (SPDX 2.3 ValidUntilDate, SPDX 3 validUntilTime, or
+  a CycloneDX property named `end-of-support`, `end-of-life`, `eos`, `eol`
+  or `valid-until`, hyphen or underscore, with the same optional prefixes),
+  `licenseDeclared` and `licenseConcluded` (the two licence fields
+  separately; `license` remains "concluded, else declared"), and
+  `properties` (CycloneDX `properties[]` rendered as `name=value` lines so
+  a `pattern` can target one property; the value is multi-line and patterns
+  run without flags, so anchor a name with `(^|\n)`).
 - **Document fields** `sbomType` (SPDX 3 sbomType or the first CycloneDX
   lifecycle phase; absent in SPDX 2.x), `describes` (a primary component
   is declared), `externalDocumentRefs` (other SBOMs are referenced).
@@ -157,16 +161,24 @@ silently. v4 includes everything from v3.
   `description` or `summary`, CycloneDX `description`).
 - **`crypto-coverage`**: a meter over the cryptographic assets of a
   CycloneDX CBOM (`cryptoProperties`), scoped by `assetTypes`, `primitives`
-  and `families` (all case-insensitive), reading one `field`: `assetType`,
-  `primitive`, `family`, `parameterSet`, `curve`, `mode`, `padding`,
-  `executionEnvironment`, `securityLevel`, `certificateSubject`,
-  `certificateIssuer`, `certificateValidity`, `certificateState`,
-  `certificateSignature`, `materialState`, `materialExpiration`,
-  `materialSecuredBy`, `protocolVersion`, `cipherSuites`, `related`, `oid`.
-  String fields take `pattern` / `values`; `threshold` gates like package
-  coverage. It measures what a BOM states and rates nothing: a row such as
-  "RSA modulus of at least 3000 bits" counts the RSA assets whose stated
-  parameter set matches, with the table it cites in the label.
+  and `families` (all case-insensitive), reading one `field`: `name` (the
+  component name), `assetType`, `primitive`, `family`, `parameterSet`,
+  `curve`, `mode`, `padding`, `executionEnvironment`, `securityLevel`,
+  `certificateSubject`, `certificateIssuer`, `certificateValidity`,
+  `certificateState`, `certificateSignature`, `materialState`,
+  `materialExpiration`, `materialSecuredBy`, `protocolVersion`,
+  `cipherSuites`, `related`, `oid`. String fields take `pattern` / `values`
+  (`values` compare case-insensitively here, like the filters); `threshold`
+  gates like package coverage. `family` and the `families` filter read the
+  CycloneDX 1.7 `algorithmFamily`; a 1.6 CBOM has no such field, so a
+  family-filtered row reads none in scope there, and a row that must work
+  on both generations reads `name`. `certificateSignature` is satisfied by
+  a `signatureAlgorithm` link or by an `algorithm` link to a signature
+  primitive. The report lists these meters apart from the package meters,
+  with the number of cryptographic assets. It measures what a BOM states
+  and rates nothing: a row such as "RSA modulus of at least 3000 bits"
+  counts the RSA assets whose stated parameter set matches, with the table
+  it cites in the label.
 
 ```json
 { "schema": "sbomlens-profile/v5", "name": "models carry a hash, RSA keys are long",
@@ -243,13 +255,21 @@ component essentials for component descriptors), the dropdown offers:
   linking to separate SBOM documents, which is what the workspace
   resolves and reports as a cascade.
 - **[BSI TR-03183-2 licence fields (6.1)](https://www.bsi.bund.de/dok/TR-03183)** (schema v4): the
-  licence fields section 6.1 of the TR requires per component. The
-  distribution licence (SPDX `licenseDeclared`, CycloneDX licences not
-  acknowledged as concluded) is **gated at 100 %** and must be an SPDX
-  identifier or expression whose identifiers are on the SPDX License List
-  or are `LicenseRef-...` (the TR names the ScanCode LicenseDB,
-  `LicenseRef-scancode-*`, as the fallback); the effective licence
-  (`licenseConcluded`) is a meter under the same identifier rule.
+  licence data fields the TR lists per component, stated as section 6.1
+  demands and mapped as the TR's appendix 8.2 maps them. The distribution
+  licence (5.2.2, required: SPDX 3 `hasConcludedLicense`, CycloneDX licence
+  acknowledged as `concluded`, model field `licenseConcluded`) is **gated
+  at 100 %** and must be an SPDX identifier or expression whose identifiers
+  are on the SPDX License List or are `LicenseRef-...` (the TR names the
+  ScanCode LicenseDB, `LicenseRef-scancode-*`, as the fallback); the
+  original licence (5.2.4, required where it exists: `hasDeclaredLicense`,
+  acknowledgement `declared`, model field `licenseDeclared`) is a meter
+  under the same identifier rule; the effective licence (5.2.5, optional)
+  is a meter read from the CycloneDX property
+  `bsi:component:effectiveLicense` (its SPDX 3 form, a relationship of type
+  `other` with the comment `hasEffectiveLicense`, is not read). A CycloneDX
+  licence entry without acknowledgement counts as declared, so a BOM that
+  omits the acknowledgement the mapping names fails the distribution gate.
   Deprecated identifiers still count as identifiers; NOASSERTION and NONE
   count as absent; a licence text in place of an identifier is the
   expression grammar lint's finding, not this profile's. The TR format
@@ -267,8 +287,10 @@ component essentials for component descriptors), the dropdown offers:
   `ValidUntilDate` (end of the support period from the supplier), SPDX
   3.0.1 `supportLevel` / `validUntilTime` (the latter means "reassess
   after", close to but not the same as end of support), and CycloneDX
-  properties named `support-level` / `end-of-support` (optionally
-  prefixed `fda:lifecycle:`), because CycloneDX has no normative field for
+  properties named `support-level` (or `support_level`) for the level and
+  `end-of-support`, `end-of-life`, `eos`, `eol` or `valid-until` (hyphen or
+  underscore) for the date, each optionally prefixed `fda:lifecycle:` or
+  either prefix alone, because CycloneDX has no normative field for
   either. An addendum file is not read. Known vulnerabilities are the
   VEX/CSAF overlay's job and are not scored.
 - **[OpenChain Automotive SBOM v1.1](https://github.com/OpenChain-Project/Automotive-SBOM)** (schema v4): the
@@ -277,8 +299,9 @@ component essentials for component descriptors), the dropdown offers:
   contractual (OEMs pass UNECE R155/R156 obligations down the tier chain),
   so package fields are meters and nothing gates. **SBOM type** and
   **external document references** are informational document facts: SPDX
-  2.x cannot express a type at all, and a leaf SBOM references nothing.
-  File name is SPDX `packageFileName` (CycloneDX has no field), concluded
+  2.x has no dedicated field for the type, and a leaf SBOM references
+  nothing. File name is SPDX `packageFileName` (CycloneDX has no dedicated
+  field), concluded
   licence is `licenseConcluded`, copyright is read where the formats carry
   it, hashes are optional in the specification and shown as a meter, and
   component name is satisfied by construction and not checked. The n-tier
@@ -304,22 +327,27 @@ component essentials for component descriptors), the dropdown offers:
   of 11 June 2025 asks Member States to start with by the end of 2026, plus
   the quantum-safe share of KEMs and signatures),
   **[DORA RTS Article 7(4): certificate register](https://eur-lex.europa.eu/eli/reg_del/2024/1774/oj/eng)**
-  (whether certificates and keys carry what a register under Commission
-  Delegated Regulation (EU) 2024/1774 needs: subject, issuer, validity end,
-  state, signature algorithm, storage mechanism),
+  (whether certificates and keys carry what a register under Article 7(4)
+  of Commission Delegated Regulation (EU) 2024/1774 needs, with the renewal
+  duty of Article 7(5) in mind: subject, issuer, validity end, state,
+  signature algorithm, storage mechanism),
   **[PCI DSS 12.3.3: cipher suite and protocol inventory](https://www.pcisecuritystandards.org/document_library/)**
   (protocols with version and cipher suites, algorithms with family and
   parameter set), and
   **[BSI TR-02102-1 (2026-01): recommended parameters](https://www.bsi.bund.de/SharedDocs/Downloads/EN/BSI/Publications/TechGuidelines/TG02102/BSI-TR-02102-1.html)**
   (per mechanism class, how many assets state a parameter the TR
-  recommends, each row citing its table: RSA and DH moduli of at least 3000
-  bits, EC orders of at least 250 bits and the brainpool curves, the
-  quantum-safe KEM and signature parameter sets, AES key lengths and modes,
-  SHA-2 and SHA-3 output lengths; with the TR's horizons quoted: sole
-  classical key agreement until the end of 2031, classical signatures until
-  the end of 2035). A match means the stated parameter is within the cited
-  recommendation, nothing more; an unmatched asset is not thereby insecure,
-  and nothing gates except the format baseline.
+  recommends, each row citing its table: RSA, DLIES and DH moduli of at
+  least 3000 bits, EC orders of at least 250 bits and the brainpool curves,
+  the quantum-safe KEM and signature schemes and parameter sets, AES key
+  lengths and modes, SHA-2 and SHA-3 output lengths; with the TR's horizons
+  quoted: sole classical key agreement until the end of 2031, classical
+  signatures until the end of 2035). Rows on the scheme itself read the
+  asset name, so CycloneDX 1.6 and 1.7 BOMs both count; rows on a parameter
+  set, mode or curve need the 1.7 `algorithmFamily` and read none in scope
+  on a 1.6 BOM. A match means the stated parameter is within the cited
+  recommendation, nothing more; an unmatched asset is outside the cited
+  table and nothing more is said about it, and nothing gates except the
+  format baseline.
 - **[BSI TR-03183-2 field coverage (approximation)](https://www.bsi.bund.de/dok/TR-03183)**: the machine-checkable
   field requirements of BSI TR-03183 part 2 v2.1.0, gated at 100%: SBOM
   creator with contact (email or URL, on a Person/Organization creator),

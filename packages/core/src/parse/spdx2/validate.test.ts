@@ -240,6 +240,13 @@ describe('validateSpdx2Structure', () => {
       expect(message).toContain('LicenseRef-acme-eula, LicenseRef-other');
     });
 
+    it('matches definitions case-insensitively, as Annex D.2 asks', () => {
+
+      expect(codes(withRefs(['LicenseRef-Acme-EULA'], ['LicenseRef-acme-eula']))).toEqual([]);
+
+    });
+
+
     it('leaves DocumentRef-…:LicenseRef-… to the other document', () => {
       expect(codes(withRefs(['DocumentRef-other:LicenseRef-vendor'], []))).toEqual([]);
     });

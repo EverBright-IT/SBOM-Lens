@@ -17,6 +17,14 @@ export const VEX_STATUS_LABEL: Record<VexStatus, string> = {
   not_affected: 'not affected',
 };
 
+/** Advisory content is untrusted input: only http(s) URLs become anchors. */
+function isHttpUrl(value: string): boolean {
+  return /^https?:\/\//i.test(value);
+}
+
+/** Lists render at most this many rows; an advisory mirror can hold thousands. */
+const LIST_CAP = 50;
+
 const CHIP: Record<VexStatus, string> = {
   affected:
     'border-red-200 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950/60 dark:text-red-300',
@@ -46,10 +54,11 @@ export function VexStatusChip({ status, small }: { status: VexStatus; small?: bo
 export function VexElementSection({ elementId }: { elementId: ElementId }) {
   const findings = useAppStore((s) => s.vex.findings.get(elementId));
   if (!findings || findings.length === 0) return null;
+  const hidden = Math.max(0, findings.length - LIST_CAP);
   return (
     <Section title={`Vulnerability communication (${findings.length})`}>
       <div className="space-y-2">
-        {findings.map((f) => (
+        {findings.slice(0, LIST_CAP).map((f) => (
           <div key={f.vulnerability} className="text-xs">
             <div className="flex flex-wrap items-center gap-2">
               <span className="font-mono font-medium text-slate-700 dark:text-slate-200">
@@ -81,9 +90,15 @@ export function VexElementSection({ elementId }: { elementId: ElementId }) {
                     {r.url && (
                       <>
                         {' '}
-                        <a href={r.url} target="_blank" rel="noreferrer" className="text-accent-700 hover:underline dark:text-accent-400">
-                          link
-                        </a>
+                        {isHttpUrl(r.url) ? (
+                          <a href={r.url} target="_blank" rel="noreferrer" className="text-accent-700 hover:underline dark:text-accent-400">
+                            link
+                          </a>
+                        ) : (
+                          <span className="font-mono text-[10px] text-slate-400" title="Not an http(s) URL; not linked">
+                            {r.url}
+                          </span>
+                        )}
                       </>
                     )}
                     {r.date ? <span className="text-slate-400"> · {r.date.slice(0, 10)}</span> : null}
@@ -106,9 +121,14 @@ export function VexElementSection({ elementId }: { elementId: ElementId }) {
           </div>
         ))}
       </div>
+      {hidden > 0 && (
+        <p className="mt-1 text-[10px] text-slate-400 dark:text-slate-500">
+          {hidden} more statement{hidden === 1 ? '' : 's'} not listed; the exports carry all of them.
+        </p>
+      )}
       <p className="mt-2 text-[10px] text-slate-400 dark:text-slate-500">
-        Supplier statements from loaded VEX documents, matched by package URL. This is not a
-        vulnerability scan.
+        Supplier statements from loaded VEX and CSAF documents, matched by package URL, CPE or file hash.
+        This is not a vulnerability scan.
       </p>
     </Section>
   );
@@ -119,13 +139,19 @@ export function VexDocumentsSection() {
   const vex = useAppStore((s) => s.vex);
   const actions = useAppStore((s) => s.actions);
   if (vex.documents.length === 0) return null;
+  const hidden = Math.max(0, vex.documents.length - LIST_CAP);
   return (
     <Section title={`VEX and advisory documents (${vex.documents.length})`}>
       <div className="space-y-1.5">
-        {vex.documents.map((doc) => (
-          <VexDocumentRow key={`${doc.id}\u0000${doc.fileName}`} doc={doc} onRemove={() => actions.removeVexDocument(doc.id)} />
+        {vex.documents.slice(0, LIST_CAP).map((doc) => (
+          <VexDocumentRow key={doc.id} doc={doc} onRemove={() => actions.removeVexDocument(doc.id)} />
         ))}
       </div>
+      {hidden > 0 && (
+        <p className="mt-1 text-[10px] text-slate-400 dark:text-slate-500">
+          {hidden} more document{hidden === 1 ? '' : 's'} loaded and matched, not listed here.
+        </p>
+      )}
       <p className="mt-1.5 text-[10px] text-slate-400 dark:text-slate-500">
         {vex.findings.size} package{vex.findings.size === 1 ? '' : 's'} in the workspace matched.
         Conflicting statements resolve by timestamp (newest wins).
@@ -134,19 +160,27 @@ export function VexDocumentsSection() {
   );
 }
 
+/**
+ * CSAF 2.0 labels are AMBER, GREEN, RED, WHITE (2.1 adds AMBER+STRICT and
+ * CLEAR); a document that writes "TLP:RED" is normalised for the chip.
+ */
 const TLP_CLASS: Record<string, string> = {
-  'TLP:RED': 'bg-red-600 text-white',
-  'TLP:AMBER': 'bg-amber-500 text-black',
-  'TLP:AMBER+STRICT': 'bg-amber-500 text-black',
-  'TLP:GREEN': 'bg-emerald-600 text-white',
-  'TLP:CLEAR': 'bg-slate-200 text-slate-800 dark:bg-slate-700 dark:text-slate-100',
-  'TLP:WHITE': 'bg-slate-200 text-slate-800 dark:bg-slate-700 dark:text-slate-100',
+  RED: 'bg-red-600 text-white',
+  AMBER: 'bg-amber-500 text-black',
+  'AMBER+STRICT': 'bg-amber-500 text-black',
+  GREEN: 'bg-emerald-600 text-white',
+  CLEAR: 'bg-slate-200 text-slate-800 dark:bg-slate-700 dark:text-slate-100',
+  WHITE: 'bg-slate-200 text-slate-800 dark:bg-slate-700 dark:text-slate-100',
 };
 
 /** One loaded document: format, profile, TLP, statement count, and for CSAF the TR-03191 measurement. */
 export function VexDocumentRow({ doc, onRemove }: { doc: VexDocument; onRemove?: () => void }) {
-  const passed = doc.tr03191?.filter((f) => f.pass).length ?? 0;
-  const total = doc.tr03191?.length ?? 0;
+  // Clauses with nothing to apply to and counted facts are shown, never tallied.
+  const measured = doc.tr03191?.filter((f) => f.applicable !== false && !f.informational) ?? [];
+  const passed = measured.filter((f) => f.pass).length;
+  const total = measured.length;
+  const notApplicable = doc.tr03191?.filter((f) => f.applicable === false).length ?? 0;
+  const tlp = doc.tlp ? doc.tlp.toUpperCase().replace(/^TLP:/, '') : undefined;
   return (
     <div className="text-xs">
       <div className="flex items-baseline gap-2">
@@ -155,9 +189,9 @@ export function VexDocumentRow({ doc, onRemove }: { doc: VexDocument; onRemove?:
             {doc.format === 'csaf' ? 'CSAF' : 'OpenVEX'}
           </span>
         )}
-        {doc.tlp && (
-          <span className={clsx('shrink-0 rounded px-1 text-[9px] font-semibold tracking-wide', TLP_CLASS[doc.tlp.toUpperCase()] ?? 'bg-slate-200 text-slate-800')}>
-            {doc.tlp}
+        {tlp && (
+          <span className={clsx('shrink-0 rounded px-1 text-[9px] font-semibold tracking-wide', TLP_CLASS[tlp] ?? 'bg-slate-200 text-slate-800')}>
+            TLP:{tlp}
           </span>
         )}
         <span className="min-w-0 flex-1 truncate font-mono text-slate-600 dark:text-slate-300" title={doc.title ? `${doc.id}: ${doc.title}` : doc.id}>
@@ -179,24 +213,34 @@ export function VexDocumentRow({ doc, onRemove }: { doc: VexDocument; onRemove?:
           </button>
         )}
       </div>
-      {doc.tr03191 && total > 0 && (
+      {doc.tr03191 && doc.tr03191.length > 0 && (
         <details className="mt-0.5 pl-1">
           <summary className="cursor-pointer text-[10px] text-slate-500 select-none hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200">
             BSI TR-03191: {passed} of {total} measured requirements present
+            {notApplicable > 0 ? `, ${notApplicable} not applicable` : ''}
           </summary>
           <ul className="mt-1 space-y-0.5 text-[11px]">
-            {doc.tr03191.map((f) => (
-              <li key={f.id} className="flex items-baseline gap-1.5">
-                <span className={clsx('shrink-0 font-semibold', f.pass ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400')}>
-                  {f.pass ? '✓' : '✗'}
-                </span>
-                <span className="shrink-0 font-mono text-[10px] text-slate-400">{f.clause}</span>
-                <span className="min-w-0 text-slate-600 dark:text-slate-300">
-                  {f.label}
-                  {f.actual ? <span className="text-slate-400"> · {f.actual}</span> : null}
-                </span>
-              </li>
-            ))}
+            {doc.tr03191.map((f) => {
+              const neutral = f.applicable === false || f.informational;
+              return (
+                <li key={f.id} className="flex items-baseline gap-1.5">
+                  <span
+                    className={clsx(
+                      'shrink-0 font-semibold',
+                      neutral ? 'text-slate-400' : f.pass ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400',
+                    )}
+                    title={f.applicable === false ? 'Nothing in this document the clause applies to' : f.informational ? 'A counted fact, not pass or fail' : undefined}
+                  >
+                    {f.applicable === false ? 'n/a' : f.informational ? 'i' : f.pass ? '✓' : '✗'}
+                  </span>
+                  <span className="shrink-0 font-mono text-[10px] text-slate-400">{f.clause}</span>
+                  <span className="min-w-0 text-slate-600 dark:text-slate-300">
+                    {f.label}
+                    {f.actual ? <span className="text-slate-400"> · {f.actual}</span> : null}
+                  </span>
+                </li>
+              );
+            })}
           </ul>
           <p className="mt-1 text-[10px] text-slate-400 dark:text-slate-500">
             Facts about the document against the clauses of TR-03191. Distribution, signature validity and the

@@ -265,6 +265,7 @@ describe('spec lint, end to end', () => {
       'SPDX3_SCHEMA_BAD_LICENSE_EXPRESSION',
       'CDX_SCHEMA_BAD_PURL',
       'CDX_SCHEMA_BAD_ACKNOWLEDGEMENT',
+      'CSAF_SCHEMA_UNDEFINED_PRODUCT_ID',
       'OCM_SCHEMA_BAD_NAME',
     ])('%s is a spec finding', (code) => {
       expect(isSpecFinding(code)).toBe(true);
@@ -303,6 +304,11 @@ describe('spec lint, end to end', () => {
       'XML_TOO_DEEP',
       'XML_NOT_CYCLONEDX',
       'RDF_NOT_SUPPORTED',
+      // cbom (a cryptographic-asset without cryptoProperties is legal; noted, not a violation)
+      'CDX_CRYPTO_PROPERTIES_MISSING',
+      // csaf overlay (parser notes; the TR-03191 measurement has no code at all)
+      'CSAF_VULN_SKIPPED',
+      'CSAF_PRODUCT_UNRESOLVED',
       // ocm
       'OCM_V3ALPHA1',
       'OCM_DIGEST_MISMATCH',

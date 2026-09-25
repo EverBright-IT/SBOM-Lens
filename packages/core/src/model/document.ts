@@ -137,7 +137,7 @@ export interface SbomDocument {
    * no field for it.
    */
   sbomType?: string;
-  /** CycloneDX `metadata.lifecycles[].phase` in order, when present. */
+  /** CycloneDX `metadata.lifecycles[]` in order: the pre-defined `phase`, or a custom lifecycle's `name`. */
   lifecycles?: string[];
   /** Packages and files, flat. */
   elements: SbomElement[];

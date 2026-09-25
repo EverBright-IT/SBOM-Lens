@@ -42,7 +42,7 @@ export function bomObjectFromXml(root: XmlElement): Record<string, unknown> | nu
         bom.components = ownChildren(child).filter((c) => c.name === 'component').map(readComponent);
         break;
       case 'dependencies':
-        bom.dependencies = ownChildren(child).filter((c) => c.name === 'dependency').map(readDependency);
+        bom.dependencies = readDependencies(child);
         break;
       case 'externalReferences':
         bom.externalReferences = readExternalReferences(child);
@@ -115,6 +115,13 @@ function readComponent(el: XmlElement): Record<string, unknown> {
       case 'supplier':
       case 'manufacturer':
         out[child.name] = readNamed(child, ['name']);
+        break;
+      case 'authors':
+        // <authors><author><name>..</name></author></authors>, the 1.6 list
+        // the JSON mapper reads as the originator.
+        out.authors = ownChildren(child)
+          .filter((c) => c.name === 'author')
+          .map((a) => readNamed(a, ['name', 'email']));
         break;
       case 'hashes':
         out.hashes = ownChildren(child)
@@ -207,19 +214,30 @@ function readProperties(el: XmlElement): Record<string, unknown>[] {
 }
 
 /** `<dependency ref="a"><dependency ref="b"/></dependency>` → { ref: a, dependsOn: [b] }. */
-function readDependency(el: XmlElement): Record<string, unknown> {
-  const out: Record<string, unknown> = {};
-  setIf(out, 'ref', el.attrs.ref);
-  const dependsOn = ownChildren(el)
-    .filter((c) => c.name === 'dependency')
-    .map((c) => c.attrs.ref)
-    .filter((ref): ref is string => typeof ref === 'string' && ref.length > 0);
-  const provides = ownChildren(el)
-    .filter((c) => c.name === 'provides')
-    .map((c) => c.attrs.ref)
-    .filter((ref): ref is string => typeof ref === 'string' && ref.length > 0);
-  out.dependsOn = dependsOn;
-  if (provides.length > 0) out.provides = provides;
+/**
+ * `<dependency ref="a"><dependency ref="b"><dependency ref="c"/></dependency></dependency>`:
+ * the XSD nests dependencies recursively, the JSON form lists them flat, so
+ * every nested element with children of its own becomes an entry too.
+ */
+function readDependencies(el: XmlElement): Record<string, unknown>[] {
+  const out: Record<string, unknown>[] = [];
+  const stack = ownChildren(el).filter((c) => c.name === 'dependency');
+  while (stack.length > 0) {
+    const node = stack.shift()!;
+    const entry: Record<string, unknown> = {};
+    setIf(entry, 'ref', node.attrs.ref);
+    const children = ownChildren(node).filter((c) => c.name === 'dependency');
+    entry.dependsOn = children
+      .map((c) => c.attrs.ref)
+      .filter((ref): ref is string => typeof ref === 'string' && ref.length > 0);
+    const provides = ownChildren(node)
+      .filter((c) => c.name === 'provides')
+      .map((c) => c.attrs.ref)
+      .filter((ref): ref is string => typeof ref === 'string' && ref.length > 0);
+    if (provides.length > 0) entry.provides = provides;
+    out.push(entry);
+    for (const child of children) if (ownChildren(child).length > 0) stack.push(child);
+  }
   return out;
 }
 
@@ -233,17 +251,20 @@ function readDependency(el: XmlElement): Record<string, unknown> {
 function readCryptoProperties(el: XmlElement): Record<string, unknown> {
   const value = generic(el);
   const out = isPlainObject(value) ? value : {};
+  // <wrapper><item>..</item></wrapper> lists (XSD 1.6/1.7).
   const listWrappers: Record<string, string> = {
     cryptoFunctions: 'cryptoFunction',
-    certificationLevel: 'certificationLevel',
-    certificateState: 'state',
     certificateExtensions: 'certificateExtension',
     relatedCryptographicAssets: 'relatedCryptographicAsset',
     cipherSuites: 'cipherSuite',
     algorithms: 'algorithm',
     identifiers: 'identifier',
-    cryptoRefArray: 'cryptoRef',
   };
+  // Elements the XSD repeats directly, without a wrapper; one occurrence
+  // must read as a one-element list.
+  const repeated = new Set(['certificationLevel', 'certificateState', 'cryptoRef']);
+  // <fingerprint alg="..">hex</fingerprint> is a hashType, like <hash>.
+  const hashLike = new Set(['fingerprint']);
   const unwrap = (node: unknown): unknown => {
     if (Array.isArray(node)) return node.map(unwrap);
     if (!isPlainObject(node)) return node;
@@ -253,6 +274,13 @@ function readCryptoProperties(el: XmlElement): Record<string, unknown> {
       if (item !== undefined && isPlainObject(child) && item in child) {
         const inner = child[item];
         result[key] = (Array.isArray(inner) ? inner : [inner]).map(unwrap);
+      } else if (repeated.has(key)) {
+        const list = (Array.isArray(child) ? child : [child]).map(unwrap);
+        // 1.6 XML spells the protocol references <cryptoRef>; the JSON field
+        // (and the 1.7 deprecation) is cryptoRefArray.
+        result[key === 'cryptoRef' ? 'cryptoRefArray' : key] = list;
+      } else if (hashLike.has(key) && isPlainObject(child)) {
+        result[key] = { alg: child.alg, content: child['#text'] };
       } else {
         result[key] = unwrap(child);
       }

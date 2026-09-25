@@ -19,10 +19,11 @@ Copyright The Linux Foundation and SPDX contributors, licensed under
 the Creative Commons Attribution License 3.0 (CC-BY-3.0).
 
 This product includes the list of SPDX License List identifiers
-(https://spdx.org/licenses/), as packaged by spdx-license-ids (CC0-1.0)
-and spdx-exceptions, Copyright the SPDX contributors and the package
-authors, licensed under the Creative Commons Attribution License 3.0
-(CC-BY-3.0). Identifiers and deprecation flags only; no licence texts.
+(https://spdx.org/licenses/) as packaged by spdx-license-ids, released
+under CC0-1.0, and the list of SPDX License List exception identifiers as
+packaged by spdx-exceptions, Copyright the SPDX contributors and the
+package authors, licensed under the Creative Commons Attribution License
+3.0 (CC-BY-3.0). Identifiers and deprecation flags only; no licence texts.
 
 This product includes the vocabulary of the CycloneDX Cryptography Registry
 (https://cyclonedx.org/registry/cryptography/, cryptography-defs.json and its

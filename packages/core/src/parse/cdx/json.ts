@@ -91,7 +91,7 @@ export function parseCdxJson(
   const bomLinkRef = (url: string): { docRef: string; fragment: string | null } => {
     const hash = url.indexOf('#');
     const urn = (hash === -1 ? url : url.slice(0, hash)).toLowerCase();
-    const fragment = hash === -1 ? null : decodeURIComponent(url.slice(hash + 1));
+    const fragment = hash === -1 ? null : decodeFragment(url.slice(hash + 1));
     let docRef = docRefByUrn.get(urn);
     if (!docRef) {
       docRef = `DocumentRef-cdx${docRefByUrn.size + 1}`;
@@ -118,6 +118,7 @@ export function parseCdxJson(
   };
 
   let nestingCapped = false;
+  let assetsWithoutProperties = 0;
   const addComponent = (node: Record<string, unknown>, parentSpdxId?: string, depth = 0): void => {
     if (depth > MAX_NESTING) {
       nestingCapped = true;
@@ -165,6 +166,7 @@ export function parseCdxJson(
       ...(isRecord(node.cryptoProperties) ? { crypto: readCryptoProperties(node.cryptoProperties) } : {}),
       raw: { kind: 'json', value: node },
     });
+    if (type === 'cryptographic-asset' && !isRecord(node.cryptoProperties)) assetsWithoutProperties++;
     if (parentSpdxId) {
       relationships.push({
         from: { kind: 'local', spdxId: parentSpdxId },
@@ -237,6 +239,11 @@ export function parseCdxJson(
     // type the tree does not follow (it is not containment).
     for (const target of Array.isArray(dep.provides) ? dep.provides : []) {
       if (typeof target !== 'string') continue;
+      if (target.toLowerCase().startsWith('urn:cdx:')) {
+        const { docRef, fragment } = bomLinkRef(target);
+        relationships.push({ from: { kind: 'local', spdxId: from }, type: 'PROVIDES', to: { kind: 'external', docRef, spdxId: fragment } });
+        continue;
+      }
       const to = idByBomRef.get(target);
       if (!to) {
         unmappedDeps++;
@@ -260,6 +267,17 @@ export function parseCdxJson(
         'warning',
         'CDX_NESTING_CAPPED',
         `Component nesting exceeded ${MAX_NESTING} levels; deeper assemblies were not read.`,
+      ),
+    );
+  }
+  if (assetsWithoutProperties > 0) {
+    // Legal (cryptoProperties is optional on every component type), but
+    // such an asset carries nothing the CBOM views or profiles can read.
+    diagnostics.push(
+      diag(
+        'info',
+        'CDX_CRYPTO_PROPERTIES_MISSING',
+        `${assetsWithoutProperties} cryptographic-asset component(s) carry no cryptoProperties and are listed without algorithm, certificate, key or protocol data.`,
       ),
     );
   }
@@ -400,6 +418,15 @@ function readCreators(metadata: Record<string, unknown>): string[] {
   return out;
 }
 
+/** A BOM-Link fragment, percent-decoded when it decodes; a malformed escape stays verbatim rather than refusing the document. */
+function decodeFragment(fragment: string): string {
+  try {
+    return decodeURIComponent(fragment);
+  } catch {
+    return fragment;
+  }
+}
+
 /** Verbatim id, suffixed only on (spec-invalid) duplicates. */
 function uniqueRaw(candidate: string, used: Set<string>): string {
   let id = candidate;
@@ -451,10 +478,10 @@ function readCryptoProperties(cp: Record<string, unknown>): CryptoElementExt {
       curve: asString(ap.curve),
       executionEnvironment: asString(ap.executionEnvironment),
       implementationPlatform: asString(ap.implementationPlatform),
-      certificationLevel: nonEmpty(asStringArray(ap.certificationLevel)),
+      certificationLevel: nonEmpty(strings(ap.certificationLevel)),
       mode: asString(ap.mode),
       padding: asString(ap.padding),
-      cryptoFunctions: nonEmpty(asStringArray(ap.cryptoFunctions)),
+      cryptoFunctions: nonEmpty(strings(ap.cryptoFunctions)),
       classicalSecurityLevel: asInteger(ap.classicalSecurityLevel),
       nistQuantumSecurityLevel: asInteger(ap.nistQuantumSecurityLevel),
     });
@@ -470,18 +497,19 @@ function readCryptoProperties(cp: Record<string, unknown>): CryptoElementExt {
       notValidAfter: asString(cert.notValidAfter),
       certificateFormat: asString(cert.certificateFormat),
       fileExtension: asString(cert.certificateFileExtension) ?? asString(cert.certificateExtension),
+      // Pre-defined states carry `state`, custom ones `name` (1.7).
       states: nonEmpty(
         asRecordArray(cert.certificateState)
-          .map((s) => asString(s.state))
-          .filter((s): s is string => s !== undefined)
-          .concat(asStringArray(cert.certificateState)),
+          .map((s) => asString(s.state) ?? asString(s.name))
+          .filter((s): s is string => s !== undefined && s !== '')
+          .concat(strings(cert.certificateState)),
       ),
       creationDate: asString(cert.creationDate),
       activationDate: asString(cert.activationDate),
       deactivationDate: asString(cert.deactivationDate),
       revocationDate: asString(cert.revocationDate),
       destructionDate: asString(cert.destructionDate),
-      fingerprint: fingerprint ? compact({ algorithm: asString(fingerprint.alg), value: asString(fingerprint.content) }) : undefined,
+      fingerprint: fingerprint ? nonEmptyObject(compact({ algorithm: asString(fingerprint.alg), value: asString(fingerprint.content) })) : undefined,
     });
     for (const [field, type] of [
       ['signatureAlgorithmRef', 'signatureAlgorithm'],
@@ -505,7 +533,9 @@ function readCryptoProperties(cp: Record<string, unknown>): CryptoElementExt {
       expirationDate: asString(mat.expirationDate),
       size: asInteger(mat.size),
       format: asString(mat.format),
-      securedBy: securedBy ? compact({ mechanism: asString(securedBy.mechanism), algorithmRef: asString(securedBy.algorithmRef) }) : undefined,
+      securedBy: securedBy
+        ? nonEmptyObject(compact({ mechanism: asString(securedBy.mechanism), algorithmRef: asString(securedBy.algorithmRef) }))
+        : undefined,
     });
     const ref = asString(mat.algorithmRef);
     if (ref) related.push({ type: 'algorithm', ref });
@@ -517,16 +547,20 @@ function readCryptoProperties(cp: Record<string, unknown>): CryptoElementExt {
       type: asString(proto.type),
       version: asString(proto.version),
       cipherSuites: nonEmpty(
-        asRecordArray(proto.cipherSuites).map((suite) =>
-          compact({
-            name: asString(suite.name),
-            algorithms: nonEmpty(asStringArray(suite.algorithms)),
-            identifiers: nonEmpty(asStringArray(suite.identifiers)),
-          }),
-        ),
+        asRecordArray(proto.cipherSuites)
+          .map((suite) =>
+            nonEmptyObject(
+              compact({
+                name: asString(suite.name),
+                algorithms: nonEmpty(strings(suite.algorithms)),
+                identifiers: nonEmpty(strings(suite.identifiers)),
+              }),
+            ),
+          )
+          .filter((suite): suite is NonNullable<typeof suite> => suite !== undefined),
       ),
     });
-    for (const ref of asStringArray(proto.cryptoRefArray)) related.push({ type: 'protocolCrypto', ref });
+    for (const ref of strings(proto.cryptoRefArray)) related.push({ type: 'protocolCrypto', ref });
     collectRelated(proto);
   }
   if (related.length > 0) ext.related = related;
@@ -541,6 +575,16 @@ function asInteger(value: unknown): number | undefined {
 
 function nonEmpty<T>(list: T[]): T[] | undefined {
   return list.length > 0 ? list : undefined;
+}
+
+/** Non-empty strings of a list (an empty XML element reads as ""). */
+function strings(value: unknown): string[] {
+  return asStringArray(value).filter((s) => s !== '');
+}
+
+/** An object that states nothing is not worth carrying. */
+function nonEmptyObject<T extends object>(value: T): T | undefined {
+  return Object.keys(value).length > 0 ? value : undefined;
 }
 
 type Compact<T> = { [K in keyof T]?: Exclude<T[K], undefined> };

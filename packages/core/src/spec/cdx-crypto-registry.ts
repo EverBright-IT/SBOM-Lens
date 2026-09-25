@@ -120,10 +120,12 @@ const FAMILIES: ReadonlyMap<string, CryptoFamilyDef> = new Map<string, CryptoFam
   ["ZUC", { family: "ZUC", primitives: ["mac","stream-cipher"], inEnum: true }],
 ]);
 
-/** Lowercase spelling -> registry family name, for tolerant lookups. */
-const FAMILY_BY_LOWER: ReadonlyMap<string, string> = new Map(
-  [...FAMILIES.keys()].map((name) => [name.toLowerCase(), name]),
-);
+/** Lowercase spelling -> registry family name, built on first use so the module stays tree-shakeable. */
+let familyByLower: ReadonlyMap<string, string> | undefined;
+function lowerFamilies(): ReadonlyMap<string, string> {
+  familyByLower ??= new Map([...FAMILIES.keys()].map((name) => [name.toLowerCase(), name]));
+  return familyByLower;
+}
 
 /** The schema's ellipticCurve enum values, `category/name`. */
 const CURVE_ENUM: ReadonlySet<string> = new Set([
@@ -880,7 +882,7 @@ export function cryptoFamily(name: string): CryptoFamilyDef | undefined {
 
 /** A family the registry knows under any casing, for messages and display. */
 export function resolveCryptoFamily(name: string): CryptoFamilyDef | undefined {
-  return FAMILIES.get(name) ?? FAMILIES.get(FAMILY_BY_LOWER.get(name.toLowerCase()) ?? '');
+  return FAMILIES.get(name) ?? FAMILIES.get(lowerFamilies().get(name.toLowerCase()) ?? '');
 }
 
 export function isKnownCryptoFamily(name: string): boolean {

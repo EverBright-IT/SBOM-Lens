@@ -91,7 +91,7 @@ export function parseSpdx3Json(input: SourceInput, root: Record<string, unknown>
       if (type.endsWith('NoAssertionLicense')) return 'NOASSERTION';
       if (type.endsWith('NoneLicense')) return 'NONE';
       const expression = asString(node.simplelicensing_licenseExpression);
-      if (expression !== undefined) return expression;
+      if (expression !== undefined) return upperCaseOperators(expression);
       if (type.endsWith('ListedLicense')) return iriTail(ref);
       if (type.endsWith('CustomLicense')) return customLicenseRef(ref, node);
       return undefined;
@@ -368,6 +368,15 @@ function noAssertion(value: string | undefined): string | undefined {
   if (value.endsWith('NoAssertion')) return 'NOASSERTION';
   if (value.endsWith('/None') || value === 'None') return 'NONE';
   return value;
+}
+
+/**
+ * SPDX 3.0.1 allows `and`/`or`/`with` in lower case; the rest of the model
+ * speaks the 2.3 form (upper case only), so the mapping normalises them.
+ * Operands are untouched: identifiers are case-insensitive by definition.
+ */
+function upperCaseOperators(expression: string): string {
+  return expression.replace(/(^|[\s()])(and|or|with)(?=[\s()]|$)/g, (_m, before: string, op: string) => `${before}${op.toUpperCase()}`);
 }
 
 /** The last path or fragment segment of an IRI. */

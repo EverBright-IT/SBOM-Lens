@@ -78,9 +78,12 @@ export function EmptyState() {
               Loaded advisories ({advisories.length})
             </h2>
             <div className="space-y-2 rounded-md border border-slate-200 px-3 py-2 dark:border-slate-700">
-              {advisories.map((doc) => (
-                <VexDocumentRow key={`${doc.id}\u0000${doc.fileName}`} doc={doc} onRemove={() => actions.removeVexDocument(doc.id)} />
+              {advisories.slice(0, 50).map((doc) => (
+                <VexDocumentRow key={doc.id} doc={doc} onRemove={() => actions.removeVexDocument(doc.id)} />
               ))}
+              {advisories.length > 50 && (
+                <p className="text-[10px] text-slate-400 dark:text-slate-500">{advisories.length - 50} more not listed.</p>
+              )}
             </div>
             <p className="mt-1.5 text-center text-xs text-slate-400 dark:text-slate-500">
               Open an SBOM to match these statements against its inventory.

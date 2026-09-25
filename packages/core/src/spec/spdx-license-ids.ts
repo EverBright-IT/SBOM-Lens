@@ -810,20 +810,40 @@ const DEPRECATED_EXCEPTION_IDS: ReadonlySet<string> = new Set([
 
 export const SPDX_LICENSE_LIST_SOURCE = 'spdx-license-ids@3.0.23';
 
-/** Current or deprecated licence identifier on the SPDX License List (case-sensitive, as the list is). */
+/**
+ * SPDX Annex D.2: identifiers are matched case-insensitively (MIT, Mit and
+ * mIt name the same licence). The lower-cased lookups are built on first
+ * use so the module stays tree-shakeable.
+ */
+let lowerIndex: { ids: Set<string>; deprecated: Set<string>; exceptions: Set<string>; deprecatedExceptions: Set<string> } | undefined;
+function lower(): NonNullable<typeof lowerIndex> {
+  lowerIndex ??= {
+    ids: new Set([...LICENSE_IDS].map((id) => id.toLowerCase())),
+    deprecated: new Set([...DEPRECATED_LICENSE_IDS].map((id) => id.toLowerCase())),
+    exceptions: new Set([...EXCEPTION_IDS].map((id) => id.toLowerCase())),
+    deprecatedExceptions: new Set([...DEPRECATED_EXCEPTION_IDS].map((id) => id.toLowerCase())),
+  };
+  return lowerIndex;
+}
+
+/** Current or deprecated licence identifier on the SPDX License List, matched case-insensitively (Annex D.2). */
 export function isKnownLicenseId(id: string): boolean {
-  return LICENSE_IDS.has(id) || DEPRECATED_LICENSE_IDS.has(id);
+  if (LICENSE_IDS.has(id) || DEPRECATED_LICENSE_IDS.has(id)) return true;
+  const l = id.toLowerCase();
+  return lower().ids.has(l) || lower().deprecated.has(l);
 }
 
 export function isDeprecatedLicenseId(id: string): boolean {
-  return DEPRECATED_LICENSE_IDS.has(id);
+  return DEPRECATED_LICENSE_IDS.has(id) || lower().deprecated.has(id.toLowerCase());
 }
 
-/** Current or deprecated exception identifier (the operand of WITH). */
+/** Current or deprecated exception identifier (the operand of WITH), matched case-insensitively. */
 export function isKnownExceptionId(id: string): boolean {
-  return EXCEPTION_IDS.has(id) || DEPRECATED_EXCEPTION_IDS.has(id);
+  if (EXCEPTION_IDS.has(id) || DEPRECATED_EXCEPTION_IDS.has(id)) return true;
+  const l = id.toLowerCase();
+  return lower().exceptions.has(l) || lower().deprecatedExceptions.has(l);
 }
 
 export function isDeprecatedExceptionId(id: string): boolean {
-  return DEPRECATED_EXCEPTION_IDS.has(id);
+  return DEPRECATED_EXCEPTION_IDS.has(id) || lower().deprecatedExceptions.has(id.toLowerCase());
 }

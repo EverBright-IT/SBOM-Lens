@@ -29,14 +29,13 @@ export const CRYPTO_PCI_PROFILE: ComplianceProfile = {
     'months, together with monitoring of industry trends and a plan to ' +
     'respond to anticipated changes. A CycloneDX CBOM can carry the ' +
     'inventory: this profile meters whether every protocol asset states ' +
-    'its type and version and lists its cipher suites, whether the ' +
+    'its version and lists its cipher suites, whether the ' +
     'algorithms the suites rely on are described (family and parameter ' +
     'set), and whether relationships say where a protocol is used. The ' +
     'review cadence, the trend monitoring and the response plan cannot be ' +
     'read off a file and remain with the assessor; nothing gates except ' +
     'the format baseline. A BOM without protocol assets reads none in scope.',
   checks: [
-    { id: 'protocol-type', type: 'crypto-coverage', field: 'assetType', assetTypes: ['protocol'], label: 'Protocols listed as assets' },
     { id: 'protocol-version', type: 'crypto-coverage', field: 'protocolVersion', assetTypes: ['protocol'], label: 'Protocols: version stated' },
     { id: 'protocol-cipher-suites', type: 'crypto-coverage', field: 'cipherSuites', assetTypes: ['protocol'], label: 'Protocols: cipher suites listed' },
     { id: 'protocol-related', type: 'crypto-coverage', field: 'related', assetTypes: ['protocol'], label: 'Protocols: related algorithms or keys linked' },

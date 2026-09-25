@@ -23,6 +23,7 @@
           "executionEnvironment": "software-plain-ram",
           "implementationPlatform": "x86_64",
           "cryptoFunctions": ["encrypt", "decrypt"],
+          "certificationLevel": ["fips140-3-l1"],
           "classicalSecurityLevel": 256,
           "nistQuantumSecurityLevel": 5
         },
@@ -93,6 +94,7 @@
           "notValidAfter": "2027-01-01T00:00:00Z",
           "certificateFormat": "X.509",
           "certificateFileExtension": "pem",
+          "fingerprint": { "alg": "SHA-256", "content": "aabb00112233445566778899aabbccddeeff00112233445566778899aabbccdd" },
           "certificateState": [{ "state": "active" }],
           "relatedCryptographicAssets": [
             { "type": "signatureAlgorithm", "ref": "alg-rsa" },
@@ -142,6 +144,7 @@
       "name": "openssl",
       "version": "3.3.1",
       "purl": "pkg:generic/openssl@3.3.1",
+      "authors": [{ "name": "OpenSSL Project" }],
       "hashes": [{ "alg": "SHA-256", "content": "aabb00112233445566778899aabbccddeeff00112233445566778899aabbccdd" }]
     }
   ],

@@ -104,10 +104,11 @@ export function validateSpdx2Structure(root: Record<string, unknown>): Diagnosti
     creators: asStringArray(creationInfo.creators),
   });
 
-  // § 10: the LicenseRef- identifiers this document defines itself.
+  // § 10: the LicenseRef- identifiers this document defines itself. Annex
+  // D.2: identifiers are matched case-insensitively.
   const definedLicenseRefs = new Set(
     asRecordArray(root.hasExtractedLicensingInfos)
-      .map((info) => asString(info.licenseId))
+      .map((info) => asString(info.licenseId)?.toLowerCase())
       .filter((id): id is string => id !== undefined),
   );
 
@@ -159,7 +160,7 @@ export function validateSpdx2TagValue(
     creators: doc.creators,
   });
 
-  const definedLicenseRefs = new Set(doc.extractedLicenseIds);
+  const definedLicenseRefs = new Set(doc.extractedLicenseIds.map((id) => id.toLowerCase()));
   checkId(tallies, doc.spdxId);
   for (const element of elements) {
     checkElement(
@@ -254,7 +255,7 @@ function checkElement(tallies: Tallies, facts: ElementFacts, definedLicenseRefs:
     // is that document's business. Grammar failures yield no ids, so an
     // expression is never reported twice.
     for (const id of licenseIdsInExpression(expression)) {
-      if (id.startsWith('LicenseRef-') && !definedLicenseRefs.has(id)) tallies.undefinedLicenseRef.add(id);
+      if (id.startsWith('LicenseRef-') && !definedLicenseRefs.has(id.toLowerCase())) tallies.undefinedLicenseRef.add(id);
     }
   }
 

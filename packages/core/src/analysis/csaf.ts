@@ -109,10 +109,15 @@ export function parseCsaf(fileName: string, raw: unknown): VexDocument {
     const aliases = vulnAliases(vuln, vulnerability);
     const description = notesText(vuln.notes);
     const timestamp = asString(vuln.release_date);
-    const flags = annotationsByProduct(vuln.flags, 'label', groupMembers);
-    const remediationTexts = annotationsByProduct(vuln.remediations, 'details', groupMembers);
+    // Flags and remediations name their products (CSAF 2.0 sections 3.2.3.5
+    // and 3.2.3.12: product_ids or group_ids MUST be present), so an entry
+    // without either applies to nobody and is reported as a schema finding
+    // below. A threat may omit both, and then describes the vulnerability
+    // for every product.
+    const flags = annotationsByProduct(vuln.flags, 'label', groupMembers, false);
+    const remediationTexts = annotationsByProduct(vuln.remediations, 'details', groupMembers, false);
     const remediationLists = remediationsByProduct(vuln.remediations, groupMembers);
-    const impacts = threatImpactsByProduct(vuln.threats, groupMembers);
+    const impacts = annotationsByProduct(asRecordArray(vuln.threats).filter((t) => asString(t.category) === 'impact'), 'details', groupMembers, true);
 
     for (const [bucket, status] of STATUS_BUCKETS) {
       const productIds = asStringArray(productStatus[bucket]);
@@ -179,7 +184,7 @@ export function parseCsaf(fileName: string, raw: unknown): VexDocument {
     }
   });
 
-  diagnostics.push(...csafSchemaFindings(root, products));
+  diagnostics.push(...csafSchemaFindings(root, definedProductIds(root.product_tree)));
 
   const publisher = isRecord(docNode.publisher) ? docNode.publisher : undefined;
   const trackingVersion = asString(tracking.version);
@@ -187,10 +192,19 @@ export function parseCsaf(fileName: string, raw: unknown): VexDocument {
   const distribution = isRecord(docNode.distribution) ? docNode.distribution : undefined;
   const tlp = distribution && isRecord(distribution.tlp) ? asString(distribution.tlp.label) : undefined;
 
+  // CSAF 2.0 section 3.2.1.12.4: the tracking id is unique per publisher,
+  // and namespace plus id identify a document globally. Keyed that way, two
+  // publishers reusing one id never displace each other; the tracking id
+  // stays available for display.
+  const trackingId = asString(tracking.id);
+  const publisherNamespace = publisher ? asString(publisher.namespace) : undefined;
+  const id = trackingId !== undefined ? (publisherNamespace ? `${publisherNamespace}#${trackingId}` : trackingId) : fileName;
+
   return {
-    id: asString(tracking.id) ?? fileName,
+    id,
     fileName,
     format: 'csaf',
+    ...(trackingId !== undefined ? { trackingId } : {}),
     ...(publisher && asString(publisher.name) !== undefined ? { author: asString(publisher.name)! } : {}),
     ...(asString(tracking.current_release_date) !== undefined
       ? { timestamp: asString(tracking.current_release_date)! }
@@ -202,7 +216,7 @@ export function parseCsaf(fileName: string, raw: unknown): VexDocument {
     ...(asString(docNode.category) !== undefined ? { category: asString(docNode.category)! } : {}),
     ...(tlp !== undefined ? { tlp } : {}),
     ...(asString(tracking.status) !== undefined ? { status: asString(tracking.status)! } : {}),
-    tr03191: lintCsafTr03191(root),
+    tr03191: lintCsafTr03191(root, products),
     statements,
     diagnostics,
   };
@@ -216,7 +230,7 @@ export function parseCsaf(fileName: string, raw: unknown): VexDocument {
  * product id used in a vulnerability that the product tree never defines
  * (CSAF 2.0 mandatory test 6.1.1).
  */
-function csafSchemaFindings(root: Record<string, unknown>, products: Map<string, ProductIdent>): Diagnostic[] {
+function csafSchemaFindings(root: Record<string, unknown>, defined: ReadonlySet<string>): Diagnostic[] {
   const lint = createLint();
   const docNode = isRecord(root.document) ? root.document : {};
   const tracking = isRecord(docNode.tracking) ? docNode.tracking : {};
@@ -241,28 +255,87 @@ function csafSchemaFindings(root: Record<string, unknown>, products: Map<string,
 
   const badCve = createTally({ unique: true });
   const undefinedProduct = createTally({ unique: true });
-  for (const vuln of asRecordArray(root.vulnerabilities)) {
+  const untargetedRemediation = createTally();
+  const untargetedFlag = createTally();
+  const untargeted = (entry: Record<string, unknown>) =>
+    asStringArray(entry.product_ids).length === 0 && asStringArray(entry.group_ids).length === 0;
+  const tree = isRecord(root.product_tree) ? root.product_tree : {};
+  // 6.1.1 names every place a product id may be referenced from.
+  for (const group of asRecordArray(tree.product_groups)) {
+    for (const pid of asStringArray(group.product_ids)) if (!defined.has(pid)) undefinedProduct.add(pid);
+  }
+  for (const rel of asRecordArray(tree.relationships)) {
+    for (const field of ['product_reference', 'relates_to_product_reference']) {
+      const pid = asString(rel[field]);
+      if (pid !== undefined && !defined.has(pid)) undefinedProduct.add(pid);
+    }
+  }
+  asRecordArray(root.vulnerabilities).forEach((vuln, index) => {
+    const name = asString(vuln.cve) ?? `vulnerability ${index + 1}`;
     const cve = asString(vuln.cve);
     if (cve !== undefined && !/^CVE-\d{4}-\d{4,}$/.test(cve)) badCve.add(cve);
     const status = isRecord(vuln.product_status) ? vuln.product_status : {};
     for (const ids of Object.values(status)) {
-      for (const pid of asStringArray(ids)) if (!products.has(pid)) undefinedProduct.add(pid);
+      for (const pid of asStringArray(ids)) if (!defined.has(pid)) undefinedProduct.add(pid);
     }
     for (const list of [vuln.remediations, vuln.flags, vuln.threats, vuln.scores]) {
       for (const entry of asRecordArray(list)) {
         for (const pid of [...asStringArray(entry.product_ids), ...asStringArray(entry.products)]) {
-          if (!products.has(pid)) undefinedProduct.add(pid);
+          if (!defined.has(pid)) undefinedProduct.add(pid);
         }
       }
     }
-  }
+    for (const entry of asRecordArray(vuln.remediations)) if (untargeted(entry)) untargetedRemediation.add(name);
+    for (const entry of asRecordArray(vuln.flags)) if (untargeted(entry)) untargetedFlag.add(name);
+  });
   lint.warnTally('CSAF_SCHEMA_BAD_CVE_ID', badCve, (count, list) => `${count} cve value(s) do not follow CVE-YYYY-NNNN: ${list}.`);
   lint.warnTally(
     'CSAF_SCHEMA_UNDEFINED_PRODUCT_ID',
     undefinedProduct,
-    (count, list) => `${count} product id(s) referenced by vulnerabilities but not defined in the product tree (mandatory test 6.1.1): ${list}.`,
+    (count, list) => `${count} product id(s) referenced but not defined in the product tree (mandatory test 6.1.1): ${list}.`,
+  );
+  lint.warnTally(
+    'CSAF_SCHEMA_UNTARGETED_REMEDIATION',
+    untargetedRemediation,
+    (count, list) => `${count} remediation(s) name neither product_ids nor group_ids and apply to nobody (mandatory test 6.1.29): ${list}.`,
+  );
+  lint.warnTally(
+    'CSAF_SCHEMA_UNTARGETED_FLAG',
+    untargetedFlag,
+    (count, list) => `${count} flag(s) name neither product_ids nor group_ids and apply to nobody (mandatory test 6.1.32): ${list}.`,
   );
   return lint.diagnostics;
+}
+
+/**
+ * Every product id the tree DEFINES (full_product_names, branch products,
+ * relationship products), whether or not it resolves to an identifier. This
+ * is the definition set 6.1.1 talks about; resolvability is a separate
+ * question that CSAF_PRODUCT_UNRESOLVED answers.
+ */
+function definedProductIds(tree: unknown): Set<string> {
+  const defined = new Set<string>();
+  forEachProductNode(tree, (node) => {
+    const pid = asString(node.product_id);
+    if (pid) defined.add(pid);
+  });
+  return defined;
+}
+
+/** Bounded, iterative visit of every full_product_name node in a product tree. */
+function forEachProductNode(tree: unknown, visit: (node: Record<string, unknown>) => void): void {
+  if (!isRecord(tree)) return;
+  for (const fpn of asRecordArray(tree.full_product_names)) visit(fpn);
+  const stack = asRecordArray(tree.branches).map((branch) => ({ branch, depth: 0 }));
+  while (stack.length > 0) {
+    const { branch, depth } = stack.pop()!;
+    if (isRecord(branch.product)) visit(branch.product);
+    if (depth >= MAX_BRANCH_DEPTH) continue;
+    for (const child of asRecordArray(branch.branches)) stack.push({ branch: child, depth: depth + 1 });
+  }
+  for (const rel of asRecordArray(tree.relationships)) {
+    if (isRecord(rel.full_product_name)) visit(rel.full_product_name);
+  }
 }
 
 /** product_groups: group_id -> member product ids (CSAF 2.0 section 3.2.2.6). */
@@ -283,10 +356,9 @@ function targetProducts(entry: Record<string, unknown>, groups: Map<string, stri
   return ids;
 }
 
-/** Every remediation per product, structured, in document order. */
+/** Every remediation per product, structured, in document order; an untargeted remediation reaches nobody. */
 function remediationsByProduct(node: unknown, groups: Map<string, string[]>): Map<string, VexRemediation[]> {
   const byProduct = new Map<string, VexRemediation[]>();
-  let fallback: VexRemediation[] | undefined;
   for (const entry of asRecordArray(node)) {
     const category = asString(entry.category);
     if (category === undefined) continue;
@@ -298,31 +370,13 @@ function remediationsByProduct(node: unknown, groups: Map<string, string[]>): Ma
       ...(asString(entry.date) !== undefined ? { date: asString(entry.date)! } : {}),
       ...(restart !== undefined ? { restartRequired: restart } : {}),
     };
-    const targets = targetProducts(entry, groups);
-    if (targets.length === 0 && asStringArray(entry.group_ids).length === 0) {
-      (fallback ??= []).push(remediation);
-      continue;
-    }
-    for (const pid of targets) {
+    for (const pid of targetProducts(entry, groups)) {
       const list = byProduct.get(pid) ?? [];
       list.push(remediation);
       byProduct.set(pid, list);
     }
   }
-  return new ProductListMap(byProduct, fallback);
-}
-
-/** A Map whose miss falls back to the document-wide remediations when some were untargeted. */
-class ProductListMap extends Map<string, VexRemediation[]> {
-  constructor(
-    entries: Map<string, VexRemediation[]>,
-    private readonly fallback: VexRemediation[] | undefined,
-  ) {
-    super(entries);
-  }
-  override get(key: string): VexRemediation[] | undefined {
-    return super.get(key) ?? this.fallback;
-  }
+  return byProduct;
 }
 
 /**
@@ -356,10 +410,16 @@ function resolveProductTree(tree: unknown): Map<string, ProductIdent> {
   return ids;
 }
 
+/** Branch trees are walked iteratively with a depth cap: a hostile document must not exhaust the stack. */
+const MAX_BRANCH_DEPTH = 64;
+
 function walkBranches(branches: readonly Record<string, unknown>[], ids: Map<string, ProductIdent>): void {
-  for (const branch of branches) {
+  const stack = branches.map((branch) => ({ branch, depth: 0 }));
+  while (stack.length > 0) {
+    const { branch, depth } = stack.pop()!;
     if (isRecord(branch.product)) register(ids, branch.product);
-    if (Array.isArray(branch.branches)) walkBranches(asRecordArray(branch.branches), ids);
+    if (depth >= MAX_BRANCH_DEPTH) continue;
+    for (const child of asRecordArray(branch.branches)) stack.push({ branch: child, depth: depth + 1 });
   }
 }
 
@@ -411,14 +471,21 @@ function vulnAliases(vuln: Record<string, unknown>, chosen: string): string[] {
 }
 
 /**
- * Collapses a CSAF annotation array (flags/remediations) into product_id →
- * value. Targets are product_ids plus the members of group_ids; an entry
- * that names neither applies to every product of the vulnerability (CSAF
- * default), captured as the fallback. An entry that names only a group
- * whose members are unknown applies to nobody, never to everybody. First
- * writer wins so the earliest/most specific entry sticks.
+ * Collapses a CSAF annotation array (flags, remediations, threats) into
+ * product_id -> value. Targets are product_ids plus the members of
+ * group_ids. An entry that names neither is a schema violation for flags
+ * and remediations (6.1.29, 6.1.32) and reaches nobody; for threats, which
+ * may omit both, it describes the vulnerability for every product when
+ * `documentWide` is set. An entry naming only an unknown group applies to
+ * nobody, never to everybody. First writer wins so the earliest/most
+ * specific entry sticks.
  */
-function annotationsByProduct(node: unknown, field: 'label' | 'details', groups: Map<string, string[]>): Map<string, string> {
+function annotationsByProduct(
+  node: unknown,
+  field: 'label' | 'details',
+  groups: Map<string, string[]>,
+  documentWide: boolean,
+): Map<string, string> {
   const byProduct = new Map<string, string>();
   let fallback: string | undefined;
   for (const entry of asRecordArray(node)) {
@@ -426,25 +493,7 @@ function annotationsByProduct(node: unknown, field: 'label' | 'details', groups:
     if (value === undefined) continue;
     const targets = targetProducts(entry, groups);
     if (targets.length === 0) {
-      if (asStringArray(entry.group_ids).length === 0 && fallback === undefined) fallback = value;
-      continue;
-    }
-    for (const pid of targets) if (!byProduct.has(pid)) byProduct.set(pid, value);
-  }
-  return new ProductMap(byProduct, fallback);
-}
-
-/** Only threats with category "impact" carry an impact statement. */
-function threatImpactsByProduct(node: unknown, groups: Map<string, string[]>): Map<string, string> {
-  const byProduct = new Map<string, string>();
-  let fallback: string | undefined;
-  for (const entry of asRecordArray(node)) {
-    if (asString(entry.category) !== 'impact') continue;
-    const value = asString(entry.details);
-    if (value === undefined) continue;
-    const targets = targetProducts(entry, groups);
-    if (targets.length === 0) {
-      if (asStringArray(entry.group_ids).length === 0 && fallback === undefined) fallback = value;
+      if (documentWide && asStringArray(entry.group_ids).length === 0 && fallback === undefined) fallback = value;
       continue;
     }
     for (const pid of targets) if (!byProduct.has(pid)) byProduct.set(pid, value);

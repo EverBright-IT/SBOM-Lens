@@ -115,6 +115,29 @@ describe('CSAF through the ingest funnel', () => {
     });
   });
 
+  it('commits a folder of advisories as one batch with one summary', async () => {
+    const before = useAppStore.getState().toasts.length;
+    await ingestBuffers([
+      { fileName: 'a.csaf.json', buffer: buf(CSAF) },
+      { fileName: 'b.csaf.json', buffer: buf(CSAF.replace('ACME-CSAF-1', 'ACME-CSAF-2')) },
+    ]);
+    const state = useAppStore.getState();
+    expect(state.vex.documents.map((d) => d.trackingId)).toEqual(['ACME-CSAF-1', 'ACME-CSAF-2']);
+    expect(state.toasts.length - before).toBe(1);
+    expect(state.toasts[state.toasts.length - 1]!.message).toContain('2 advisory documents loaded');
+  });
+
+  it('records an advisory with a spec finding as loaded, not as a failure', async () => {
+    const broken = CSAF.replace('"known_affected":["CSAFPID-1"]', '"known_affected":["CSAFPID-1","CSAFPID-404"]');
+    expect(broken).not.toBe(CSAF);
+    await ingestBuffers([{ fileName: 'broken.csaf.json', buffer: buf(broken) }]);
+    const state = useAppStore.getState();
+    expect(state.vex.documents).toHaveLength(1);
+    const failure = state.failures.find((f) => f.fileName === 'broken.csaf.json');
+    expect(failure?.loaded).toBe(true);
+    expect(failure?.diagnostics.map((d) => d.code)).toContain('CSAF_SCHEMA_UNDEFINED_PRODUCT_ID');
+  });
+
   it('lets CSAF and OpenVEX overlays coexist on the same package', async () => {
     const openvex = JSON.stringify({
       '@context': 'https://openvex.dev/ns/v0.2.0',

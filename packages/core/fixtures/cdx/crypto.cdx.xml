@@ -27,6 +27,7 @@
             <cryptoFunction>encrypt</cryptoFunction>
             <cryptoFunction>decrypt</cryptoFunction>
           </cryptoFunctions>
+          <certificationLevel>fips140-3-l1</certificationLevel>
           <classicalSecurityLevel>256</classicalSecurityLevel>
           <nistQuantumSecurityLevel>5</nistQuantumSecurityLevel>
         </algorithmProperties>
@@ -94,6 +95,7 @@
           <notValidAfter>2027-01-01T00:00:00Z</notValidAfter>
           <certificateFormat>X.509</certificateFormat>
           <certificateFileExtension>pem</certificateFileExtension>
+          <fingerprint alg="SHA-256">aabb00112233445566778899aabbccddeeff00112233445566778899aabbccdd</fingerprint>
           <certificateState>
             <state>active</state>
           </certificateState>
@@ -152,6 +154,9 @@
       </cryptoProperties>
     </component>
     <component type="library" bom-ref="lib-openssl">
+      <authors>
+        <author><name>OpenSSL Project</name></author>
+      </authors>
       <name>openssl</name>
       <version>3.3.1</version>
       <hashes>

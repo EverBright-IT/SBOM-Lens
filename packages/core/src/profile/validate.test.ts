@@ -235,3 +235,35 @@ describe('schema v3: requires with format-baseline lists', () => {
     }
   });
 });
+
+describe('coverage modifiers stay with their check type', () => {
+  const v5 = (check: Record<string, unknown>): string[] => {
+    const result = validateProfile({ schema: 'sbomlens-profile/v5', name: 'x', checks: [check] });
+    return result.ok ? [] : result.errors;
+  };
+
+  it('rejects informational on crypto-coverage (omit threshold instead)', () => {
+    expect(v5({ type: 'crypto-coverage', field: 'family', informational: true })).toEqual([
+      'checks[0]: "informational" does not apply to "crypto-coverage" (omit "threshold" instead)',
+    ]);
+  });
+
+  it('rejects crypto filters on package-coverage', () => {
+    expect(v5({ type: 'package-coverage', field: 'version', families: ['AES'] })).toEqual([
+      'checks[0]: "families" only applies to "crypto-coverage"',
+    ]);
+  });
+
+  it('rejects package modifiers on crypto-coverage', () => {
+    expect(v5({ type: 'crypto-coverage', field: 'family', purposes: ['MODEL'] })).toEqual([
+      'checks[0]: "purposes" does not apply to "crypto-coverage"',
+    ]);
+    expect(v5({ type: 'crypto-coverage', field: 'family', licenseIds: 'known' })).toEqual([
+      'checks[0]: "licenseIds" does not apply to "crypto-coverage"',
+    ]);
+  });
+
+  it('accepts the name field on crypto-coverage with a pattern', () => {
+    expect(v5({ type: 'crypto-coverage', field: 'name', pattern: 'ML-?KEM' })).toEqual([]);
+  });
+});

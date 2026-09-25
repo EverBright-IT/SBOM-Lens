@@ -31,6 +31,10 @@ const MAX_VALUE_LENGTH = 200;
 const MAX_ID = 64;
 const MAX_AGE_DAYS = 36500;
 
+/** Modifiers that belong to one coverage type; on the other one they are a mistake, never silently dropped. */
+const CRYPTO_ONLY_KEYS = ['assetTypes', 'primitives', 'families'] as const;
+const PACKAGE_ONLY_KEYS = ['purposes', 'licenseIds', 'allowDeprecated', 'algorithms'] as const;
+
 const DOCUMENT_FIELDS: readonly DocumentField[] = [
   'name',
   'namespace',
@@ -242,6 +246,12 @@ function validateCheck(
         errors.push(`${at}: pattern/values do not apply to non-string field "${field}"`);
         return null;
       }
+      for (const key of CRYPTO_ONLY_KEYS) {
+        if (entry[key] !== undefined) {
+          errors.push(`${at}: "${key}" only applies to "crypto-coverage"`);
+          return null;
+        }
+      }
       const threshold = validateThreshold(entry.threshold, at, errors);
       if (threshold === null) return null;
       const algorithms = validateAlgorithms(entry.algorithms, field, at, errors, level);
@@ -273,6 +283,12 @@ function validateCheck(
       if ((pattern || values) && !STRING_CRYPTO_FIELDS.includes(field)) {
         errors.push(`${at}: pattern/values do not apply to non-string crypto field "${field}"`);
         return null;
+      }
+      for (const key of PACKAGE_ONLY_KEYS) {
+        if (entry[key] !== undefined) {
+          errors.push(`${at}: "${key}" does not apply to "crypto-coverage"`);
+          return null;
+        }
       }
       const threshold = validateThreshold(entry.threshold, at, errors);
       if (threshold === null) return null;
@@ -352,8 +368,8 @@ function validateInformational(
     errors.push(`${at}: "informational" requires schema "${PROFILE_SCHEMA_V4}"`);
     return undefined;
   }
-  if (type === 'package-coverage') {
-    errors.push(`${at}: "informational" does not apply to "package-coverage" (omit "threshold" instead)`);
+  if (type === 'package-coverage' || type === 'crypto-coverage') {
+    errors.push(`${at}: "informational" does not apply to "${type}" (omit "threshold" instead)`);
     return undefined;
   }
   return raw ? true : undefined;

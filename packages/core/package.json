@@ -1,6 +1,6 @@
 {
   "name": "@sbomlens/core",
-  "version": "0.29.0",
+  "version": "0.29.1",
   "description": "Framework-free SPDX model, parsers, cascade resolution, and analysis for SBOM Lens.",
   "license": "Apache-2.0",
   "private": true,
@@ -13,9 +13,13 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "generate:spec-docs": "node scripts/extract-spec-docs.mjs",
-    "generate:ocm-fixtures": "node scripts/generate-ocm-fixtures.mjs"
+    "generate:ocm-fixtures": "node scripts/generate-ocm-fixtures.mjs",
+    "generate:license-ids": "node scripts/extract-license-ids.mjs",
+    "generate:crypto-registry": "node scripts/extract-crypto-registry.mjs"
   },
   "devDependencies": {
+    "spdx-exceptions": "2.5.0",
+    "spdx-license-ids": "3.0.23",
     "yaml": "^2.9.0"
   }
 }

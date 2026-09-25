@@ -4,6 +4,115 @@ All notable changes to SBOM Lens. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [SemVer](https://semver.org) (0.x: the API surface is the app itself).
 
+## [0.29.1] - 2026-09-25
+
+### Fixed
+- **BSI TR-03183-2 licence preset mapped as the TR maps it.** Appendix 8.2
+  of the TR puts the distribution licence (5.2.2, required) on SPDX 3
+  `hasConcludedLicense` and the CycloneDX acknowledgement `concluded`, the
+  original licence (5.2.4) on `hasDeclaredLicense` / `declared`, and the
+  effective licence (5.2.5) on the property `bsi:component:effectiveLicense`.
+  The preset had the first two swapped. It now gates the concluded field,
+  meters the declared one as the original licence, and meters the property;
+  a CycloneDX licence entry without acknowledgement counts as declared, so
+  a BOM that omits the acknowledgement fails the distribution gate, which
+  the description says.
+- **BSI TR-02102-1 preset.** Rows that read a parameter set, mode or curve
+  identify the algorithm through the CycloneDX 1.7 `algorithmFamily` and
+  read none in scope on a 1.6 CBOM; the rows on the scheme itself now read
+  the asset name (new crypto field `name`), so 1.6 and 1.7 BOMs both count
+  and FrodoKEM and Classic McEliece, which the registry does not list,
+  count too. Table attributions were checked against the PDF: MQV and
+  ElGamal are not in Table 2.2 and are gone from the filters, DSA is cited
+  from 5.3.2 (recommended only until 2029), AES-GCM-SIV is in Table 3.2
+  but has no CycloneDX mode value, which the row says. The curve-order
+  pattern no longer matches a bit length inside an OID. Verdict vocabulary
+  left the labels and descriptions of all four crypto presets, and a test
+  keeps it out.
+- The EU PQC roadmap preset quotes the roadmap's third milestone as "as
+  many systems as feasible by the end of 2035" and drops the row that every
+  schema-valid BOM satisfied (asset kind stated; the schema lint reports a
+  missing one); the PCI preset drops its equally tautological "protocols
+  listed as assets" row. The DORA preset attributes the renewal duty to
+  Article 7(5), the register to 7(4). The FDA preset lists every property
+  name it reads. The Automotive preset no longer claims SPDX 2.x cannot
+  express an SBOM type, only that it has no dedicated field.
+- `certificateSignature` counts a related asset typed `algorithm` when it
+  points at a signature primitive; `values` on `crypto-coverage` compare
+  case-insensitively, like the filters. The validator rejects
+  `informational` on `crypto-coverage`, crypto filters on
+  `package-coverage` and package modifiers on `crypto-coverage` instead of
+  dropping them silently.
+- The quality report and its Markdown export list crypto-asset meters
+  under their own heading with the number of cryptographic assets, mark
+  informational document facts as such, and count meters with nothing in
+  scope.
+- CSAF: a product identified by a purl and file hashes, or by hashes alone,
+  was filed once per key, so one statement counted as a superseded
+  duplicate and the match was attributed to the wrong key. One candidate is
+  now filed under every key; a finding names the first of purl, CPE, hash.
+- CSAF: a remediation or flag without `product_ids` and `group_ids` was
+  applied to every product of the vulnerability, including the ones marked
+  not affected. The standard makes that a violation (mandatory tests 6.1.29
+  and 6.1.32); it is now reported as `CSAF_SCHEMA_UNTARGETED_REMEDIATION`
+  or `CSAF_SCHEMA_UNTARGETED_FLAG` and applied to nobody. Threats without
+  a target still describe the vulnerability for every product.
+- CSAF: `CSAF_SCHEMA_UNDEFINED_PRODUCT_ID` reported relationship products
+  that the tree defines but that do not resolve to an identifier, and
+  missed the product_groups and relationship references 6.1.1 names.
+- CSAF: the TLP chip expected `TLP:RED`-style labels; the standard's labels
+  are `RED`, `AMBER`, `GREEN`, `WHITE` (and `AMBER+STRICT`, `CLEAR` in 2.1).
+  The demo advisory and fixtures carried the invalid spelling.
+- CSAF: documents are keyed by publisher namespace plus tracking id, the
+  globally unique form the standard defines; the tracking id stays
+  visible.
+- CSAF: a product tree nested thousands of levels deep exhausted the stack
+  and lost the whole drop; the walks are bounded now, and a parser failure
+  on one advisory no longer aborts the batch.
+- CSAF: dropping a folder of advisories recomputed the overlay and raised a
+  toast once per file; a batch now commits once with one summary.
+- TR-03191 measurement: clauses with nothing to apply to (no
+  vulnerabilities, no referenced products) read as not applicable instead
+  of failed; `recommended` counts as a fixing version; the incident-response
+  profile is accepted; the version-range count is a fact without a verdict;
+  product hashes resolve through relationships like the matcher does.
+- Hash matching applies to packages only: a product hash names a delivered
+  artifact, and a file element with the same bytes must not carry the
+  statement. Coverage keeps classifying by purl and CPE.
+- CycloneDX XML: `certificationLevel`, `certificateState` and `cryptoRef`
+  with a single occurrence, certificate and key `fingerprint`, component
+  `authors` and dependencies nested deeper than one level were lost or
+  misread; all map like their JSON twins now.
+- CycloneDX: a malformed percent-escape in a BOM-Link fragment refused the
+  whole document; it now stays verbatim.
+- CycloneDX: `CDX_SCHEMA_CRYPTO_MISSING_ASSET_TYPE` fired for a
+  cryptographic-asset component without any cryptoProperties, which the
+  schema allows; that case is a parser note now, the finding stays for a
+  cryptoProperties block without the required assetType. A family the
+  registry lists but the 1.7 JSON-schema enum lacks is named as such.
+- SPDX 3: `SPDX3_SCHEMA_BAD_LICENSE_EXPRESSION` rejected the lower-case
+  operators and `AdditionRef-` additions the 3.0.1 grammar allows; mapped
+  expressions now carry upper-case operators like the 2.x form.
+- SPDX 2: `LicenseRef-` definitions compare case-insensitively (Annex D.2),
+  and SPDX License List identifiers are matched case-insensitively wherever
+  the profiles and the Licenses view check them.
+- Advisory links: only http(s) URLs from a CSAF remediation become links.
+- Licenses view: the click-through matched the effective licence only,
+  so it could show fewer packages than the row counted; it now filters by
+  identifier across both licence fields, clears other facets first, and
+  the identifier chips are visible. The view filters by the search box and
+  names the SPDX License List version it used.
+- An advisory that loaded with a spec finding was listed as "(not loaded)"
+  in the diagnostics drawer.
+- A BOM whose XML nesting exceeded 64 levels was refused where the JSON
+  twin degraded; the XML reader now allows 160 levels, so nested assemblies
+  cap with `CDX_NESTING_CAPPED` like JSON.
+
+### Changed
+- The generated SPDX License List and Cryptography Registry modules have
+  npm scripts (`generate:license-ids`, `generate:crypto-registry`), pinned
+  source packages, and a CI check that the committed output is current.
+
 ## [0.29.0] - 2026-09-25
 
 ### Added
@@ -38,12 +147,6 @@ All notable changes to SBOM Lens. The format follows
   Five `CSAF_SCHEMA_*` spec findings cover the mandatory pieces the reader
   relies on, including product ids a vulnerability references but the tree
   never defines (mandatory test 6.1.1).
-
-### Fixed
-- A CSAF annotation aimed only at `group_ids` used to apply to every product
-  of the vulnerability; it now applies to the group's members, and an
-  unknown group to nobody.
-
 - **CBOM.** CycloneDX `cryptoProperties` (1.6 and 1.7) map into a crypto
   extension on the element: algorithm family, primitive, parameter set,
   curve, mode, execution environment, security levels; certificate subject,
@@ -70,6 +173,11 @@ All notable changes to SBOM Lens. The format follows
   (sole classical key agreement until the end of 2031, classical signatures
   until the end of 2035). Every check counts what the BOM states; a match is
   not a security verdict and an unmatched asset is not thereby insecure.
+
+### Fixed
+- A CSAF annotation aimed only at `group_ids` used to apply to every product
+  of the vulnerability; it now applies to the group's members, and an
+  unknown group to nobody.
 
 ### Changed
 - A coverage meter with nothing in scope reads "none in scope" instead of

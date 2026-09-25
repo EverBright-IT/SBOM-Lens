@@ -81,6 +81,10 @@ export interface CsafRequirementFinding {
   pass: boolean;
   /** What was observed, for the reader. */
   actual?: string;
+  /** False when the document has nothing the clause applies to (no vulnerabilities, no referenced products); `pass` is then meaningless. */
+  applicable?: boolean;
+  /** A counted fact the TR conditions on circumstances a file cannot show; reported, never pass or fail. */
+  informational?: boolean;
 }
 
 export interface VexDocument {
@@ -100,6 +104,12 @@ export interface VexDocument {
   tlp?: string;
   /** CSAF tracking.status: draft, interim, final. */
   status?: string;
+  /**
+   * CSAF tracking.id as published. `id` is the globally unique form the
+   * standard defines (publisher namespace plus tracking id), so two
+   * publishers reusing one tracking id never displace each other.
+   */
+  trackingId?: string;
   /** CSAF only: the TR-03191 requirements measured on this document. */
   tr03191?: CsafRequirementFinding[];
   statements: VexStatement[];
@@ -345,7 +355,16 @@ interface IndexedStatement {
   /** Position for deterministic tie-breaks: later loaded wins. */
   order: number;
   viaSubcomponent: boolean;
-  /** Version constraint of the matching product/subcomponent purl, if any. */
+}
+
+/**
+ * One index row: the candidate plus the version constraint of the key it was
+ * filed under. The SAME candidate object is filed under every key its
+ * product carries (purl, CPE, file hashes), so an element reachable through
+ * several keys sees one candidate, not one per key.
+ */
+interface IndexEntry {
+  candidate: IndexedStatement;
   version?: string;
 }
 
@@ -363,34 +382,28 @@ export function matchVex(
   ws: WorkspaceState,
   vexDocs: readonly VexDocument[],
 ): Map<ElementId, VexFinding[]> {
-  // purl package-key -> candidate statements (both exact-version and versionless).
-  const index = new Map<string, IndexedStatement[]>();
+  // match key -> index rows (both exact-version and versionless).
+  const index = new Map<string, IndexEntry[]>();
   let order = 0;
   for (const doc of vexDocs) {
     for (const statement of doc.statements) {
       const timestamp = statement.timestamp ?? doc.timestamp;
       for (const product of statement.products) {
-        addCandidate(index, product.id, {
+        const candidate: IndexedStatement = {
           statement,
           source: doc.id,
           sourceFile: doc.fileName,
           ...(timestamp !== undefined ? { timestamp } : {}),
           order: order++,
           viaSubcomponent: false,
-        });
+        };
+        // A product known only by its hashes carries a hash: pseudo-id; the
+        // hashes list below files it, so the id must not file it again.
+        if (!product.id.startsWith('hash:')) fileUnderRef(index, product.id, candidate);
         // A file hash names exact bytes: no version dimension, no wildcard.
-        for (const hash of product.hashes ?? []) {
-          pushCandidate(index, hashKey(hash.algorithm, hash.value), {
-            statement,
-            source: doc.id,
-            sourceFile: doc.fileName,
-            ...(timestamp !== undefined ? { timestamp } : {}),
-            order: order++,
-            viaSubcomponent: false,
-          });
-        }
+        for (const hash of product.hashes ?? []) fileUnder(index, hashKey(hash.algorithm, hash.value), candidate);
         for (const sub of product.subcomponents) {
-          addCandidate(index, sub, {
+          fileUnderRef(index, sub, {
             statement,
             source: doc.id,
             sourceFile: doc.fileName,
@@ -412,13 +425,13 @@ export function matchVex(
 
       // A versioned VEX identifier must match the element's version exactly;
       // a versionless one covers every version. An element reachable through
-      // both its purl and a CPE must not double-count one statement — the
-      // Set collapses candidates that arrive via more than one key.
+      // several keys sees each candidate once; the first key in purl, CPE,
+      // hash order says how it matched.
       const applicable = new Map<IndexedStatement, VexFinding['matchedBy']>();
       for (const key of keys) {
-        for (const c of index.get(key.id) ?? []) {
-          if (c.version === undefined || (key.version !== undefined && c.version === key.version)) {
-            if (!applicable.has(c)) applicable.set(c, key.kind);
+        for (const entry of index.get(key.id) ?? []) {
+          if (entry.version === undefined || (key.version !== undefined && entry.version === key.version)) {
+            if (!applicable.has(entry.candidate)) applicable.set(entry.candidate, key.kind);
           }
         }
       }
@@ -462,19 +475,16 @@ export function matchVex(
   return findings;
 }
 
-function addCandidate(
-  index: Map<string, IndexedStatement[]>,
-  ref: string,
-  candidate: Omit<IndexedStatement, 'version'>,
-): void {
+/** Files a candidate under the match key of a purl, CPE or hash pseudo-id (ignored when it is none). */
+function fileUnderRef(index: Map<string, IndexEntry[]>, ref: string, candidate: IndexedStatement): void {
   const key = refMatchKey(ref);
   if (!key) return;
-  pushCandidate(index, key.id, key.version !== undefined ? { ...candidate, version: key.version } : candidate);
+  fileUnder(index, key.id, candidate, key.version);
 }
 
-function pushCandidate(index: Map<string, IndexedStatement[]>, id: string, candidate: IndexedStatement): void {
+function fileUnder(index: Map<string, IndexEntry[]>, id: string, candidate: IndexedStatement, version?: string): void {
   const list = index.get(id) ?? [];
-  list.push(candidate);
+  list.push(version !== undefined ? { candidate, version } : { candidate });
   index.set(id, list);
 }
 
@@ -509,8 +519,25 @@ function refMatchKey(ref: string): MatchKey | undefined {
   return undefined;
 }
 
-/** Every key an inventory element can be matched by: its purl, its CPEs, and its checksums. */
+/**
+ * Every key an inventory element can be matched by: its purl, its CPEs, and
+ * (packages only) its checksums. Files carry checksums too, but a CSAF
+ * product hash names a delivered artifact, which the inventory models as a
+ * package; matching files would spread one statement over every file of
+ * the same bytes.
+ */
 function elementMatchKeys(element: SbomElement): MatchKey[] {
+  const keys = identifierMatchKeys(element);
+  if (element.kind === 'package') {
+    for (const checksum of element.checksums ?? []) {
+      keys.push({ id: hashKey(checksum.algorithm, checksum.value), kind: 'hash' });
+    }
+  }
+  return keys;
+}
+
+/** The purl and CPE keys only: what coverage classifies by (a checksum alone does not make a package "matchable"). */
+function identifierMatchKeys(element: SbomElement): MatchKey[] {
   const keys: MatchKey[] = [];
   if (element.purl) {
     const purl = purlMatchKey(element.purl);
@@ -526,9 +553,6 @@ function elementMatchKeys(element: SbomElement): MatchKey[] {
           : { id: `cpe|${cpe.key}`, kind: 'cpe' },
       );
     }
-  }
-  for (const checksum of element.checksums ?? []) {
-    keys.push({ id: hashKey(checksum.algorithm, checksum.value), kind: 'hash' });
   }
   return keys;
 }
@@ -556,9 +580,13 @@ export function worstVexStatus(findings: readonly VexFinding[] | undefined): Vex
 export interface VexCoverage {
   /** Packages with at least one finding. */
   covered: number;
-  /** Packages whose purl/CPE yields a match key but no statement matched. */
+  /** Packages whose purl or CPE yields a match key but no statement matched. */
   uncovered: number;
-  /** Packages without a usable purl or CPE — no statement can ever match them. */
+  /**
+   * Packages without a usable purl or CPE. A checksum does not make a package
+   * matchable for this count (advisories rarely carry file hashes); a package
+   * that did match by hash counts as covered through its findings.
+   */
   unmatchable: number;
   /** All package elements considered (files never count). */
   total: number;
@@ -580,7 +608,7 @@ export function vexCoverage(
       if (element.kind !== 'package') continue;
       coverage.total++;
       if ((findings.get(element.id)?.length ?? 0) > 0) coverage.covered++;
-      else if (elementMatchKeys(element).length > 0) coverage.uncovered++;
+      else if (identifierMatchKeys(element).length > 0) coverage.uncovered++;
       else coverage.unmatchable++;
     }
   }

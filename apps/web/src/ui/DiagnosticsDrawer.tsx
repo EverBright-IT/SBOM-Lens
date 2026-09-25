@@ -47,7 +47,7 @@ export function DiagnosticsDrawer() {
         {failures
           .filter((failure) => visible(failure.diagnostics).length > 0)
           .map((failure, i) => (
-          <Group key={`failure-${i}`} title={`${failure.fileName} (not loaded)`}>
+          <Group key={`failure-${i}`} title={`${failure.fileName}${failure.loaded ? '' : ' (not loaded)'}`}>
             {visible(failure.diagnostics).map((d, j) => (
               <Row key={j} diagnostic={d} />
             ))}

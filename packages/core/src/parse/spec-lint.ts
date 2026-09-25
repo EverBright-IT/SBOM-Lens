@@ -172,6 +172,16 @@ const LOWERCASE_OPERATORS = new Set(['and', 'or', 'with']);
 const ID_TOKEN = /^[A-Za-z0-9.\-+]+$/;
 
 /**
+ * SPDX 3.0.1 widens the 2.3 grammar in two places: operators may be all
+ * lower case (`and`, `or`, `with`; 2.3 Annex D.2 requires upper case), and
+ * the operand of WITH may be a user-defined `AdditionRef-` reference,
+ * optionally prefixed `DocumentRef-x:`.
+ */
+export interface LicenseExpressionOptions {
+  spdx3?: boolean;
+}
+
+/**
  * Grammar of an SPDX license expression (Annex D): can the expression be
  * parsed at all (operators, parentheses, LicenseRef shape). Whether an
  * identifier is on the SPDX License List is NOT a spec-lint question — a
@@ -182,7 +192,7 @@ const ID_TOKEN = /^[A-Za-z0-9.\-+]+$/;
  *
  * Returns a human reason, or undefined when the expression parses.
  */
-export function licenseExpressionError(raw: string): string | undefined {
+export function licenseExpressionError(raw: string, options: LicenseExpressionOptions = {}): string | undefined {
   const expr = raw.trim();
   if (expr === '') return 'empty expression';
   if (LICENSE_LITERALS.has(expr)) return undefined;
@@ -212,10 +222,10 @@ export function licenseExpressionError(raw: string): string | undefined {
       if (depth < 0) return 'unbalanced parentheses';
       continue;
     }
-    if (OPERATORS.has(token)) {
+    if (OPERATORS.has(token) || (options.spdx3 && LOWERCASE_OPERATORS.has(token))) {
       if (expectOperand) return `operator "${token}" without a left-hand license`;
       expectOperand = true;
-      lastWasWith = token === 'WITH';
+      lastWasWith = token.toUpperCase() === 'WITH';
       continue;
     }
     if (LOWERCASE_OPERATORS.has(token)) {
@@ -224,7 +234,9 @@ export function licenseExpressionError(raw: string): string | undefined {
     // An operand. The two reference forms carry a `:` and are checked first,
     // since a plain idstring may not contain one.
     if (!expectOperand) return `missing operator before "${token}"`;
-    if (token.startsWith('DocumentRef-')) {
+    if (options.spdx3 && lastWasWith && /^(DocumentRef-[A-Za-z0-9.-]+:)?AdditionRef-[A-Za-z0-9.-]+$/.test(token)) {
+      // SPDX 3: a user-defined addition after WITH.
+    } else if (token.startsWith('DocumentRef-')) {
       if (!/^DocumentRef-[A-Za-z0-9.-]+:LicenseRef-[A-Za-z0-9.-]+$/.test(token)) {
         return `"${token}" is not a valid DocumentRef-…:LicenseRef-… reference`;
       }

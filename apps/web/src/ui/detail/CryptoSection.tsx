@@ -13,9 +13,13 @@ export function CryptoSection({ crypto, loaded }: { crypto: CryptoElementExt; lo
   const c = crypto.certificate;
   const m = crypto.material;
   const p = crypto.protocol;
-  const nameOf = (ref: string) => loaded.document.elements.find((e) => e.spdxId === ref)?.name ?? ref;
+  const elementFor = (ref: string) => {
+    const index = loaded.indexes.elementBySpdxId.get(ref);
+    return index === undefined ? undefined : loaded.document.elements[index];
+  };
+  const nameOf = (ref: string) => elementFor(ref)?.name ?? ref;
   const refLink = (ref: string) => {
-    const target = loaded.document.elements.find((e) => e.spdxId === ref);
+    const target = elementFor(ref);
     return target ? (
       <button
         type="button"
@@ -106,8 +110,8 @@ export function CryptoSection({ crypto, loaded }: { crypto: CryptoElementExt; lo
                 )}
                 {suite.algorithms && suite.algorithms.length > 0 && (
                   <div className="mt-0.5 flex flex-wrap gap-x-2 text-slate-500 dark:text-slate-400">
-                    {suite.algorithms.map((ref) => (
-                      <span key={ref}>{refLink(ref)}</span>
+                    {suite.algorithms.map((ref, j) => (
+                      <span key={`${j}:${ref}`}>{refLink(ref)}</span>
                     ))}
                   </div>
                 )}

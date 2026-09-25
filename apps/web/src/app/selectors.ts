@@ -42,7 +42,8 @@ const facetsMemo = memoLast(
     kinds: SearchFacets['kinds'],
     purposes: SearchFacets['purposes'],
     licenses: SearchFacets['licenses'],
-  ): SearchFacets => ({ docs, kinds, purposes, licenses }),
+    licenseIds: SearchFacets['licenseIds'],
+  ): SearchFacets => ({ docs, kinds, purposes, licenses, licenseIds }),
 );
 
 export function useSearchFacets(): SearchFacets {
@@ -50,7 +51,8 @@ export function useSearchFacets(): SearchFacets {
   const kinds = useAppStore((s) => s.facetKinds);
   const purposes = useAppStore((s) => s.facetPurposes);
   const licenses = useAppStore((s) => s.facetLicenses);
-  return facetsMemo(docs, kinds, purposes, licenses);
+  const licenseIds = useAppStore((s) => s.facetLicenseIds);
+  return facetsMemo(docs, kinds, purposes, licenses, licenseIds);
 }
 
 export function useSearchResults(activeQuery: string): SearchResult {
@@ -62,7 +64,7 @@ export function useSearchResults(activeQuery: string): SearchResult {
 
 export function hasSearchCriteria(query: string, facets: SearchFacets): boolean {
   return (
-    query.trim() !== '' || !!(facets.docs || facets.kinds || facets.purposes || facets.licenses)
+    query.trim() !== '' || !!(facets.docs || facets.kinds || facets.purposes || facets.licenses || facets.licenseIds)
   );
 }
 

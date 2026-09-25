@@ -155,7 +155,10 @@ function QualitySection({ ws, loaded }: { ws: WorkspaceState; loaded: LoadedDocu
   if (report.packagesTotal === 0) return null;
 
   const booleans = report.results.filter((r) => r.kind === 'boolean');
-  const coverages = report.results.filter((r) => r.coverage);
+  // Package meters and crypto-asset meters count different things; they
+  // render apart so a CBOM row is never read against the package count.
+  const packageMeters = report.results.filter((r) => r.coverage && r.subject !== 'crypto');
+  const cryptoMeters = report.results.filter((r) => r.coverage && r.subject === 'crypto');
   const issueParts = [
     issues.unresolvedStructuralRefs > 0 &&
       `${issues.unresolvedStructuralRefs} unresolved external reference(s)`,
@@ -273,16 +276,45 @@ function QualitySection({ ws, loaded }: { ws: WorkspaceState; loaded: LoadedDocu
             <span className={result.pass ? 'text-slate-600 dark:text-slate-300' : 'text-slate-400'}>
               {result.label}
             </span>
+            {result.informational && (
+              <span
+                className="shrink-0 rounded bg-slate-100 px-1 text-[9px] text-slate-400 dark:bg-slate-800"
+                title="Reported for the reader, never a gate"
+              >
+                info
+              </span>
+            )}
           </div>
         ))}
       </div>
-      <div className="mt-3 space-y-1.5">
-        {coverages.map((result) => (
-          <Meter key={result.id} result={result} />
-        ))}
-      </div>
+      {packageMeters.length > 0 && (
+        <div className="mt-3 space-y-1.5">
+          {packageMeters.map((result) => (
+            <Meter key={result.id} result={result} />
+          ))}
+        </div>
+      )}
+      {cryptoMeters.length > 0 && (
+        <div className="mt-3">
+          <p className="mb-1 text-[10px] font-medium tracking-wide text-slate-400 uppercase">
+            Cryptographic assets ({formatCount(report.cryptoAssetsTotal)})
+          </p>
+          <div className="space-y-1.5">
+            {cryptoMeters.map((result) => (
+              <Meter key={result.id} result={result} />
+            ))}
+          </div>
+        </div>
+      )}
       <p className="mt-2 text-[11px] text-slate-400">
-        Across {formatCount(report.packagesTotal)} package{report.packagesTotal === 1 ? '' : 's'} in this document.
+        Across {formatCount(report.packagesTotal)} package{report.packagesTotal === 1 ? '' : 's'}
+        {cryptoMeters.length > 0
+          ? ` and ${formatCount(report.cryptoAssetsTotal)} cryptographic asset${report.cryptoAssetsTotal === 1 ? '' : 's'}`
+          : ''}{' '}
+        in this document.
+        {report.noneInScope > 0
+          ? ` ${report.noneInScope} meter${report.noneInScope === 1 ? '' : 's'} with nothing in scope.`
+          : ''}
       </p>
       {issueParts.length > 0 && (
         <p className="mt-1 text-xs text-amber-700 dark:text-amber-400">{issueParts.join(' · ')}</p>

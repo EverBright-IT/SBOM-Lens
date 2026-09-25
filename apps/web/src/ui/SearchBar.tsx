@@ -13,7 +13,7 @@ const PLACEHOLDERS = {
   explore: 'Search packages across all documents...',
   map: 'Highlight documents in the map...',
   inventory: 'Filter the inventory...',
-  licenses: 'Search packages across all documents...',
+  licenses: 'Filter licence identifiers...',
   conflicts: 'Search packages across all documents...',
   diff: 'Search packages across all documents...',
 } as const;

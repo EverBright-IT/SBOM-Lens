@@ -117,8 +117,12 @@ export const LICENSE_PACKAGE_FIELDS: readonly PackageField[] = ['license', 'lice
  * v5: what a `crypto-coverage` check reads off a cryptographic asset
  * (CycloneDX cryptoProperties). Boolean-valued fields answer "is it stated";
  * string-valued ones carry the value so `pattern` / `values` can narrow it.
+ * `name` is the component name: the one place a 1.6 CBOM names its
+ * algorithm (algorithmFamily arrived in 1.7), and the only way to name a
+ * scheme the registry does not list (FrodoKEM, Classic McEliece).
  */
 export type CryptoField =
+  | 'name'
   | 'assetType'
   | 'primitive'
   | 'family'
@@ -142,6 +146,7 @@ export type CryptoField =
   | 'oid';
 
 export const CRYPTO_FIELDS: readonly CryptoField[] = [
+  'name',
   'assetType',
   'primitive',
   'family',
@@ -167,6 +172,7 @@ export const CRYPTO_FIELDS: readonly CryptoField[] = [
 
 /** Crypto fields whose extracted value is a string (pattern/values apply). */
 export const STRING_CRYPTO_FIELDS: readonly CryptoField[] = [
+  'name',
   'assetType',
   'primitive',
   'family',

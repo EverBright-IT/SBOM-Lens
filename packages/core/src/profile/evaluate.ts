@@ -31,6 +31,8 @@ export interface ProfileCheckResult {
   coverage?: CoverageStat;
   /** v4: a boolean check the profile marked as a meter; reported, never gated. */
   informational?: boolean;
+  /** v5: a crypto-coverage meter; its total counts cryptographic assets, not packages. */
+  subject?: 'crypto';
 }
 
 export interface ProfileReport {
@@ -40,11 +42,17 @@ export interface ProfileReport {
   /** The requirement source, so a reader can check the mapping themselves. */
   profileSpecUrl?: string;
   packagesTotal: number;
+  /** v5: elements carrying cryptoProperties, the scope crypto-coverage meters count over. */
+  cryptoAssetsTotal: number;
   results: ProfileCheckResult[];
   gatedPassed: number;
   gatedFailed: number;
   informational: number;
+  /** Coverage meters with nothing in scope (0/0), which pass by construction. */
+  noneInScope: number;
 }
+
+type CryptoElement = SbomElement & { crypto: CryptoElementExt };
 
 const MS_PER_DAY = 86_400_000;
 const ACTUAL_MAX = 120;
@@ -63,7 +71,9 @@ export function evaluateProfile(
   const doc = loaded.document;
   const now = opts?.now ?? Date.now();
   const packages = doc.elements.filter((el) => el.kind === 'package');
-  const cryptoAssets = doc.elements.map((el) => el.crypto).filter((c): c is CryptoElementExt => c !== undefined);
+  const cryptoElements = doc.elements.filter((el): el is CryptoElement => el.crypto !== undefined);
+  // Refs between assets (a certificate to its signature algorithm) resolve by bom-ref.
+  const cryptoByRef: ReadonlyMap<string, CryptoElementExt> = new Map(cryptoElements.map((el) => [el.spdxId, el.crypto]));
 
   // Preconditions gate FIRST: a requirement source that only accepts a
   // format must show that mismatch as a failing check, not bury it in the
@@ -141,17 +151,19 @@ export function evaluateProfile(
       case 'crypto-coverage': {
         // v5: the scope is every element carrying cryptoProperties, narrowed
         // by asset type, primitive and family; the total is what is in scope.
-        const scope = cryptoAssets.filter(
-          (c) =>
-            matchesFilter(c.assetType, check.assetTypes) &&
-            matchesFilter(c.algorithm?.primitive, check.primitives) &&
-            matchesFilter(c.algorithm?.family, check.families),
+        // `values` compare case-insensitively here, like the filters do: the
+        // vocabulary is the BOM author's spelling, not the profile's.
+        const scope = cryptoElements.filter(
+          (el) =>
+            matchesFilter(el.crypto.assetType, check.assetTypes) &&
+            matchesFilter(el.crypto.algorithm?.primitive, check.primitives) &&
+            matchesFilter(el.crypto.algorithm?.family, check.families),
         );
         let satisfied = 0;
-        for (const asset of scope) {
-          const value = extractCryptoField(asset, check.field);
+        for (const el of scope) {
+          const value = extractCryptoField(el, check.field, cryptoByRef);
           const present = typeof value === 'boolean' ? value : Boolean(value);
-          if (present && matchesModifiers(value, check.pattern, check.values)) satisfied++;
+          if (present && matchesModifiers(value, check.pattern, check.values, { caseInsensitiveValues: true })) satisfied++;
         }
         const total = scope.length;
         const percent = total === 0 ? 100 : Math.round((satisfied / total) * 100);
@@ -160,6 +172,7 @@ export function evaluateProfile(
           id,
           label,
           kind: 'coverage',
+          subject: 'crypto',
           pass,
           coverage: { satisfied, total, percent, threshold: check.threshold },
         };
@@ -172,11 +185,13 @@ export function evaluateProfile(
   let gatedPassed = 0;
   let gatedFailed = 0;
   let informational = 0;
+  let noneInScope = 0;
   for (const result of results) {
     const gated = (result.kind === 'boolean' && !result.informational) || result.coverage?.threshold !== undefined;
     if (!gated) informational++;
     else if (result.pass) gatedPassed++;
     else gatedFailed++;
+    if (result.coverage?.total === 0) noneInScope++;
   }
 
   return {
@@ -184,10 +199,12 @@ export function evaluateProfile(
     ...(profile.description ? { profileDescription: profile.description } : {}),
     ...(profile.specUrl ? { profileSpecUrl: profile.specUrl } : {}),
     packagesTotal: packages.length,
+    cryptoAssetsTotal: cryptoElements.length,
     results,
     gatedPassed,
     gatedFailed,
     informational,
+    noneInScope,
   };
 }
 
@@ -205,9 +222,20 @@ function matchesFilter(value: string | undefined, wanted: string[] | undefined):
   return wanted.some((w) => w.toLowerCase() === lower);
 }
 
-/** What a crypto asset states for a field: a value for string fields, presence for the rest. */
-function extractCryptoField(c: CryptoElementExt, field: CryptoField): string | boolean | undefined {
+/**
+ * What a crypto asset states for a field: a value for string fields,
+ * presence for the rest. `name` is the component name, the one place a 1.6
+ * CBOM names its algorithm (algorithmFamily arrived in 1.7).
+ */
+function extractCryptoField(
+  el: CryptoElement,
+  field: CryptoField,
+  byRef: ReadonlyMap<string, CryptoElementExt>,
+): string | boolean | undefined {
+  const c = el.crypto;
   switch (field) {
+    case 'name':
+      return el.name;
     case 'assetType':
       return c.assetType;
     case 'primitive':
@@ -235,7 +263,14 @@ function extractCryptoField(c: CryptoElementExt, field: CryptoField): string | b
     case 'certificateState':
       return c.certificate?.states && c.certificate.states.length > 0 ? c.certificate.states.join(', ') : undefined;
     case 'certificateSignature':
-      return (c.related ?? []).some((r) => /signature/i.test(r.type));
+      // 1.6 signatureAlgorithmRef and a 1.7 relation typed signatureAlgorithm
+      // say it outright; a relation typed `algorithm` counts when it points
+      // at an asset whose primitive is signature.
+      return (c.related ?? []).some(
+        (r) =>
+          /signature/i.test(r.type) ||
+          (r.type.toLowerCase() === 'algorithm' && byRef.get(r.ref)?.algorithm?.primitive === 'signature'),
+      );
     case 'materialState':
       return c.material?.state;
     case 'materialExpiration':
@@ -377,8 +412,9 @@ function extractPackageField(
     case 'licenseConcluded':
       return element.licenseConcluded && !EMPTYISH.has(element.licenseConcluded) ? element.licenseConcluded : undefined;
     case 'properties':
-      // Rendered as "name=value" lines so a pattern can target one property,
-      // e.g. ^fda:lifecycle:support-level=.
+      // Rendered as "name=value" lines so a pattern can target one property.
+      // The value is multi-line and patterns run without flags, so anchor a
+      // name with (^|\n), e.g. (^|\n)fda:lifecycle:support-level=.
       return element.properties && element.properties.length > 0
         ? element.properties.map((p) => `${p.name}=${p.value}`).join('\n')
         : undefined;
@@ -396,15 +432,18 @@ function matchesModifiers(
   value: string | string[] | boolean | undefined,
   pattern?: string,
   values?: string[],
+  opts?: { caseInsensitiveValues?: boolean },
 ): boolean {
   if (pattern === undefined && values === undefined) return true;
   if (typeof value === 'boolean' || value === undefined) return true;
   const candidates = Array.isArray(value) ? value : [value];
   const regex = safeRegex(pattern);
+  const fold = (s: string) => (opts?.caseInsensitiveValues ? s.toLowerCase() : s);
+  const allowed = values?.map(fold);
   return candidates.some(
     (candidate) =>
       (regex === null || regex.test(candidate)) &&
-      (values === undefined || values.includes(candidate)),
+      (allowed === undefined || allowed.includes(fold(candidate))),
   );
 }
 

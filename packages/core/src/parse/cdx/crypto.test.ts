@@ -6,6 +6,7 @@ import { CRYPTO_BSI_TR02102_PROFILE } from '../../profile/crypto-bsi-tr02102';
 import { CRYPTO_DORA_PROFILE } from '../../profile/crypto-dora';
 import { CRYPTO_EU_ROADMAP_PROFILE } from '../../profile/crypto-eu-roadmap';
 import { CRYPTO_PCI_PROFILE } from '../../profile/crypto-pci';
+import { profileReportToMarkdown } from '../../profile/markdown';
 import { validateProfile } from '../../profile/validate';
 import { canonicalCurve, isKnownCryptoFamily, isKnownCurve, resolveCryptoFamily } from '../../spec/cdx-crypto-registry';
 import { parseDocument } from '../parser';
@@ -23,6 +24,7 @@ function load(fixture: string) {
 }
 
 const byRef = (doc: ReturnType<typeof load>['loaded']['document']) => Object.fromEntries(doc.elements.map((e) => [e.spdxId, e]));
+const SHA = 'aabb00112233445566778899aabbccddeeff00112233445566778899aabbccdd';
 
 describe('cryptoProperties mapping', () => {
   it('reads algorithms, certificates, material and protocols into the crypto extension', () => {
@@ -40,6 +42,7 @@ describe('cryptoProperties mapping', () => {
         executionEnvironment: 'software-plain-ram',
         implementationPlatform: 'x86_64',
         cryptoFunctions: ['encrypt', 'decrypt'],
+        certificationLevel: ['fips140-3-l1'],
         classicalSecurityLevel: 256,
         nistQuantumSecurityLevel: 5,
       },
@@ -70,13 +73,89 @@ describe('cryptoProperties mapping', () => {
     expect(provides.every((r) => r.from.kind === 'local' && r.from.spdxId === 'lib-openssl')).toBe(true);
   });
 
-  it('reads the same CBOM from XML', () => {
+  it('reads the same CBOM from XML, including the unwrapped repeat elements, fingerprint and authors', () => {
     const json = load('cdx/crypto.cdx.json').loaded.document;
     const xml = load('cdx/crypto.cdx.xml').loaded.document;
     expect(xml.spec.serialization).toBe('xml');
-    const cryptoOf = (doc: typeof json) => doc.elements.map((e) => [e.spdxId, e.purpose, e.crypto]);
+    const cryptoOf = (doc: typeof json) => doc.elements.map((e) => [e.spdxId, e.purpose, e.originator, e.crypto]);
     expect(cryptoOf(xml)).toEqual(cryptoOf(json));
     expect(xml.relationships.filter((r) => r.type === 'PROVIDES')).toHaveLength(5);
+    expect(byRef(xml)['alg-aes']!.crypto!.algorithm?.certificationLevel).toEqual(['fips140-3-l1']);
+    expect(byRef(xml)['cert-server']!.crypto!.certificate?.fingerprint).toEqual({ algorithm: 'SHA-256', value: SHA });
+    expect(byRef(xml)['lib-openssl']!.originator).toBe('OpenSSL Project');
+  });
+
+  it('reads 1.6 XML protocol cryptoRef elements and dependencies nested deeper than one level', () => {
+    const xml = [
+      '<?xml version="1.0"?>',
+      '<bom xmlns="http://cyclonedx.org/schema/bom/1.6" version="1">',
+      '  <components>',
+      '    <component type="cryptographic-asset" bom-ref="tls"><name>TLS</name>',
+      '      <cryptoProperties><assetType>protocol</assetType>',
+      '        <protocolProperties><type>tls</type><version>1.2</version><cryptoRef>alg-aes</cryptoRef></protocolProperties>',
+      '      </cryptoProperties>',
+      '    </component>',
+      '    <component type="library" bom-ref="a"><name>a</name></component>',
+      '    <component type="library" bom-ref="b"><name>b</name></component>',
+      '    <component type="library" bom-ref="c"><name>c</name></component>',
+      '  </components>',
+      '  <dependencies>',
+      '    <dependency ref="a"><dependency ref="b"><dependency ref="c"/></dependency></dependency>',
+      '  </dependencies>',
+      '</bom>',
+    ].join('\n');
+    const result = parseDocument({ fileName: 'legacy.cdx.xml', text: xml, sha1: 'f'.repeat(40), byteSize: xml.length });
+    const e = byRef(result.document!);
+    expect(e['tls']!.crypto?.related).toEqual([{ type: 'protocolCrypto', ref: 'alg-aes' }]);
+    const deps = result
+      .document!.relationships.filter((r) => r.type === 'DEPENDS_ON')
+      .map((r) => [r.from.kind === 'local' ? r.from.spdxId : '?', r.to.kind === 'local' ? r.to.spdxId : '?'])
+      .sort();
+    expect(deps).toEqual([
+      ['a', 'b'],
+      ['b', 'c'],
+    ]);
+    // cryptoRef is the 1.6 field: no deprecation finding on a 1.6 BOM.
+    expect(result.diagnostics.map((d) => d.code)).not.toContain('CDX_SCHEMA_CRYPTO_DEPRECATED_FIELD');
+  });
+
+  it('notes a cryptographic-asset component without cryptoProperties instead of calling it a schema violation', () => {
+    const bom = JSON.stringify({
+      bomFormat: 'CycloneDX',
+      specVersion: '1.7',
+      version: 1,
+      components: [{ type: 'cryptographic-asset', 'bom-ref': 'x', name: 'x' }],
+    });
+    const result = parseDocument({ fileName: 'bare.cdx.json', text: bom, sha1: '1'.repeat(40), byteSize: bom.length });
+    const codes = result.diagnostics.map((d) => d.code);
+    expect(codes).toContain('CDX_CRYPTO_PROPERTIES_MISSING');
+    expect(codes).not.toContain('CDX_SCHEMA_CRYPTO_MISSING_ASSET_TYPE');
+  });
+
+  it('names a registry family the 1.7 JSON-schema enum lacks, and keeps a BOM-Link with a malformed escape verbatim', () => {
+    const bom = JSON.stringify({
+      bomFormat: 'CycloneDX',
+      specVersion: '1.7',
+      version: 1,
+      components: [
+        {
+          type: 'cryptographic-asset',
+          'bom-ref': 'kdf',
+          name: 'TLS PRF',
+          cryptoProperties: { assetType: 'algorithm', algorithmProperties: { primitive: 'kdf', algorithmFamily: 'TLS-PRF' } },
+        },
+        {
+          type: 'library',
+          'bom-ref': 'lib',
+          name: 'lib',
+          externalReferences: [{ type: 'bom', url: 'urn:cdx:3e671687-395b-41f5-a30f-a58921a69b79/1#%E0%A4%A' }],
+        },
+      ],
+    });
+    const result = parseDocument({ fileName: 'enum.cdx.json', text: bom, sha1: '2'.repeat(40), byteSize: bom.length });
+    expect(result.document).not.toBeNull();
+    const finding = result.diagnostics.find((d) => d.code === 'CDX_SCHEMA_CRYPTO_UNKNOWN_FAMILY')!;
+    expect(finding.message).toContain('TLS-PRF (in the registry, not in the 1.7 JSON-schema enum)');
   });
 
   it('keeps the 1.6 fields that 1.7 deprecated, without a finding on a 1.6 BOM', () => {
@@ -148,7 +227,6 @@ describe('crypto profiles', () => {
     const report = evaluateProfile(ws, loaded, CRYPTO_EU_ROADMAP_PROFILE);
     const r = Object.fromEntries(report.results.map((x) => [x.id, x]));
     expect(r['format-baseline']!.pass).toBe(true);
-    expect(r['asset-type']!.coverage).toMatchObject({ satisfied: 8, total: 8 });
     expect(r['algorithm-family']!.coverage).toMatchObject({ satisfied: 5, total: 5 });
     expect(r['algorithm-security-level']!.coverage).toMatchObject({ satisfied: 2, total: 5 });
     expect(r['quantum-safe-kem']!.coverage).toMatchObject({ satisfied: 1, total: 2 }); // ML-KEM yes, ECDH no
@@ -178,12 +256,82 @@ describe('crypto profiles', () => {
     expect(r['aes-mode']!.coverage).toMatchObject({ satisfied: 1, total: 1 });
     expect(r['hash-family']!.coverage).toMatchObject({ satisfied: 0, total: 1 }); // SHA-1 is not SHA-2/SHA-3
     expect(r['hash-length']!.coverage).toMatchObject({ satisfied: 0, total: 0 }); // no SHA-2/3 asset in scope
-    expect(r['pq-kem']!.coverage).toMatchObject({ satisfied: 1, total: 1 }); // ML-KEM-768
-    expect(r['classical-key-agreement']!.coverage).toMatchObject({ satisfied: 1, total: 2 }); // ECDH of ECDH + ML-KEM
-    expect(r['pq-signature-family']!.coverage).toMatchObject({ satisfied: 0, total: 1 });
+    expect(r['pq-kem-parameter-set']!.coverage).toMatchObject({ satisfied: 1, total: 2 }); // ML-KEM-768 named; ECDH is not
+    expect(r['ml-kem-parameter-set']!.coverage).toMatchObject({ satisfied: 1, total: 1 });
+    expect(r['key-agreement-quantum-safe']!.coverage).toMatchObject({ satisfied: 1, total: 2 }); // ML-KEM of ECDH + ML-KEM
+    expect(r['block-cipher-aes']!.coverage).toMatchObject({ satisfied: 1, total: 1 });
+    expect(r['pq-signature']!.coverage).toMatchObject({ satisfied: 0, total: 1 });
     expect(r['ml-dsa-parameter-set']!.coverage).toMatchObject({ satisfied: 0, total: 0 });
     expect(r['ml-dsa-parameter-set']!.pass).toBe(true);
-    for (const result of Object.values(r)) expect(result.label + (result.coverage ? '' : '')).not.toMatch(/insecure|unsafe|non-compliant/i);
+  });
+
+  it('never rates: no verdict vocabulary in any label or description', () => {
+    const verdicts = /insecure|unsafe|non-compliant|advisable|weak|broken|compliant with/i;
+    for (const profile of all) {
+      expect(profile.description).not.toMatch(verdicts);
+      for (const check of profile.checks) expect(check.label ?? '').not.toMatch(verdicts);
+    }
+  });
+
+  it('reads names where 1.6 has no family field, and family rows say none in scope there', () => {
+    const bom = JSON.stringify({
+      bomFormat: 'CycloneDX',
+      specVersion: '1.6',
+      version: 1,
+      components: [
+        { type: 'cryptographic-asset', 'bom-ref': 'aes', name: 'AES-128-GCM', cryptoProperties: { assetType: 'algorithm', algorithmProperties: { primitive: 'ae', parameterSetIdentifier: '128', mode: 'gcm' } } },
+        { type: 'cryptographic-asset', 'bom-ref': 'kem', name: 'mlkem768', cryptoProperties: { assetType: 'algorithm', algorithmProperties: { primitive: 'kem' } } },
+        { type: 'cryptographic-asset', 'bom-ref': 'sig', name: 'RSA-2048', cryptoProperties: { assetType: 'algorithm', algorithmProperties: { primitive: 'signature', parameterSetIdentifier: '2048' } } },
+        { type: 'cryptographic-asset', 'bom-ref': 'hash', name: 'sha256', cryptoProperties: { assetType: 'algorithm', algorithmProperties: { primitive: 'hash' } } },
+      ],
+    });
+    const loaded = loadedFromText('legacy.cdx.json', bom);
+    const ws = addDocument(emptyWorkspace, loaded).workspace;
+    const report = evaluateProfile(ws, loaded, CRYPTO_BSI_TR02102_PROFILE);
+    const r = Object.fromEntries(report.results.map((x) => [x.id, x]));
+    expect(r['aes-key-length']!.coverage).toMatchObject({ satisfied: 0, total: 0 }); // the families filter needs 1.7 algorithmFamily
+    expect(r['block-cipher-aes']!.coverage).toMatchObject({ satisfied: 1, total: 1 });
+    expect(r['key-agreement-quantum-safe']!.coverage).toMatchObject({ satisfied: 1, total: 1 });
+    expect(r['pq-kem-parameter-set']!.coverage).toMatchObject({ satisfied: 1, total: 1 });
+    expect(r['pq-signature']!.coverage).toMatchObject({ satisfied: 0, total: 1 });
+    expect(r['hash-family']!.coverage).toMatchObject({ satisfied: 1, total: 1 });
+    expect(report.cryptoAssetsTotal).toBe(4);
+    expect(report.noneInScope).toBeGreaterThan(0);
+    const meters = report.results.filter((x) => x.kind === 'coverage');
+    expect(meters.every((x) => x.subject === 'crypto')).toBe(true);
+    const eu = Object.fromEntries(evaluateProfile(ws, loaded, CRYPTO_EU_ROADMAP_PROFILE).results.map((x) => [x.id, x]));
+    expect(eu['quantum-safe-kem']!.coverage).toMatchObject({ satisfied: 1, total: 1 });
+    expect(eu['algorithm-family']!.coverage).toMatchObject({ satisfied: 0, total: 4 });
+  });
+
+  it('compares crypto values case-insensitively and accepts an algorithm-typed signature link', () => {
+    const bom = JSON.stringify({
+      bomFormat: 'CycloneDX',
+      specVersion: '1.7',
+      version: 1,
+      components: [
+        { type: 'cryptographic-asset', 'bom-ref': 'sig', name: 'ECDSA', cryptoProperties: { assetType: 'algorithm', algorithmProperties: { primitive: 'signature', algorithmFamily: 'ECDSA', ellipticCurve: 'nist/P-384' } } },
+        { type: 'cryptographic-asset', 'bom-ref': 'cert', name: 'leaf', cryptoProperties: { assetType: 'certificate', certificateProperties: { subjectName: 'CN=leaf', relatedCryptographicAssets: [{ type: 'algorithm', ref: 'sig' }] } } },
+        { type: 'cryptographic-asset', 'bom-ref': 'aes', name: 'AES', cryptoProperties: { assetType: 'algorithm', algorithmProperties: { primitive: 'block-cipher', algorithmFamily: 'aes', mode: 'GCM' } } },
+        { type: 'cryptographic-asset', 'bom-ref': 'oid-curve', name: 'ECDH', cryptoProperties: { assetType: 'algorithm', algorithmProperties: { primitive: 'key-agree', algorithmFamily: 'ECDH', ellipticCurve: '1.2.840.10045.3.1.7' } } },
+      ],
+    });
+    const loaded = loadedFromText('mixed.cdx.json', bom);
+    const ws = addDocument(emptyWorkspace, loaded).workspace;
+    const dora = Object.fromEntries(evaluateProfile(ws, loaded, CRYPTO_DORA_PROFILE).results.map((x) => [x.id, x]));
+    expect(dora['certificate-signature']!.coverage).toMatchObject({ satisfied: 1, total: 1 });
+    const tr = Object.fromEntries(evaluateProfile(ws, loaded, CRYPTO_BSI_TR02102_PROFILE).results.map((x) => [x.id, x]));
+    expect(tr['aes-mode']!.coverage).toMatchObject({ satisfied: 1, total: 1 }); // "GCM" against the profile's "gcm"
+    // P-384 counts; an OID in place of a curve name does not match a bit length by accident.
+    expect(tr['ec-order']!.coverage).toMatchObject({ satisfied: 1, total: 2 });
+  });
+
+  it('splits package and crypto meters in the Markdown export and marks informational facts', () => {
+    const { ws, loaded } = load('cdx/crypto.cdx.json');
+    const md = profileReportToMarkdown(evaluateProfile(ws, loaded, CRYPTO_PCI_PROFILE), { docName: 'x' });
+    expect(md).toContain('## Cryptographic asset coverage (8 assets)');
+    expect(md).not.toContain('## Package coverage');
+    expect(md).toContain('(informational)');
   });
 
   it('reads none in scope on an SBOM without cryptographic assets', () => {

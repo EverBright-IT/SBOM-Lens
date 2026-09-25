@@ -53,14 +53,14 @@ describe('parseXml', () => {
     });
 
     it('nesting beyond the cap', () => {
-      const deep = '<a>'.repeat(70) + '</a>'.repeat(70);
+      const deep = '<a>'.repeat(170) + '</a>'.repeat(170);
       try {
         parseXml(deep);
         expect.unreachable();
       } catch (e) {
         expect((e as XmlError).code).toBe('XML_TOO_DEEP');
       }
-      expect(() => parseXml(deep, { maxDepth: 100 })).not.toThrow();
+      expect(() => parseXml(deep, { maxDepth: 200 })).not.toThrow();
     });
   });
 

@@ -31,6 +31,7 @@
     </component>
     <component type="cryptographic-asset" bom-ref="crypto-2">
       <name>untyped-asset</name>
+      <cryptoProperties><algorithmProperties><primitive>hash</primitive></algorithmProperties></cryptoProperties>
     </component>
     <component type="microservice" bom-ref="component-1">
       <name>webserver</name>

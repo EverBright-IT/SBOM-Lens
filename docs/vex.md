@@ -23,9 +23,11 @@ arbitrated by the same time rule.
 - **Inventory**: a VEX column with the package's worst status, status
   filter chips (including *no statement*), and both exports (CSV/JSON)
   carry the findings.
-- **Per document**: a *VEX documents* overview with statement counts and
-  one-click removal; the overlay recomputes live as SBOMs and VEX
-  documents come and go.
+- **Per document**: a *VEX and advisory documents* overview with format,
+  profile, TLP label, statement counts, the TR-03191 measurement for CSAF
+  and one-click removal; the overlay recomputes live as SBOMs and
+  advisories come and go. Advisories dropped before any SBOM are listed
+  on the start screen until an inventory arrives.
 
 Statuses render exactly as OpenVEX defines them: `affected` (red),
 `under_investigation` (amber), `fixed` (emerald), `not_affected` (slate).
@@ -70,28 +72,40 @@ id. SBOM Lens resolves that indirection before matching:
 
 Every CSAF document is measured against the machine-checkable clauses of
 [BSI TR-03191](https://www.bsi.bund.de/SharedDocs/Downloads/EN/BSI/Publications/TechGuidelines/TR03191/BSI-TR-03191.html)
-(v1.0.1): a CVE and a CVSS for every vulnerability, the Security Advisory or
-VEX profile, fixing versions stated next to the affected ones (or a no-fix
-remediation), the TLP label (4.3), a vendor / product_name / product_version
-tree, enumerated versions rather than ranges, file hashes of the referenced
-products (4.4, "where an SBOM is mandatory"), and `current_release_date`
-with a `revision_history` (4.6). The result is a list of facts with clause
-numbers under each document, never a conformance verdict: distribution as a
-trusted provider, signature validity windows and the 48-hour reaction to BSI
-warnings cannot be read off a file and are not measured.
+(v1.0.1): a CVE and a CVSS for every vulnerability, the Security Advisory,
+VEX or Security Incident Response profile, fixing versions as `fixed`,
+`first_fixed` or `recommended` status next to the affected ones (or a
+no-fix remediation), the TLP label (4.3), a vendor / product_name /
+product_version tree, file hashes of the referenced products (4.4, "where
+an SBOM is mandatory", resolved through relationships like the matcher
+does), and `current_release_date` with a `revision_history` (4.6). The
+result is a list of facts with clause numbers under each document, never a
+conformance verdict. A clause with nothing to apply to (no vulnerabilities,
+no referenced products) reads as not applicable rather than as failed, and
+the count of version ranges is reported without a verdict, because the TR
+allows ranges where enumeration is impossible and a file cannot show which
+case applies. Distribution as a trusted provider, signature validity
+windows and the 48-hour reaction to BSI warnings cannot be read off a file
+and are not measured.
 
 A handful of CSAF schema facts this reader relies on are reported as spec
 findings (`CSAF_SCHEMA_*`): the 2.x version, the mandatory tracking and
-publisher fields, the CVE id pattern, and product ids that a vulnerability
-references but the product tree never defines (mandatory test 6.1.1). This
-is not a schema validator; the OASIS csaf-validator owns that.
+publisher fields, the CVE id pattern, product ids referenced anywhere but
+never defined in the product tree (mandatory test 6.1.1), and remediations
+or flags that name no product (6.1.29, 6.1.32). This is not a schema
+validator; the OASIS csaf-validator owns that.
 
 ## Matching rules (deliberately conservative)
 
-- Matching happens on **package URLs** (purl) and **CPEs**: the statement's
-  `products` (their `@id` or `identifiers.purl`/`.cpe23`/`.cpe22`) and
-  `subcomponents` against each element's purl and its SECURITY `cpe22Type`/
-  `cpe23Type` external references. Elements with neither never match.
+- Matching happens on **package URLs** (purl), **CPEs** and, for CSAF,
+  **file hashes**: the statement's `products` (their `@id` or
+  `identifiers.purl`/`.cpe23`/`.cpe22`, or the hashes of a CSAF
+  `product_identification_helper`) and `subcomponents` against each
+  element's purl, its SECURITY `cpe22Type`/`cpe23Type` external references
+  and, for packages, its checksums. A finding says which key matched
+  (`matchedBy`: purl, cpe or hash); a product reachable through several
+  keys yields one finding, attributed to the first of purl, CPE, hash.
+  Elements with none of these never match.
 - Normalisation: the purl **type and namespace are case-folded**, the name
   and version compare **exactly** (after percent-decoding); **qualifiers
   and subpath are ignored** on both sides.
@@ -119,20 +133,32 @@ earlier version — deliberately, so an updated advisory supersedes its
 predecessor. The flip side: two *different* advisories that sloppily share
 one `@id` displace each other in the viewer. OpenVEX requires document ids
 to be unique; if you need both loaded, give them distinct `@id`s (a
-programmatic consumer calling `matchVex` with its own list is unaffected). Each finding carries `source` (the document's @id) plus
-`sourceFile` as an unambiguous join key, and `supersededCount` says how
-many older statements the time rule discarded. `vexCoverage()` quantifies
-the counterpart: how many packages are covered, uncovered (matchable purl,
-no statement), or unmatchable (no usable purl).
+programmatic consumer calling `matchVex` with its own list is unaffected).
+A CSAF document is keyed by publisher namespace plus tracking id, the
+globally unique form the standard defines, so two publishers reusing one
+tracking id never displace each other. Each finding carries `source` (the
+document's id) plus `sourceFile` as an unambiguous join key, and
+`supersededCount` says how many older statements the time rule discarded.
+`vexCoverage()` quantifies the counterpart: how many packages are covered,
+uncovered (a purl or CPE to match on, no statement), or unmatchable (no
+usable purl or CPE; a checksum alone does not count, because advisories
+rarely carry file hashes, but a package that matched by hash counts as
+covered).
 
 ## Limits (deliberate)
 
 - **Matching is by purl, CPE and file hash.** CPE matching is name-exact:
   no NIST-style wildcard evaluation, no version ranges, no update/edition
-  comparison — a CPE the normalisation cannot pin to a concrete
+  comparison; a CPE the normalisation cannot pin to a concrete
   vendor+product stays unmatched rather than guessed. A hash matches only
-  the element whose checksum is byte-identical; there is no version
+  the package whose checksum is byte-identical (files are not matched by
+  hash: a product hash names a delivered artifact, and every file with the
+  same bytes would otherwise carry the statement); there is no version
   dimension to widen.
+- **Annotations reach only the products they name.** A CSAF remediation or
+  flag without `product_ids` or `group_ids` is a schema violation (mandatory
+  tests 6.1.29 and 6.1.32), reported as such, and applied to nobody; a
+  threat without either describes the vulnerability for every product.
 - CSAF `relationships` are resolved one level deep (to the component); a
   relationship whose reference is itself another relationship is not
   chased further.

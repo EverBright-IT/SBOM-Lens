@@ -27,7 +27,7 @@ describe('filterTree', () => {
   const ws = loadAll('cascade/leaf.spdx.json', 'cascade/mid.spdx', 'cascade/root.spdx');
 
   it('keeps matches plus their ancestor chain, in tree order, across documents', () => {
-    const result = filterTree(ws, 'busybox', { docs: null, kinds: null, purposes: null, licenses: null });
+    const result = filterTree(ws, 'busybox', { docs: null, kinds: null, purposes: null, licenses: null, licenseIds: null });
     // busybox lives in leaf.spdx.json, reached root → platform → webstack → runtime-image
     expect(rowNames(ws, result)).toEqual([
       'doc:acme-platform',
@@ -45,7 +45,7 @@ describe('filterTree', () => {
   });
 
   it('drops siblings that do not match and reports unreachable matches via shown < total', () => {
-    const result = filterTree(ws, 'openssl', { docs: null, kinds: null, purposes: null, licenses: null });
+    const result = filterTree(ws, 'openssl', { docs: null, kinds: null, purposes: null, licenses: null, licenseIds: null });
     const names = rowNames(ws, result);
     expect(names).toContain('openssl');
     expect(names).not.toContain('busybox');
@@ -53,7 +53,7 @@ describe('filterTree', () => {
   });
 
   it('respects the search limit', () => {
-    const result = filterTree(ws, 'a', { docs: null, kinds: null, purposes: null, licenses: null }, 2);
+    const result = filterTree(ws, 'a', { docs: null, kinds: null, purposes: null, licenses: null, licenseIds: null }, 2);
     expect(result.total).toBeGreaterThan(2);
     expect(result.shown).toBeLessThanOrEqual(2);
   });

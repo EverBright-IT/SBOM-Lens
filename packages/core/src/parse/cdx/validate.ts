@@ -1,5 +1,5 @@
 import type { Diagnostic } from '../../model/diagnostics';
-import { canonicalCurve, isKnownCryptoFamily, isKnownCurve, resolveCryptoFamily } from '../../spec/cdx-crypto-registry';
+import { canonicalCurve, cryptoFamily, isKnownCurve, resolveCryptoFamily } from '../../spec/cdx-crypto-registry';
 import { asRecordArray, asString, asStringArray, isRecord } from '../../util/narrow';
 import { checksumProblem, createLint, createTally, licenseExpressionError } from '../spec-lint';
 
@@ -124,12 +124,14 @@ export function validateCdxStructure(root: Record<string, unknown>): Diagnostic[
   // CBOM: the asset kind is mandatory, the closed vocabularies are checked as
   // such, and the two registry-backed names against the registry. 1.6 fields
   // that 1.7 deprecated count only on 1.7+ BOMs.
-  const visitCrypto = (name: string, type: string | undefined, cp: Record<string, unknown> | undefined) => {
-    if (type !== 'cryptographic-asset' && !cp) return;
-    const assetType = cp ? asString(cp.assetType) : undefined;
+  const visitCrypto = (name: string, cp: Record<string, unknown> | undefined) => {
+    // cryptoProperties is optional on every component type (a
+    // cryptographic-asset without it is legal and gets a parser note); once
+    // present, assetType is required.
+    if (!cp) return;
+    const assetType = asString(cp.assetType);
     if (assetType === undefined) cryptoMissingAssetType.add(name);
     else if (!CRYPTO_VOCAB.assetType!.has(assetType)) cryptoBadVocabulary.add(`${name}: assetType=${assetType}`);
-    if (!cp) return;
     const vocab = (block: Record<string, unknown> | undefined, field: string, set: string) => {
       if (!block) return;
       const values = Array.isArray(block[field]) ? asStringArray(block[field]) : asString(block[field]) !== undefined ? [asString(block[field])!] : [];
@@ -143,9 +145,16 @@ export function validateCdxStructure(root: Record<string, unknown>): Diagnostic[
     vocab(ap, 'padding', 'padding');
     vocab(ap, 'cryptoFunctions', 'cryptoFunctions');
     const family = ap ? asString(ap.algorithmFamily) : undefined;
-    if (family !== undefined && !isKnownCryptoFamily(family)) {
-      const known = resolveCryptoFamily(family);
-      cryptoUnknownFamily.add(`${name}: ${family}${known ? ` (registry spells it ${known.family})` : ''}`);
+    if (family !== undefined) {
+      const exact = cryptoFamily(family);
+      if (!exact) {
+        const known = resolveCryptoFamily(family);
+        cryptoUnknownFamily.add(`${name}: ${family}${known ? ` (registry spells it ${known.family})` : ''}`);
+      } else if (!exact.inEnum) {
+        // The registry lists it, the 1.7 JSON schema's enum does not (yet):
+        // a schema validator rejects such a BOM, so it is worth a line.
+        cryptoUnknownFamily.add(`${name}: ${family} (in the registry, not in the 1.7 JSON-schema enum)`);
+      }
     }
     const curve = ap ? asString(ap.ellipticCurve) : undefined;
     if (curve !== undefined && !isKnownCurve(curve)) {
@@ -190,7 +199,7 @@ export function validateCdxStructure(root: Record<string, unknown>): Diagnostic[
     const purl = asString(component.purl);
     if (purl !== undefined && !purl.startsWith('pkg:')) badPurl.add(`${name} (${purl})`);
 
-    visitCrypto(name, type, isRecord(component.cryptoProperties) ? component.cryptoProperties : undefined);
+    visitCrypto(name, isRecord(component.cryptoProperties) ? component.cryptoProperties : undefined);
 
     for (const entry of asRecordArray(component.licenses)) {
       const expression = asString(entry.expression);
@@ -232,7 +241,7 @@ export function validateCdxStructure(root: Record<string, unknown>): Diagnostic[
   lint.warnTally(
     'CDX_SCHEMA_CRYPTO_MISSING_ASSET_TYPE',
     cryptoMissingAssetType,
-    (count, list) => `${count} cryptographic asset(s) without cryptoProperties.assetType (algorithm, certificate, protocol, related-crypto-material): ${list}.`,
+    (count, list) => `${count} cryptoProperties block(s) without the required assetType (algorithm, certificate, protocol, related-crypto-material): ${list}.`,
   );
   lint.warnTally(
     'CDX_SCHEMA_CRYPTO_BAD_VOCABULARY',
@@ -242,7 +251,7 @@ export function validateCdxStructure(root: Record<string, unknown>): Diagnostic[
   lint.warnTally(
     'CDX_SCHEMA_CRYPTO_UNKNOWN_FAMILY',
     cryptoUnknownFamily,
-    (count, list) => `${count} algorithmFamily value(s) not in the CycloneDX Cryptography Registry: ${list}.`,
+    (count, list) => `${count} algorithmFamily value(s) outside the CycloneDX Cryptography Registry vocabulary: ${list}.`,
   );
   lint.warnTally(
     'CDX_SCHEMA_CRYPTO_UNKNOWN_CURVE',
@@ -252,7 +261,7 @@ export function validateCdxStructure(root: Record<string, unknown>): Diagnostic[
   lint.warnTally(
     'CDX_SCHEMA_CRYPTO_DEPRECATED_FIELD',
     cryptoDeprecated,
-    (count, list) => `${count} cryptoProperties field(s) deprecated since CycloneDX 1.7 in a 1.7+ BOM: ${list}.`,
+    (count, list) => `${count} cryptoProperties field(s) that CycloneDX 1.7 deprecates (still valid in 1.7, removed in a later version): ${list}.`,
   );
 
   return lint.diagnostics;

@@ -339,7 +339,7 @@ describe('CSAF product groups, hashes, remediations and schema findings', () => 
             {
               product_id: 'CSAFPID-blob',
               name: 'firmware blob',
-              product_identification_helper: { hashes: [{ file_name: 'fw.bin', file_hashes: [{ algorithm: 'sha-256', value: SHA.toUpperCase() }] }] },
+              product_identification_helper: { hashes: [{ filename: 'fw.bin', file_hashes: [{ algorithm: 'sha-256', value: SHA.toUpperCase() }] }] },
             },
           ],
         },
@@ -369,6 +369,8 @@ describe('CSAF product groups, hashes, remediations and schema findings', () => 
     const findings = findingsFor(ws, 'firmware', matchVex(ws, [doc]));
     expect(findings).toHaveLength(1);
     expect(findings![0]).toMatchObject({ vulnerability: 'CVE-2026-9999', status: 'affected', matchedBy: 'hash' });
+    // One statement, one hash: the pseudo-id and the hashes list must not index it twice.
+    expect(findings![0]!.supersededCount).toBeUndefined();
   });
 
   it('reads title, category, TLP and tracking status, and measures TR-03191', () => {
@@ -377,14 +379,14 @@ describe('CSAF product groups, hashes, remediations and schema findings', () => 
       csafDoc({
         document: {
           ...(csafDoc().document as Record<string, unknown>),
-          distribution: { tlp: { label: 'TLP:AMBER' } },
+          distribution: { tlp: { label: 'AMBER' } },
           tracking: { ...((csafDoc().document as Record<string, unknown>).tracking as Record<string, unknown>), status: 'final' },
         },
       }),
     );
-    expect(doc).toMatchObject({ title: 'ACME advisory', category: 'csaf_vex', tlp: 'TLP:AMBER', status: 'final' });
+    expect(doc).toMatchObject({ title: 'ACME advisory', category: 'csaf_vex', tlp: 'AMBER', status: 'final', trackingId: 'ACME-VEX-2026-0001' });
     expect(doc.tr03191).toHaveLength(9);
-    expect(doc.tr03191!.find((f) => f.id === 'tr03191-tlp')).toMatchObject({ pass: true, actual: 'TLP:AMBER' });
+    expect(doc.tr03191!.find((f) => f.id === 'tr03191-tlp')).toMatchObject({ pass: true, actual: 'AMBER' });
   });
 
   it('emits schema findings for the mandatory pieces this reader relies on', () => {
@@ -417,5 +419,139 @@ describe('CSAF product groups, hashes, remediations and schema findings', () => 
     document.publisher = { ...document.publisher, namespace: 'https://acme.example' };
     document.tracking = { ...document.tracking, status: 'final' };
     expect(parseCsaf('clean.json', complete).diagnostics.filter((d) => d.code.includes('_SCHEMA_'))).toEqual([]);
+  });
+});
+
+describe('CSAF targeting, identity and hostile shapes', () => {
+  const SHA = 'aabb00112233445566778899aabbccddeeff00112233445566778899aabbccdd';
+
+  it('lets an untargeted remediation or flag reach nobody and reports it (6.1.29, 6.1.32)', () => {
+    const doc = parseCsaf(
+      'untargeted.json',
+      csafDoc({
+        vulnerabilities: [
+          {
+            cve: 'CVE-2026-1010',
+            product_status: { known_affected: ['CSAFPID-openssl'], known_not_affected: ['CSAFPID-apiserver'] },
+            remediations: [{ category: 'vendor_fix', details: 'Upgrade a to 2.' }],
+            flags: [{ label: 'vulnerable_code_not_present' }],
+            threats: [{ category: 'impact', details: 'Applies to the whole vulnerability.' }],
+          },
+        ],
+      }),
+    );
+    const affected = doc.statements.find((s) => s.status === 'affected')!;
+    const notAffected = doc.statements.find((s) => s.status === 'not_affected')!;
+    expect(affected.actionStatement).toBeUndefined();
+    expect(affected.remediations).toBeUndefined();
+    expect(notAffected.actionStatement).toBeUndefined();
+    expect(notAffected.justification).toBeUndefined();
+    // A threat without targets is a statement about the vulnerability.
+    expect(affected.impactStatement).toBe('Applies to the whole vulnerability.');
+    const codes = doc.diagnostics.map((d) => d.code);
+    expect(codes).toContain('CSAF_SCHEMA_UNTARGETED_REMEDIATION');
+    expect(codes).toContain('CSAF_SCHEMA_UNTARGETED_FLAG');
+  });
+
+  it('keys the document by publisher namespace and tracking id', () => {
+    const base = csafDoc();
+    (base.document as Record<string, Record<string, unknown>>).publisher = { category: 'vendor', name: 'ACME', namespace: 'https://acme.example' };
+    const doc = parseCsaf('ns.json', base);
+    expect(doc.id).toBe('https://acme.example#ACME-VEX-2026-0001');
+    expect(doc.trackingId).toBe('ACME-VEX-2026-0001');
+  });
+
+  it('defines product ids from every tree node, not only the resolvable ones (6.1.1)', () => {
+    const doc = parseCsaf(
+      'rel.json',
+      csafDoc({
+        product_tree: {
+          full_product_names: [{ product_id: 'P-bare', name: 'bare product' }],
+          relationships: [
+            {
+              category: 'installed_on',
+              product_reference: 'P-bare',
+              relates_to_product_reference: 'P-ghost',
+              full_product_name: { product_id: 'R1', name: 'bare on ghost' },
+            },
+          ],
+          product_groups: [{ group_id: 'G', product_ids: ['R1', 'P-missing'] }],
+        },
+        vulnerabilities: [{ cve: 'CVE-2026-2020', product_status: { known_affected: ['R1'] } }],
+      }),
+    );
+    const finding = doc.diagnostics.find((d) => d.code === 'CSAF_SCHEMA_UNDEFINED_PRODUCT_ID')!;
+    expect(finding.message).toContain('2 product id(s)');
+    expect(finding.message).toContain('P-ghost');
+    expect(finding.message).toContain('P-missing');
+    expect(finding.message).not.toContain('R1');
+  });
+
+  it('files a purl-and-hash product once: no phantom superseded statements, purl wins the attribution', () => {
+    const doc = parseCsaf(
+      'both.json',
+      csafDoc({
+        product_tree: {
+          full_product_names: [
+            {
+              product_id: 'P',
+              name: 'openssl',
+              product_identification_helper: { purl: OPENSSL, hashes: [{ filename: 'openssl.tar', file_hashes: [{ algorithm: 'sha256', value: SHA }] }] },
+            },
+          ],
+        },
+        vulnerabilities: [{ cve: 'CVE-2026-3030', product_status: { known_affected: ['P'] } }],
+      }),
+    );
+    const lines = [
+      'SPDXVersion: SPDX-2.3',
+      'SPDXID: SPDXRef-DOCUMENT',
+      'DocumentName: both',
+      'DocumentNamespace: https://example.org/spdxdocs/both',
+      'PackageName: openssl',
+      'SPDXID: SPDXRef-openssl',
+      'PackageVersion: 3.0.9',
+      'PackageDownloadLocation: NOASSERTION',
+      `ExternalRef: PACKAGE-MANAGER purl ${OPENSSL}`,
+      `PackageChecksum: SHA256: ${SHA}`,
+      '',
+    ];
+    const ws = addDocument(emptyWorkspace, loadedFromText('both.spdx', lines.join('\n'))).workspace;
+    const findings = findingsFor(ws, 'openssl', matchVex(ws, [doc]))!;
+    expect(findings).toHaveLength(1);
+    expect(findings[0]).toMatchObject({ vulnerability: 'CVE-2026-3030', matchedBy: 'purl' });
+    expect(findings[0]!.supersededCount).toBeUndefined();
+  });
+
+  it('does not match a file element by hash; a product hash names a delivered package', () => {
+    const doc = parseCsaf(
+      'file.json',
+      csafDoc({
+        product_tree: {
+          full_product_names: [{ product_id: 'P', name: 'blob', product_identification_helper: { hashes: [{ filename: 'b', file_hashes: [{ algorithm: 'sha256', value: SHA }] }] } }],
+        },
+        vulnerabilities: [{ cve: 'CVE-2026-4040', product_status: { known_affected: ['P'] } }],
+      }),
+    );
+    const lines = [
+      'SPDXVersion: SPDX-2.3',
+      'SPDXID: SPDXRef-DOCUMENT',
+      'DocumentName: f',
+      'DocumentNamespace: https://example.org/spdxdocs/f',
+      'FileName: ./blob.bin',
+      'SPDXID: SPDXRef-blob',
+      `FileChecksum: SHA256: ${SHA}`,
+      '',
+    ];
+    const ws = addDocument(emptyWorkspace, loadedFromText('f.spdx', lines.join('\n'))).workspace;
+    expect(matchVex(ws, [doc]).size).toBe(0);
+  });
+
+  it('survives a product tree nested thousands of levels deep', () => {
+    let branch: Record<string, unknown> = { category: 'product_version', name: '1', product: { product_id: 'deep', name: 'deep' } };
+    for (let i = 0; i < 5000; i++) branch = { category: 'product_name', name: `n${i}`, branches: [branch] };
+    const doc = parseCsaf('deep.json', csafDoc({ product_tree: { branches: [branch] }, vulnerabilities: [] }));
+    expect(doc.statements).toEqual([]);
+    expect(doc.tr03191).toHaveLength(9);
   });
 });

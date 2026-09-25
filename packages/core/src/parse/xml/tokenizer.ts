@@ -41,7 +41,12 @@ export class XmlError extends Error {
 }
 
 /** Nesting cap; a hostile document must not overflow the worker stack. */
-const MAX_DEPTH = 64;
+/**
+ * Two XML levels per nested CycloneDX assembly (components/component), so
+ * this stays above the JSON mapper's 64-assembly cap, which then degrades
+ * with CDX_NESTING_CAPPED instead of this hard refusal.
+ */
+const MAX_DEPTH = 160;
 
 const ENTITIES: Record<string, string> = { lt: '<', gt: '>', amp: '&', quot: '"', apos: "'" };
 

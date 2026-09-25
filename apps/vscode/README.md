@@ -83,9 +83,10 @@ release diff, and quality reports.
 - The **workspace scan skips files over 50 MB** (open those by hand). A
   single large SPDX document has no hard cap; parsing runs off the UI thread.
 - Compliance profiles are capped at 64 KB / 200 checks; up to 16 persist.
-- No license-compliance judgement and no vulnerability overlays: license and
-  quality fields are shown, counted and checked against the SPDX License List
-  (identifiers and deprecation flags only), never interpreted. Spec findings
+- No license-compliance judgement, and no vulnerability data in the core
+  model (VEX and CSAF stay an overlay): license and quality fields are shown,
+  counted and checked against the SPDX License List (identifiers and
+  deprecation flags only), never interpreted. Spec findings
   check expression GRAMMAR, not whether an identifier is on the list; for
   authoritative conformance verification use
   [spdx/tools-java](https://github.com/spdx/tools-java).

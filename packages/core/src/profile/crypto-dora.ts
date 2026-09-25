@@ -5,10 +5,10 @@ import { PROFILE_SCHEMA_V5 } from './model';
  * Commission Delegated Regulation (EU) 2024/1774 (the DORA RTS on ICT risk
  * management), Article 7(4): financial entities "create and maintain a
  * register for all certificates and certificate-storing devices for at
- * least ICT assets supporting critical or important functions", keep it
- * up to date, and "ensure the prompt renewal of certificates in advance of
- * their expiration". Article 7(1) asks for key management across the whole
- * lifecycle, from generation to destruction.
+ * least ICT assets supporting critical or important functions" and keep it
+ * up to date; Article 7(5): they "ensure the prompt renewal of certificates
+ * in advance of their expiration". Article 7(1) asks for key management
+ * across the whole lifecycle, from generation to destruction.
  *
  * A CBOM can BE that register when it names its certificates and keys with
  * the data the register needs; this profile measures whether it does. What
@@ -27,9 +27,10 @@ export const CRYPTO_DORA_PROFILE: ComplianceProfile = {
     'management) needs: the regulation requires financial entities to ' +
     'create and maintain a register for all certificates and ' +
     'certificate-storing devices for at least the ICT assets supporting ' +
-    'critical or important functions, keep it up to date, and ensure the ' +
-    'prompt renewal of certificates in advance of their expiration; Article ' +
-    '7(1) adds key management through the whole lifecycle. The meters cover ' +
+    'critical or important functions and keep it up to date (Article 7(4)), ' +
+    'and to ensure the prompt renewal of certificates in advance of their ' +
+    'expiration (Article 7(5)); Article 7(1) adds key management through ' +
+    'the whole lifecycle. The meters cover ' +
     'certificates (subject, issuer, validity end, lifecycle state, signature ' +
     'algorithm linked) and keys and other material (lifecycle state, ' +
     'expiration, how and where the material is secured, which is the ' +

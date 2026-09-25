@@ -1,4 +1,4 @@
-import type { DeliveredFile, DocumentId, LoadedDocument } from '@sbomlens/core';
+import type { DeliveredFile, DocumentId, LoadedDocument, VexDocument } from '@sbomlens/core';
 import {
   MAX_CSAF_BYTES,
   MAX_VEX_BYTES,
@@ -159,7 +159,7 @@ async function parseEntry(
  * makes the ASCII substring byte-stable), so ordinary SBOM drops are never
  * text-decoded on the UI thread just to be ruled out.
  */
-function siftOverlays(entries: ReadonlyArray<IngestEntry>): IngestEntry[] {
+function siftOverlays(entries: ReadonlyArray<IngestEntry>, overlays: VexDocument[]): IngestEntry[] {
   const sboms: IngestEntry[] = [];
   for (const entry of entries) {
     if ('buffer' in entry && entry.buffer.byteLength <= MAX_OVERLAY_BYTES) {
@@ -178,14 +178,16 @@ function siftOverlays(entries: ReadonlyArray<IngestEntry>): IngestEntry[] {
         if (vexCandidate) {
           const vexSniff = sniffVex(text);
           if (vexSniff.isVex) {
-            importVexRaw(entry.fileName, vexSniff.raw);
+            const doc = parseOverlay(entry.fileName, vexSniff.raw, 'VEX');
+            if (doc) overlays.push(doc);
             continue;
           }
         }
         if (csafCandidate) {
           const csafSniff = sniffCsaf(text);
           if (csafSniff.isCsaf) {
-            importCsafRaw(entry.fileName, csafSniff.raw);
+            const doc = parseOverlay(entry.fileName, csafSniff.raw, 'CSAF');
+            if (doc) overlays.push(doc);
             continue;
           }
         }
@@ -232,31 +234,53 @@ function bufferContains(buffer: ArrayBuffer, marker: Uint8Array): boolean {
   }
 }
 
-/** Parse + commit one OpenVEX document; findings recompute in the store. */
-function importVexRaw(fileName: string, raw: unknown): void {
-  commitVexDoc(fileName, parseOpenVex(fileName, raw), 'VEX');
-}
+type OverlayFormat = 'VEX' | 'CSAF';
 
-/** Parse + commit one CSAF document; it flows through the same overlay. */
-function importCsafRaw(fileName: string, raw: unknown): void {
-  commitVexDoc(fileName, parseCsaf(fileName, raw), 'CSAF');
-}
-
-function commitVexDoc(
-  fileName: string,
-  doc: ReturnType<typeof parseOpenVex>,
-  label: 'VEX' | 'CSAF',
-): void {
+/**
+ * Parse one overlay document. Its findings are recorded as diagnostics of a
+ * file that DID load; a reader that throws on hostile input costs that one
+ * file, not the drop.
+ */
+function parseOverlay(fileName: string, raw: unknown, format: OverlayFormat): VexDocument | null {
   const { actions } = useAppStore.getState();
-  if (doc.diagnostics.length > 0) {
-    actions.recordFailure({ fileName, diagnostics: doc.diagnostics });
+  try {
+    const doc = format === 'CSAF' ? parseCsaf(fileName, raw) : parseOpenVex(fileName, raw);
+    if (doc.diagnostics.length > 0) {
+      actions.recordFailure({ fileName, diagnostics: doc.diagnostics, loaded: true });
+    }
+    return doc;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    actions.recordFailure({
+      fileName,
+      diagnostics: [{ severity: 'error', code: `${format}_PARSE_FAILED`, message }],
+    });
+    actions.toast(`${fileName}: could not read the ${format} document (${message})`, 'error');
+    return null;
   }
-  const { matched } = actions.addVexDocument(doc);
-  const n = doc.statements.length;
+}
+
+/** Commit overlays as ONE batch: one overlay recompute, one summary toast. */
+function commitOverlays(docs: readonly VexDocument[]): void {
+  if (docs.length === 0) return;
+  const { actions } = useAppStore.getState();
+  const { matched } = actions.addVexDocuments(docs);
+  const statements = docs.reduce((n, d) => n + d.statements.length, 0);
+  const label =
+    docs.length === 1
+      ? `${docs[0]!.format === 'csaf' ? 'CSAF' : 'VEX'} loaded`
+      : `${docs.length} advisory documents loaded`;
   actions.toast(
-    `${label} loaded: ${n} statement${n === 1 ? '' : 's'}, ${matched} package${matched === 1 ? '' : 's'} matched`,
+    `${label}: ${statements} statement${statements === 1 ? '' : 's'}, ${matched} package${matched === 1 ? '' : 's'} matched`,
     matched > 0 ? 'success' : 'info',
   );
+}
+
+function commitFetchedOverlay(url: string, raw: unknown, format: OverlayFormat): UrlIngestResult {
+  const doc = parseOverlay(url, raw, format);
+  if (!doc) return { ok: false, message: `The fetched file did not parse as ${format}.` };
+  commitOverlays([doc]);
+  return { ok: true };
 }
 
 /**
@@ -269,21 +293,27 @@ export type IngestEntry =
   | { fileName: string; blob: Blob };
 
 export async function ingestBuffers(entries: ReadonlyArray<IngestEntry>): Promise<DocumentId[]> {
-  const sbomEntries = siftOverlays(entries);
-  if (sbomEntries.length === 0) return [];
-  const { actions } = useAppStore.getState();
-  actions.parsingBegin(sbomEntries.length);
-  const parsed = await Promise.all(
-    sbomEntries.map((e) => parseEntry(e.fileName, 'buffer' in e ? e.buffer : e.blob)),
-  );
-  const loaded = parsed.flat();
-  const { added, duplicates } = actions.addLoadedBatch(loaded);
-  if (duplicates > 0) {
-    actions.toast(
-      `${duplicates} file${duplicates === 1 ? ' was' : 's were'} already loaded (same content)`,
-      'info',
+  const overlays: VexDocument[] = [];
+  const sbomEntries = siftOverlays(entries, overlays);
+  let added: DocumentId[] = [];
+  if (sbomEntries.length > 0) {
+    const { actions } = useAppStore.getState();
+    actions.parsingBegin(sbomEntries.length);
+    const parsed = await Promise.all(
+      sbomEntries.map((e) => parseEntry(e.fileName, 'buffer' in e ? e.buffer : e.blob)),
     );
+    const loaded = parsed.flat();
+    const result = actions.addLoadedBatch(loaded);
+    added = result.added;
+    if (result.duplicates > 0) {
+      actions.toast(
+        `${result.duplicates} file${result.duplicates === 1 ? ' was' : 's were'} already loaded (same content)`,
+        'info',
+      );
+    }
   }
+  // After the SBOMs, so the summary counts matches against what just loaded.
+  commitOverlays(overlays);
   return added;
 }
 
@@ -487,15 +517,9 @@ export async function ingestUrl(url: string, options: UrlIngestOptions = {}): Pr
       }
     }
     const vexSniff = sniffVex(text);
-    if (vexSniff.isVex) {
-      importVexRaw(url, vexSniff.raw);
-      return { ok: true };
-    }
+    if (vexSniff.isVex) return commitFetchedOverlay(url, vexSniff.raw, 'VEX');
     const csafSniff = sniffCsaf(text);
-    if (csafSniff.isCsaf) {
-      importCsafRaw(url, csafSniff.raw);
-      return { ok: true };
-    }
+    if (csafSniff.isCsaf) return commitFetchedOverlay(url, csafSniff.raw, 'CSAF');
   }
   const pathName = (() => {
     try {

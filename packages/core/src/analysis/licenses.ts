@@ -2,6 +2,7 @@ import { licenseIdsInExpression, licenseExpressionError } from '../parse/spec-li
 import { isDeprecatedLicenseId, isKnownLicenseId } from '../spec/spdx-license-ids';
 import type { DocumentId } from '../model/ids';
 import type { WorkspaceState } from '../workspace/workspace';
+import { SPDX_LICENSE_LIST_SOURCE } from '../spec/spdx-license-ids';
 
 /**
  * The licence inventory across the whole workspace: which SPDX identifiers
@@ -127,6 +128,7 @@ export function licenseInventoryToCsv(inventory: LicenseInventory): string {
 export function licenseInventoryToMarkdown(inventory: LicenseInventory, opts: { generatedAt?: string } = {}): string {
   const lines: string[] = ['# License inventory', ''];
   if (opts.generatedAt) lines.push(`- Generated: ${opts.generatedAt}`);
+  lines.push(`- SPDX License List: ${SPDX_LICENSE_LIST_SOURCE}`);
   lines.push(`- Packages: ${inventory.packagesTotal}`);
   lines.push(`- Without a declared licence (missing, NONE or NOASSERTION): ${inventory.withoutDeclared}`);
   lines.push(`- Without a concluded licence: ${inventory.withoutConcluded}`);

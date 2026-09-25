@@ -39,6 +39,8 @@ export interface ToastItem {
 export interface IngestFailure {
   fileName: string;
   diagnostics: Diagnostic[];
+  /** True when the file did load (an overlay with findings); the drawer says "not loaded" otherwise. */
+  loaded?: boolean;
 }
 
 /** Inventory filtered to one package's transitive subtree (across documents). */
@@ -71,6 +73,8 @@ interface AppState {
   facetKinds: ReadonlySet<'package' | 'file'> | null;
   facetPurposes: ReadonlySet<string> | null;
   facetLicenses: ReadonlySet<string> | null;
+  /** Licence identifiers (Licenses view drill-down): a package matches when either licence field names one. */
+  facetLicenseIds: ReadonlySet<string> | null;
   /** When set, the Inventory shows only this package subtree. */
   inventoryScope: InventoryScope | null;
 
@@ -133,6 +137,9 @@ interface AppState {
     toggleFacetLicense(license: string): void;
     /** Replace the licence facet wholesale (null clears); the Licenses view drills down with it. */
     setFacetLicenses(licenses: ReadonlySet<string> | null): void;
+    toggleFacetLicenseId(id: string): void;
+    /** Replace the identifier facet wholesale (null clears). */
+    setFacetLicenseIds(ids: ReadonlySet<string> | null): void;
     clearFacets(): void;
 
     parsingBegin(count: number): void;
@@ -154,6 +161,8 @@ interface AppState {
 
     /** Add or update (same @id) a VEX document; returns matched element count. */
     addVexDocument(doc: VexDocument): { matched: number };
+    /** Batch form: one overlay recompute for a folder of advisories; same ids replace, later entries win. */
+    addVexDocuments(docs: readonly VexDocument[]): { matched: number };
     removeVexDocument(id: string): void;
 
     /** Store (or clear with null) the latest delivery-acceptance report. */
@@ -190,6 +199,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
   facetKinds: null,
   facetPurposes: null,
   facetLicenses: null,
+  facetLicenseIds: null,
   inventoryScope: null,
 
   diffA: null,
@@ -308,6 +318,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
         facetKinds: null,
         facetPurposes: null,
         facetLicenses: null,
+        facetLicenseIds: null,
         inventoryScope: null,
         diffA: null,
         diffB: null,
@@ -385,8 +396,14 @@ export const useAppStore = create<AppState>()((set, get) => ({
     setFacetLicenses(licenses) {
       set({ facetLicenses: licenses && licenses.size > 0 ? licenses : null });
     },
+    toggleFacetLicenseId(id) {
+      set((s) => ({ facetLicenseIds: toggleInSet(s.facetLicenseIds, id) }));
+    },
+    setFacetLicenseIds(ids) {
+      set({ facetLicenseIds: ids && ids.size > 0 ? ids : null });
+    },
     clearFacets() {
-      set({ facetDocs: null, facetKinds: null, facetPurposes: null, facetLicenses: null });
+      set({ facetDocs: null, facetKinds: null, facetPurposes: null, facetLicenses: null, facetLicenseIds: null });
     },
 
     parsingBegin(count) {
@@ -441,9 +458,16 @@ export const useAppStore = create<AppState>()((set, get) => ({
     },
 
     addVexDocument(doc) {
+      return get().actions.addVexDocuments([doc]);
+    },
+    addVexDocuments(docs) {
       const { ws, vex } = get();
-      // Same @id replaces (a newer version of the same VEX document).
-      const documents = [...vex.documents.filter((d) => d.id !== doc.id), doc];
+      if (docs.length === 0) return { matched: vex.findings.size };
+      // Same @id replaces (a newer version of the same document); within one
+      // batch the later entry wins, so a folder with two versions of an
+      // advisory ends up with the one listed last.
+      const incoming = new Map(docs.map((d) => [d.id, d]));
+      const documents = [...vex.documents.filter((d) => !incoming.has(d.id)), ...incoming.values()];
       const findings = vexFindingsFor(ws, documents);
       set({ vex: { documents, findings } });
       return { matched: findings.size };

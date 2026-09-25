@@ -1,5 +1,5 @@
 import type { QualityReport } from '../analysis/quality';
-import type { ProfileReport } from './evaluate';
+import type { ProfileCheckResult, ProfileReport } from './evaluate';
 
 /**
  * Audit-friendly Markdown rendering of a profile report (host-free; the UI
@@ -23,6 +23,9 @@ export function profileReportToMarkdown(
   if (opts.generatedAt) lines.push(`- Generated: ${opts.generatedAt}`);
   const gates = report.gatedPassed + report.gatedFailed;
   lines.push(`- Result: **${report.gatedPassed}/${gates} gated checks passed**`);
+  if (report.noneInScope > 0) {
+    lines.push(`- Meters with nothing in scope: ${report.noneInScope} (0/0, pass by construction)`);
+  }
   lines.push('');
 
   // The description carries what the profile approximates and what it
@@ -38,18 +41,19 @@ export function profileReportToMarkdown(
     lines.push('## Document checks');
     lines.push('');
     for (const result of booleans) {
-      lines.push(`- [${result.pass ? 'x' : ' '}] ${result.label}: ${result.actual ?? ''}`.trimEnd());
+      const note = result.informational ? ' (informational)' : '';
+      lines.push(`- [${result.pass ? 'x' : ' '}] ${result.label}${note}: ${result.actual ?? ''}`.trimEnd());
     }
     lines.push('');
   }
 
-  const coverages = report.results.filter((r) => r.coverage);
-  if (coverages.length > 0) {
-    lines.push(`## Package coverage (${report.packagesTotal} packages)`);
+  const coverageTable = (title: string, rows: ProfileCheckResult[]) => {
+    if (rows.length === 0) return;
+    lines.push(title);
     lines.push('');
     lines.push('| Check | Coverage | Percent | Threshold | Result |');
     lines.push('| --- | --- | --- | --- | --- |');
-    for (const result of coverages) {
+    for (const result of rows) {
       const c = result.coverage!;
       const threshold = c.threshold === undefined ? '-' : `≥ ${c.threshold}%`;
       const verdict = c.threshold === undefined ? 'info' : result.pass ? 'pass' : '**fail**';
@@ -57,7 +61,15 @@ export function profileReportToMarkdown(
       lines.push(`| ${result.label} | ${c.satisfied}/${c.total} | ${percent} | ${threshold} | ${verdict} |`);
     }
     lines.push('');
-  }
+  };
+  // Package meters and crypto-asset meters count different things; one table
+  // headed "packages" would misstate what a CBOM row's total is.
+  const coverages = report.results.filter((r) => r.coverage);
+  coverageTable(`## Package coverage (${report.packagesTotal} packages)`, coverages.filter((r) => r.subject !== 'crypto'));
+  coverageTable(
+    `## Cryptographic asset coverage (${report.cryptoAssetsTotal} assets)`,
+    coverages.filter((r) => r.subject === 'crypto'),
+  );
 
   if (opts.issues) {
     const parts = [

@@ -90,12 +90,14 @@ export function validateSpdx3Structure(
     }
 
     // SimpleLicensing: a LicenseExpression element carries the expression as
-    // a string in the SPDX expression syntax (Annex D of 2.3, unchanged in
-    // 3.x). Grammar only; whether an id is on the license list is a profile
-    // question, see parse/spec-lint.ts.
+    // a string in the 3.0.1 expression syntax (its Annex widens 2.3 Annex D:
+    // lower-case operators and AdditionRef- after WITH are legal). Grammar
+    // only; whether an id is on the license list is a profile question, see
+    // parse/spec-lint.ts.
     if (type === 'LicenseExpression') {
       const expression = asString(node.simplelicensing_licenseExpression);
-      const problem = expression === undefined ? 'no simplelicensing_licenseExpression' : licenseExpressionError(expression);
+      const problem =
+        expression === undefined ? 'no simplelicensing_licenseExpression' : licenseExpressionError(expression, { spdx3: true });
       if (problem) badLicense.add(`${label}: ${problem}`);
     }
   }

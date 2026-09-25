@@ -2,7 +2,7 @@ import clsx from 'clsx';
 import { useMemo, useState } from 'react';
 import type { LicenseIdKind, LicenseIdRow } from '@sbomlens/core';
 import {
-  licenseIdsInExpression,
+  SPDX_LICENSE_LIST_SOURCE,
   licenseInventory,
   licenseInventoryToCsv,
   licenseInventoryToMarkdown,
@@ -49,6 +49,7 @@ const KIND_CLASS: Record<LicenseIdKind, string> = {
 export function LicensesView() {
   const ws = useAppStore((s) => s.ws);
   const wsVersion = useAppStore((s) => s.wsVersion);
+  const query = useAppStore((s) => s.query);
   const actions = useAppStore((s) => s.actions);
   const [sortKey, setSortKey] = useState<SortKey>('packages');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
@@ -56,15 +57,20 @@ export function LicensesView() {
   // eslint-disable-next-line react-hooks/exhaustive-deps -- wsVersion is the memo key for everything derived from ws
   const inventory = useMemo(() => licenseInventory(ws), [wsVersion]);
 
+  // The search box filters identifiers; the status column sorts by its label.
   const rows = useMemo(() => {
+    const q = query.trim().toLowerCase();
     const sign = sortDir === 'asc' ? 1 : -1;
-    return [...inventory.rows].sort((a, b) => {
-      const av = a[sortKey];
-      const bv = b[sortKey];
-      const cmp = typeof av === 'number' && typeof bv === 'number' ? av - bv : String(av).localeCompare(String(bv));
-      return sign * cmp || a.id.localeCompare(b.id);
-    });
-  }, [inventory, sortKey, sortDir]);
+    const sortValue = (row: LicenseIdRow) => (sortKey === 'kind' ? KIND_LABEL[row.kind] : row[sortKey]);
+    return inventory.rows
+      .filter((row) => q === '' || row.id.toLowerCase().includes(q))
+      .sort((a, b) => {
+        const av = sortValue(a);
+        const bv = sortValue(b);
+        const cmp = typeof av === 'number' && typeof bv === 'number' ? av - bv : String(av).localeCompare(String(bv));
+        return sign * cmp || a.id.localeCompare(b.id);
+      });
+  }, [inventory, query, sortKey, sortDir]);
 
   const onSort = (key: SortKey) => {
     if (key === sortKey) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
@@ -74,23 +80,17 @@ export function LicensesView() {
     }
   };
 
-  // Drill-down: the inventory's licence facet matches whole expressions, so
-  // an identifier maps to every expression that names it.
+  // Drill-down: the identifier facet matches either licence field, so the
+  // inventory shows exactly the packages this row counted. Other facets and
+  // a subtree scope would silently shrink that set, so they are cleared.
   const showPackages = (row: LicenseIdRow) => {
-    const expressions = new Set<string>();
-    for (const loaded of ws.documents.values()) {
-      for (const element of loaded.document.elements) {
-        if (element.kind !== 'package') continue;
-        for (const value of [element.licenseConcluded, element.licenseDeclared]) {
-          if (value && licenseIdsInExpression(value).includes(row.id)) expressions.add(value);
-        }
-      }
-    }
-    actions.setFacetLicenses(expressions);
+    actions.clearFacets();
+    actions.setInventoryScope(null);
+    actions.setFacetLicenseIds(new Set([row.id]));
     actions.setView('inventory');
   };
 
-  const stamp = new Date().toISOString().slice(0, 10);
+  const stamp = () => new Date().toISOString().slice(0, 10);
   const exportButton =
     'rounded border border-slate-200 px-2 py-1 text-[11px] font-medium text-slate-600 hover:border-accent-300 hover:text-accent-700 dark:border-slate-700 dark:text-slate-300 dark:hover:border-accent-700 dark:hover:text-accent-400';
 
@@ -120,7 +120,7 @@ export function LicensesView() {
         <button
           type="button"
           className={exportButton}
-          onClick={() => host().exportFile(`sbom-licenses-${stamp}.csv`, 'text/csv', licenseInventoryToCsv(inventory))}
+          onClick={() => host().exportFile(`sbom-licenses-${stamp()}.csv`, 'text/csv', licenseInventoryToCsv(inventory))}
         >
           Export CSV
         </button>
@@ -129,7 +129,7 @@ export function LicensesView() {
           className={exportButton}
           onClick={() =>
             host().exportFile(
-              `sbom-licenses-${stamp}.md`,
+              `sbom-licenses-${stamp()}.md`,
               'text/markdown',
               licenseInventoryToMarkdown(inventory, { generatedAt: new Date().toISOString() }),
             )
@@ -164,7 +164,7 @@ export function LicensesView() {
       <div className="min-h-0 flex-1 overflow-auto">
         {rows.length === 0 ? (
           <p className="px-4 py-6 text-sm text-slate-500 dark:text-slate-400">
-            No licence identifiers in the loaded documents.
+            {inventory.rows.length === 0 ? 'No licence identifiers in the loaded documents.' : 'No identifier matches the search box.'}
           </p>
         ) : (
           rows.map((row) => (
@@ -176,7 +176,7 @@ export function LicensesView() {
                 type="button"
                 title="Show the packages naming this identifier in the inventory"
                 onClick={() => showPackages(row)}
-                className="truncate text-left font-mono text-[11px] text-accent-700 hover:underline dark:text-accent-400"
+                className="min-w-0 truncate text-left font-mono text-[11px] text-accent-700 hover:underline dark:text-accent-400"
               >
                 {row.id}
               </button>
@@ -195,8 +195,9 @@ export function LicensesView() {
       </div>
 
       <p className="border-t border-slate-200 px-4 py-1.5 text-[11px] text-slate-400 dark:border-slate-800">
-        Identifiers are checked against the SPDX License List (ids and deprecation flags only). This view states
-        nothing about what a licence obliges or whether licences are compatible.
+        Identifiers are checked against the SPDX License List as packaged in {SPDX_LICENSE_LIST_SOURCE} (ids and
+        deprecation flags only). This view states nothing about what a licence obliges or whether licences are
+        compatible.
       </p>
     </div>
   );

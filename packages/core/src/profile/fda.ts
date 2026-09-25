@@ -20,10 +20,12 @@ import { PROFILE_SCHEMA_V4 } from './model';
  *     ValidUntilDate ("end of the support period ... from the supplier",
  *     7.27); SPDX 3.0.1 supportLevel and validUntilTime (the latter means
  *     "reassess after", not end of support - close, not identical);
- *     CycloneDX properties named support-level / end-of-support (optionally
- *     prefixed fda:lifecycle:), because CycloneDX has no normative field
- *     yet. A generator using other names is reported as missing, not
- *     guessed.
+ *     CycloneDX properties named support-level (or support_level) for the
+ *     level and end-of-support, end-of-life, eos, eol or valid-until (hyphen
+ *     or underscore) for the date, each optionally prefixed fda:lifecycle:
+ *     (either prefix alone counts too), because CycloneDX has no normative field yet (the
+ *     patterns live in evaluate.ts). A generator using other names is
+ *     reported as missing, not guessed.
  *   - Known vulnerabilities are not a profile check: that is the VEX/CSAF
  *     overlay's job, and it never scores.
  */
@@ -44,8 +46,11 @@ export const FDA_524B_PROFILE: ComplianceProfile = {
     '(end of the support period from the supplier), SPDX 3.0.1 supportLevel ' +
     'and validUntilTime (the latter means "reassess after", which is close to ' +
     'but not the same as end of support), and CycloneDX properties named ' +
-    'support-level and end-of-support (optionally prefixed fda:lifecycle:), ' +
-    'since CycloneDX has no normative field for either. Known vulnerabilities ' +
+    'support-level (or support_level) for the level and end-of-support, ' +
+    'end-of-life, eos, eol or valid-until (hyphen or underscore) for the ' +
+    'date, each optionally prefixed fda:lifecycle: (either prefix alone ' +
+    'counts too), since CycloneDX ' +
+    'has no normative field for either. Known vulnerabilities ' +
     'per component are shown by the VEX/CSAF overlay, not scored here. Note ' +
     'for quality systems: ISO 13485 clause 4.1.6 expects software used in the ' +
     'QMS to be validated; this viewer measures, it does not decide.',

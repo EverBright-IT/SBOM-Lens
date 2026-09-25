@@ -131,6 +131,28 @@ describe('SPDX 3 mapping', () => {
     expect(result.diagnostics.map((d) => d.code)).not.toContain('SPDX3_SCHEMA_DANGLING_REF');
   });
 
+  it('accepts the 3.0.1 expression dialect and maps its operators to the 2.x spelling', () => {
+    const ci = '_:ci';
+    const graph = JSON.stringify({
+      '@context': 'https://spdx.org/rdf/3.0.1/spdx-context.jsonld',
+      '@graph': [
+        { type: 'CreationInfo', '@id': ci, specVersion: '3.0.1', created: '2026-06-01T10:00:00Z' },
+        { type: 'SpdxDocument', spdxId: 'https://acme.example/doc/dialect', creationInfo: ci, name: 'dialect' },
+        { type: 'software_Package', spdxId: 'https://acme.example/pkg/a', creationInfo: ci, name: 'a' },
+        {
+          type: 'simplelicensing_LicenseExpression',
+          spdxId: 'https://acme.example/lic/1',
+          creationInfo: ci,
+          simplelicensing_licenseExpression: 'MIT and (Apache-2.0 or GPL-2.0-only with AdditionRef-acme)',
+        },
+        { type: 'Relationship', spdxId: 'https://acme.example/rel/1', creationInfo: ci, from: 'https://acme.example/pkg/a', relationshipType: 'hasDeclaredLicense', to: ['https://acme.example/lic/1'] },
+      ],
+    });
+    const result = parseDocument({ fileName: 'dialect.spdx3.json', text: graph, sha1: 'e'.repeat(40), byteSize: graph.length });
+    expect(result.diagnostics.map((d) => d.code)).not.toContain('SPDX3_SCHEMA_BAD_LICENSE_EXPRESSION');
+    expect(result.document!.elements.find((e) => e.name === 'a')!.licenseDeclared).toBe('MIT AND (Apache-2.0 OR GPL-2.0-only WITH AdditionRef-acme)');
+  });
+
   it('expands multi-target relationships and converts camelCase types', () => {
     const { document } = parse();
     const contains = document!.relationships.filter((r) => r.type === 'CONTAINS');

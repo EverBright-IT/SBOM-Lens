@@ -1,5 +1,6 @@
 import type { SbomElement } from '../model/document';
 import { effectiveLicense } from '../model/document';
+import { licenseIdsInExpression } from '../parse/spec-lint';
 import type { DocumentId } from '../model/ids';
 import type { WorkspaceState } from '../workspace/workspace';
 
@@ -8,6 +9,11 @@ export interface SearchFacets {
   kinds: ReadonlySet<'package' | 'file'> | null;
   purposes: ReadonlySet<string> | null;
   licenses: ReadonlySet<string> | null;
+  /**
+   * Licence identifiers (the Licenses view drills down with these): an
+   * element matches when its declared or concluded expression names one.
+   */
+  licenseIds: ReadonlySet<string> | null;
 }
 
 export const emptyFacets: SearchFacets = {
@@ -15,6 +21,7 @@ export const emptyFacets: SearchFacets = {
   kinds: null,
   purposes: null,
   licenses: null,
+  licenseIds: null,
 };
 
 export interface SearchHit {
@@ -59,6 +66,7 @@ export function searchWorkspace(
         const license = effectiveLicense(element);
         if (!license || !facets.licenses.has(license)) continue;
       }
+      if (facets.licenseIds && !namesLicenseId(element, facets.licenseIds)) continue;
 
       if (q === '') {
         hits.push({ element, docId, score: 0 });
@@ -84,6 +92,15 @@ function scoreMatch(q: string, name: string, blob: string): number {
   if (base === 0) return 0;
   // Tie-break toward shorter names.
   return base - Math.min(name.length, 200) / 1000;
+}
+
+/** Either licence field names one of the wanted identifiers (exceptions after WITH excluded). */
+function namesLicenseId(element: SbomElement, wanted: ReadonlySet<string>): boolean {
+  for (const value of [element.licenseConcluded, element.licenseDeclared]) {
+    if (!value) continue;
+    for (const id of licenseIdsInExpression(value)) if (wanted.has(id)) return true;
+  }
+  return false;
 }
 
 function isSubsequence(q: string, s: string): boolean {

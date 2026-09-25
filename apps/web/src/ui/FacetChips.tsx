@@ -13,6 +13,7 @@ export function FacetChips() {
   const facetKinds = useAppStore((s) => s.facetKinds);
   const facetPurposes = useAppStore((s) => s.facetPurposes);
   const facetLicenses = useAppStore((s) => s.facetLicenses);
+  const facetLicenseIds = useAppStore((s) => s.facetLicenseIds);
   const actions = useAppStore((s) => s.actions);
 
   const { purposes, licenses } = useMemo(() => {
@@ -32,8 +33,12 @@ export function FacetChips() {
   }, [ws]);
 
   const anyFacet =
-    facetDocs !== null || facetKinds !== null || facetPurposes !== null || facetLicenses !== null;
-  if (ws.documents.size < 2 && purposes.length === 0 && licenses.length === 0) return null;
+    facetDocs !== null ||
+    facetKinds !== null ||
+    facetPurposes !== null ||
+    facetLicenses !== null ||
+    facetLicenseIds !== null;
+  if (ws.documents.size < 2 && purposes.length === 0 && licenses.length === 0 && facetLicenseIds === null) return null;
 
   const chipClass = (active: boolean) =>
     clsx(
@@ -87,6 +92,18 @@ export function FacetChips() {
           {license}
         </button>
       ))}
+      {facetLicenseIds &&
+        [...facetLicenseIds].map((id) => (
+          <button
+            key={`id:${id}`}
+            type="button"
+            className={clsx(chipClass(true), 'font-mono')}
+            title={`licence identifier ${id} in either licence field (click to remove)`}
+            onClick={() => actions.toggleFacetLicenseId(id)}
+          >
+            id: {id}
+          </button>
+        ))}
       {anyFacet && (
         <button
           type="button"

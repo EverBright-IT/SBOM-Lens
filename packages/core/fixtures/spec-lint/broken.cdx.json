@@ -30,7 +30,8 @@
         }
       }
     },
-    { "bom-ref": "crypto-2", "type": "cryptographic-asset", "name": "untyped-asset" },
+    { "bom-ref": "crypto-2", "type": "cryptographic-asset", "name": "untyped-asset",
+      "cryptoProperties": { "algorithmProperties": { "primitive": "hash" } } },
     {
       "bom-ref": "component-1",
       "type": "microservice",
