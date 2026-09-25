@@ -4,6 +4,61 @@ All notable changes to SBOM Lens. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [SemVer](https://semver.org) (0.x: the API surface is the app itself).
 
+## [0.29.3] - 2026-09-25
+
+### Fixed
+- CSAF: one statement that names several products of the same package (a
+  component installed on two hosts, or a purl product next to a CPE product)
+  was filed once per product, so the package showed a phantom superseded
+  count and the match was attributed to the later product rather than to
+  the first of purl, CPE, hash. One candidate per statement now. When two
+  statements of one document contradict each other about a package with
+  the same date (affected on host A, fixed on host B), the bucket order used
+  to decide and `fixed` won; the more cautious status wins now and the
+  superseded count keeps the conflict visible. Ties across documents still
+  fall to the later-loaded one.
+- Licenses view: the drill-down cleared facets and scope but left the search
+  box query behind, which then filtered the inventory by package name. It is
+  cleared too, so the inventory shows exactly the packages the row counted.
+- SPDX 3: the 3.0.1 expression dialect (`WITH DocumentRef-x:AdditionRef-y`)
+  passed the lint but the licence inventory, the profile `licenseIds`
+  modifier and the identifier facet still parsed it with the 2.x grammar
+  and treated the expression as unparseable. They read the dialect of the
+  document now.
+- BSI TR-02102-1 preset: the hash row cited Table 4.1 but also matched
+  SHA-224 and SHA3-224, which the table does not list; the quantum-safe
+  signature rows (this preset and the EU roadmap one) missed `MLDSA65`,
+  `mldsa65`, `XMSSMT-SHA2_20/2_256` and `LMS_SHA256_M32_H5` because of a
+  trailing word boundary, and the EU roadmap KEM row missed `hqc192`. Labels
+  now say that the RSA row does not read the padding scheme, that the EC row
+  reads the order off the curve name, and that the AES row also spans AEAD
+  assets.
+- BSI TR-03183-2 licence preset: the effective-licence meter counted
+  `NOASSERTION` and `NONE`; the label, description, README and docs say it
+  is a presence meter on a property, not an identifier check.
+- TR-03191 measurement: a no-fix remediation counts for the fixed-versions
+  row only when it addresses an affected product (group members included);
+  a document without any product tree reads the hierarchy row as not
+  applicable; the profile row cites 4.2 and 4.5, the clause the
+  incident-response profile comes from. A product tree deeper than the walk
+  cap is reported as `CSAF_TREE_CAPPED` instead of reporting its unread
+  products as undefined.
+- CycloneDX XML: a dependency ref nested in several places produced
+  duplicate edges; entries merge by ref now.
+- The status bar counted an advisory that loaded with warnings as an
+  error; the TLP chip is rendered only for a label the standard defines;
+  a folder drop whose files share one id says how many were displaced
+  instead of counting both; `certificateSignature` matches the signature
+  primitive case-insensitively; report footers and the Markdown export say
+  that cryptographic assets are among the packages rather than next to
+  them.
+
+### Changed
+- Since 0.29.1 the profile validator rejects `informational` on
+  `crypto-coverage` (omit the key; a meter without `threshold` never gates).
+  The 0.29.1 notes listed that under Fixed; it is a compatibility break for
+  an imported v5 profile that carried the key.
+
 ## [0.29.2] - 2026-09-25
 
 ### Fixed

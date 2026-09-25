@@ -110,3 +110,29 @@ describe('scale smoke test', () => {
     expect(searchMs).toBeLessThan(50);
   });
 });
+
+describe('licenseIds facet', () => {
+  it('matches either licence field by identifier, in the SPDX 3.0.1 dialect too', () => {
+    const ci = '_:ci';
+    const graph = JSON.stringify({
+      '@context': 'https://spdx.org/rdf/3.0.1/spdx-context.jsonld',
+      '@graph': [
+        { type: 'CreationInfo', '@id': ci, specVersion: '3.0.1', created: '2026-06-01T10:00:00Z' },
+        { type: 'SpdxDocument', spdxId: 'https://acme.example/doc/facet', creationInfo: ci, name: 'facet' },
+        { type: 'software_Package', spdxId: 'https://acme.example/pkg/a', creationInfo: ci, name: 'a' },
+        { type: 'software_Package', spdxId: 'https://acme.example/pkg/b', creationInfo: ci, name: 'b' },
+        { type: 'simplelicensing_LicenseExpression', spdxId: 'https://acme.example/lic/1', creationInfo: ci, simplelicensing_licenseExpression: 'GPL-2.0-only WITH DocumentRef-d:AdditionRef-x' },
+        { type: 'simplelicensing_LicenseExpression', spdxId: 'https://acme.example/lic/2', creationInfo: ci, simplelicensing_licenseExpression: 'MIT' },
+        { type: 'Relationship', spdxId: 'https://acme.example/rel/1', creationInfo: ci, from: 'https://acme.example/pkg/a', relationshipType: 'hasDeclaredLicense', to: ['https://acme.example/lic/1'] },
+        { type: 'Relationship', spdxId: 'https://acme.example/rel/2', creationInfo: ci, from: 'https://acme.example/pkg/b', relationshipType: 'hasConcludedLicense', to: ['https://acme.example/lic/2'] },
+      ],
+    });
+    const ws = addDocument(emptyWorkspace, loadedFromText('facet.spdx3.json', graph)).workspace;
+    const names = (ids: string[]) =>
+      searchWorkspace(ws, '', { ...emptyFacets, licenseIds: new Set(ids) }).hits.map((h) => h.element.name).sort();
+    expect(names(['GPL-2.0-only'])).toEqual(['a']);
+    expect(names(['MIT'])).toEqual(['b']);
+    expect(names(['GPL-2.0-only', 'MIT'])).toEqual(['a', 'b']);
+    expect(names(['AdditionRef-x'])).toEqual([]); // the addition after WITH is not a licence
+  });
+});

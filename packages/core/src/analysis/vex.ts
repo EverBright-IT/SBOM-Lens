@@ -372,7 +372,8 @@ interface IndexEntry {
  * Match every loaded VEX statement against the workspace inventory.
  * Returns one finding per (element, vulnerability): when several statements
  * target the same pair, the one with the newest timestamp wins (the OpenVEX
- * time rule); ties fall to the later-loaded document — the ORDER of vexDocs
+ * time rule); a tie within one document falls to the more cautious status,
+ * ties across documents fall to the later-loaded document; the ORDER of vexDocs
  * is part of the contract, so callers must hand documents over in a stable
  * order (the app loads in ingest order; a CLI should sort by path).
  * Findings are sorted alarming-first (affected before not_affected), and
@@ -388,29 +389,28 @@ export function matchVex(
   for (const doc of vexDocs) {
     for (const statement of doc.statements) {
       const timestamp = statement.timestamp ?? doc.timestamp;
+      // ONE candidate per statement, filed under every key of every product
+      // it names: a component installed on two hosts is two products of one
+      // statement, and an element reachable through both must see one
+      // candidate, not a phantom "superseded" duplicate.
+      const candidate: IndexedStatement = {
+        statement,
+        source: doc.id,
+        sourceFile: doc.fileName,
+        ...(timestamp !== undefined ? { timestamp } : {}),
+        order: order++,
+        viaSubcomponent: false,
+      };
+      let viaSub: IndexedStatement | undefined;
       for (const product of statement.products) {
-        const candidate: IndexedStatement = {
-          statement,
-          source: doc.id,
-          sourceFile: doc.fileName,
-          ...(timestamp !== undefined ? { timestamp } : {}),
-          order: order++,
-          viaSubcomponent: false,
-        };
         // A product known only by its hashes carries a hash: pseudo-id; the
         // hashes list below files it, so the id must not file it again.
         if (!product.id.startsWith('hash:')) fileUnderRef(index, product.id, candidate);
         // A file hash names exact bytes: no version dimension, no wildcard.
         for (const hash of product.hashes ?? []) fileUnder(index, hashKey(hash.algorithm, hash.value), candidate);
         for (const sub of product.subcomponents) {
-          fileUnderRef(index, sub, {
-            statement,
-            source: doc.id,
-            sourceFile: doc.fileName,
-            ...(timestamp !== undefined ? { timestamp } : {}),
-            order: order++,
-            viaSubcomponent: true,
-          });
+          viaSub ??= { ...candidate, order: order++, viaSubcomponent: true };
+          fileUnderRef(index, sub, viaSub);
         }
       }
     }
@@ -437,8 +437,15 @@ export function matchVex(
       }
       if (applicable.size === 0) continue;
 
-      const byVuln = new Map<string, { winner: IndexedStatement; superseded: number }>();
+      // A statement reachable both directly and through a subcomponent is
+      // one statement: the direct path wins and nothing is superseded.
+      const byStatement = new Map<VexStatement, IndexedStatement>();
       for (const candidate of applicable.keys()) {
+        const seen = byStatement.get(candidate.statement);
+        if (!seen || (seen.viaSubcomponent && !candidate.viaSubcomponent)) byStatement.set(candidate.statement, candidate);
+      }
+      const byVuln = new Map<string, { winner: IndexedStatement; superseded: number }>();
+      for (const candidate of byStatement.values()) {
         const existing = byVuln.get(candidate.statement.vulnerability);
         if (!existing) {
           byVuln.set(candidate.statement.vulnerability, { winner: candidate, superseded: 0 });
@@ -557,14 +564,25 @@ function identifierMatchKeys(element: SbomElement): MatchKey[] {
   return keys;
 }
 
-/** OpenVEX time rule; unparseable/missing timestamps lose to real ones. */
+/**
+ * OpenVEX time rule; unparseable/missing timestamps lose to real ones. On a
+ * tie WITHIN one document (a component installed on two hosts, affected on
+ * one and fixed on the other, both dated with the document) the more
+ * cautious status wins, so a reassuring statement never hides an alarming
+ * one from the same source; the reader sees the conflict as supersededCount.
+ * Ties across documents still fall to the later-loaded one.
+ */
 function newerThan(a: IndexedStatement, b: IndexedStatement): boolean {
   const ta = Date.parse(a.timestamp ?? '');
   const tb = Date.parse(b.timestamp ?? '');
-  if (Number.isNaN(ta) && Number.isNaN(tb)) return a.order > b.order;
-  if (Number.isNaN(ta)) return false;
-  if (Number.isNaN(tb)) return true;
-  return ta === tb ? a.order > b.order : ta > tb;
+  if (Number.isNaN(ta) !== Number.isNaN(tb)) return !Number.isNaN(ta);
+  if (!Number.isNaN(ta) && ta !== tb) return ta > tb;
+  if (a.source === b.source) {
+    const sa = VEX_STATUS_ORDER.indexOf(a.statement.status);
+    const sb = VEX_STATUS_ORDER.indexOf(b.statement.status);
+    if (sa !== sb) return sa < sb;
+  }
+  return a.order > b.order;
 }
 
 /** The single worst status across findings — drives badges and facets. */

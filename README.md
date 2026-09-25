@@ -156,9 +156,9 @@ requirement. Four further presets measure field coverage the same way:
 (the thirteen mandatory fields), **[FDA 524B cybersecurity (02/2026)](https://www.fda.gov/regulatory-information/search-fda-guidance-documents/cybersecurity-medical-devices-quality-management-system-considerations-and-content-premarket)**
 (the 2021 baseline plus level of support and end-of-support date),
 **[BSI TR-03183-2 licence fields (6.1)](https://www.bsi.bund.de/dok/TR-03183)**
-(distribution, original and effective licence as SPDX identifiers, mapped as
-the TR's appendix 8.2 maps them and checked against the SPDX License List),
-and the
+(distribution and original licence as SPDX identifiers checked against the
+SPDX License List, the effective-licence property by presence, all mapped
+as the TR's appendix 8.2 maps them), and the
 **[G7 SBOM for AI minimum elements](https://www.bsi.bund.de/SharedDocs/Downloads/EN/BSI/KI/SBOM-for-AI_minimum-elements.html)**
 (17 of the 50 elements measured, with model and dataset meters scoped to
 those components). A CycloneDX **CBOM** (cryptographic assets with their

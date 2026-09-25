@@ -265,9 +265,11 @@ component essentials for component descriptors), the dropdown offers:
   original licence (5.2.4, required where it exists: `hasDeclaredLicense`,
   acknowledgement `declared`, model field `licenseDeclared`) is a meter
   under the same identifier rule; the effective licence (5.2.5, optional)
-  is a meter read from the CycloneDX property
-  `bsi:component:effectiveLicense` (its SPDX 3 form, a relationship of type
-  `other` with the comment `hasEffectiveLicense`, is not read). A CycloneDX
+  is a meter on the presence of the CycloneDX property
+  `bsi:component:effectiveLicense`, with NOASSERTION and NONE as absent and
+  no identifier check, because a property value is free text (its SPDX 3
+  form, a relationship of type `other` with the comment
+  `hasEffectiveLicense`, is not read). A CycloneDX
   licence entry without acknowledgement counts as declared, so a BOM that
   omits the acknowledgement the mapping names fails the distribution gate.
   Deprecated identifiers still count as identifiers; NOASSERTION and NONE

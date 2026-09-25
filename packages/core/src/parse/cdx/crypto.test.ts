@@ -101,6 +101,7 @@ describe('cryptoProperties mapping', () => {
       '  </components>',
       '  <dependencies>',
       '    <dependency ref="a"><dependency ref="b"><dependency ref="c"/></dependency></dependency>',
+      '    <dependency ref="b"><dependency ref="c"/></dependency>',
       '  </dependencies>',
       '</bom>',
     ].join('\n');
@@ -310,7 +311,7 @@ describe('crypto profiles', () => {
       specVersion: '1.7',
       version: 1,
       components: [
-        { type: 'cryptographic-asset', 'bom-ref': 'sig', name: 'ECDSA', cryptoProperties: { assetType: 'algorithm', algorithmProperties: { primitive: 'signature', algorithmFamily: 'ECDSA', ellipticCurve: 'nist/P-384' } } },
+        { type: 'cryptographic-asset', 'bom-ref': 'sig', name: 'ECDSA', cryptoProperties: { assetType: 'algorithm', algorithmProperties: { primitive: 'Signature', algorithmFamily: 'ECDSA', ellipticCurve: 'nist/P-384' } } },
         { type: 'cryptographic-asset', 'bom-ref': 'cert', name: 'leaf', cryptoProperties: { assetType: 'certificate', certificateProperties: { subjectName: 'CN=leaf', relatedCryptographicAssets: [{ type: 'algorithm', ref: 'sig' }] } } },
         { type: 'cryptographic-asset', 'bom-ref': 'aes', name: 'AES', cryptoProperties: { assetType: 'algorithm', algorithmProperties: { primitive: 'block-cipher', algorithmFamily: 'aes', mode: 'GCM' } } },
         { type: 'cryptographic-asset', 'bom-ref': 'oid-curve', name: 'ECDH', cryptoProperties: { assetType: 'algorithm', algorithmProperties: { primitive: 'key-agree', algorithmFamily: 'ECDH', ellipticCurve: '1.2.840.10045.3.1.7' } } },
@@ -324,6 +325,47 @@ describe('crypto profiles', () => {
     expect(tr['aes-mode']!.coverage).toMatchObject({ satisfied: 1, total: 1 }); // "GCM" against the profile's "gcm"
     // P-384 counts; an OID in place of a curve name does not match a bit length by accident.
     expect(tr['ec-order']!.coverage).toMatchObject({ satisfied: 1, total: 2 });
+  });
+
+  it('reads the spellings generators use and leaves out what the cited tables do not list', () => {
+    const asset = (ref: string, name: string, primitive: string) => ({
+      type: 'cryptographic-asset',
+      'bom-ref': ref,
+      name,
+      cryptoProperties: { assetType: 'algorithm', algorithmProperties: { primitive } },
+    });
+    const bom = JSON.stringify({
+      bomFormat: 'CycloneDX',
+      specVersion: '1.6',
+      version: 1,
+      components: [
+        asset('h1', 'SHA-224', 'hash'),
+        asset('h2', 'SHA3-224', 'hash'),
+        asset('h3', 'SHA-256', 'hash'),
+        asset('h4', 'sha3_384', 'hash'),
+        asset('h5', 'SHA-512/256', 'hash'),
+        asset('h6', 'SHA-1', 'hash'),
+        asset('s1', 'MLDSA65', 'signature'),
+        asset('s2', 'mldsa65', 'signature'),
+        asset('s3', 'XMSSMT-SHA2_20/2_256', 'signature'),
+        asset('s4', 'LMS_SHA256_M32_H5', 'signature'),
+        asset('s5', 'ECDSA-P256', 'signature'),
+        asset('k1', 'HQC-128', 'kem'),
+        asset('k2', 'hqc192', 'kem'),
+        asset('k3', 'X25519MLKEM768', 'kem'),
+        asset('k4', 'Kyber768', 'kem'),
+      ],
+    });
+    const loaded = loadedFromText('spellings.cdx.json', bom);
+    const ws = addDocument(emptyWorkspace, loaded).workspace;
+    const tr = Object.fromEntries(evaluateProfile(ws, loaded, CRYPTO_BSI_TR02102_PROFILE).results.map((x) => [x.id, x]));
+    expect(tr['hash-family']!.coverage).toMatchObject({ satisfied: 3, total: 6 }); // Table 4.1 lists no 224-bit function
+    expect(tr['pq-signature']!.coverage).toMatchObject({ satisfied: 4, total: 5 });
+    // X25519MLKEM768 names ML-KEM; the TR does not list HQC yet, and Kyber is not ML-KEM.
+    expect(tr['key-agreement-quantum-safe']!.coverage).toMatchObject({ satisfied: 1, total: 4 });
+    const eu = Object.fromEntries(evaluateProfile(ws, loaded, CRYPTO_EU_ROADMAP_PROFILE).results.map((x) => [x.id, x]));
+    expect(eu['quantum-safe-kem']!.coverage).toMatchObject({ satisfied: 3, total: 4 });
+    expect(eu['quantum-safe-signature']!.coverage).toMatchObject({ satisfied: 4, total: 5 });
   });
 
   it('splits package and crypto meters in the Markdown export and marks informational facts', () => {

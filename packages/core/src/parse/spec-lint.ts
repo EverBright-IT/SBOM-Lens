@@ -267,15 +267,17 @@ export function licenseExpressionError(raw: string, options: LicenseExpressionOp
  * LicenseRef-/DocumentRef- forms are returned verbatim; callers decide
  * whether a reference counts.
  */
-export function licenseIdsInExpression(raw: string): string[] {
+export function licenseIdsInExpression(raw: string, options: LicenseExpressionOptions = {}): string[] {
   const expr = raw.trim();
-  if (expr === '' || LICENSE_LITERALS.has(expr) || licenseExpressionError(expr) !== undefined) return [];
+  if (expr === '' || LICENSE_LITERALS.has(expr) || licenseExpressionError(expr, options) !== undefined) return [];
   const out: string[] = [];
   let afterWith = false;
   for (const token of expr.replace(/\(/g, ' ( ').replace(/\)/g, ' ) ').split(/\s+/)) {
     if (token === '' || token === '(' || token === ')') continue;
-    if (OPERATORS.has(token)) {
-      afterWith = token === 'WITH';
+    // SPDX 3 spells operators all-lower-case as well.
+    const operator = options.spdx3 && token === token.toLowerCase() ? token.toUpperCase() : token;
+    if (OPERATORS.has(operator)) {
+      afterWith = operator === 'WITH';
       continue;
     }
     if (afterWith) {

@@ -1,6 +1,7 @@
 import type { CryptoElementExt } from '../model/crypto';
 import type { SbomDocument, SbomElement } from '../model/document';
 import { effectiveLicense } from '../model/document';
+import type { LicenseExpressionOptions } from '../parse/spec-lint';
 import { licenseIdsInExpression } from '../parse/spec-lint';
 import { isDeprecatedLicenseId, isKnownLicenseId } from '../spec/spdx-license-ids';
 import type { LoadedDocument, WorkspaceState } from '../workspace/workspace';
@@ -71,6 +72,8 @@ export function evaluateProfile(
   const doc = loaded.document;
   const now = opts?.now ?? Date.now();
   const packages = doc.elements.filter((el) => el.kind === 'package');
+  // SPDX 3 documents may carry the 3.0.1 additions the 2.x grammar lacks.
+  const dialect: LicenseExpressionOptions = { spdx3: doc.spec.model === 'spdx-3' };
   const cryptoElements = doc.elements.filter((el): el is CryptoElement => el.crypto !== undefined);
   // Refs between assets (a certificate to its signature algorithm) resolve by bom-ref.
   const cryptoByRef: ReadonlyMap<string, CryptoElementExt> = new Map(cryptoElements.map((el) => [el.spdxId, el.crypto]));
@@ -131,7 +134,7 @@ export function evaluateProfile(
           if (
             present &&
             matchesModifiers(value, check.pattern, check.values) &&
-            licenseIdsSatisfied(value, check.licenseIds, check.allowDeprecated)
+            licenseIdsSatisfied(value, check.licenseIds, check.allowDeprecated, dialect)
           ) {
             satisfied++;
           }
@@ -269,7 +272,7 @@ function extractCryptoField(
       return (c.related ?? []).some(
         (r) =>
           /signature/i.test(r.type) ||
-          (r.type.toLowerCase() === 'algorithm' && byRef.get(r.ref)?.algorithm?.primitive === 'signature'),
+          (r.type.toLowerCase() === 'algorithm' && byRef.get(r.ref)?.algorithm?.primitive?.toLowerCase() === 'signature'),
       );
     case 'materialState':
       return c.material?.state;
@@ -341,9 +344,10 @@ function licenseIdsSatisfied(
   value: string | boolean | undefined,
   licenseIds: 'known' | 'known-or-ref' | undefined,
   allowDeprecated: boolean | undefined,
+  dialect: LicenseExpressionOptions,
 ): boolean {
   if (licenseIds === undefined || typeof value !== 'string') return true;
-  const ids = licenseIdsInExpression(value);
+  const ids = licenseIdsInExpression(value, dialect);
   if (ids.length === 0) return false; // NOASSERTION/NONE or nothing parseable
   return ids.every((id) => {
     if (/^(DocumentRef-[^:]+:)?LicenseRef-/.test(id)) return licenseIds === 'known-or-ref';

@@ -90,6 +90,8 @@ describe('BSI_LICENSING_PROFILE', () => {
     expect(byId(stated, 'effective-licence').coverage?.satisfied).toBe(1);
     const empty = cdx([concluded({ license: { id: 'MIT' } })], { properties: [{ name: 'bsi:component:effectiveLicense', value: '' }] });
     expect(byId(empty, 'effective-licence').coverage?.satisfied).toBe(0);
+    const noassertion = cdx([concluded({ license: { id: 'MIT' } })], { properties: [{ name: 'bsi:component:effectiveLicense', value: 'NOASSERTION' }] });
+    expect(byId(noassertion, 'effective-licence').coverage?.satisfied).toBe(0);
     expect(byId(cdx([concluded({ license: { id: 'MIT' } })]), 'effective-licence').coverage?.satisfied).toBe(0);
   });
 

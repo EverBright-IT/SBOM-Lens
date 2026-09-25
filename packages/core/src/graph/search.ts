@@ -1,5 +1,6 @@
 import type { SbomElement } from '../model/document';
 import { effectiveLicense } from '../model/document';
+import type { LicenseExpressionOptions } from '../parse/spec-lint';
 import { licenseIdsInExpression } from '../parse/spec-lint';
 import type { DocumentId } from '../model/ids';
 import type { WorkspaceState } from '../workspace/workspace';
@@ -57,6 +58,7 @@ export function searchWorkspace(
     if (!loaded) continue;
     const { elements } = loaded.document;
     const blobs = loaded.indexes.searchBlobs;
+    const dialect = { spdx3: loaded.document.spec.model === 'spdx-3' };
 
     for (let i = 0; i < elements.length; i++) {
       const element = elements[i]!;
@@ -66,7 +68,7 @@ export function searchWorkspace(
         const license = effectiveLicense(element);
         if (!license || !facets.licenses.has(license)) continue;
       }
-      if (facets.licenseIds && !namesLicenseId(element, facets.licenseIds)) continue;
+      if (facets.licenseIds && !namesLicenseId(element, facets.licenseIds, dialect)) continue;
 
       if (q === '') {
         hits.push({ element, docId, score: 0 });
@@ -95,10 +97,10 @@ function scoreMatch(q: string, name: string, blob: string): number {
 }
 
 /** Either licence field names one of the wanted identifiers (exceptions after WITH excluded). */
-function namesLicenseId(element: SbomElement, wanted: ReadonlySet<string>): boolean {
+function namesLicenseId(element: SbomElement, wanted: ReadonlySet<string>, dialect: LicenseExpressionOptions): boolean {
   for (const value of [element.licenseConcluded, element.licenseDeclared]) {
     if (!value) continue;
-    for (const id of licenseIdsInExpression(value)) if (wanted.has(id)) return true;
+    for (const id of licenseIdsInExpression(value, dialect)) if (wanted.has(id)) return true;
   }
   return false;
 }

@@ -49,11 +49,15 @@ const PQ_KEM_NAMED = '(ML-?KEM|ml-?kem|[Ff]rodo|[Cc]lassic[- ]?[Mm]c[Ee]liece|mc
 /** The recommended parameter sets of Tables 2.5 to 2.7, as names carry them. */
 const PQ_KEM_PARAMETER_NAMED =
   '(ML-?KEM-?(768|1024)|ml-?kem-?(768|1024)|[Ff]rodo[- ]?(KEM|kem)-?(976|1344)|[Cc]lassic[- ]?[Mm]c[Ee]liece[- ]?(460896|6688128|8192128)|mceliece(460896|6688128|8192128))';
-/** ML-DSA, SLH-DSA, XMSS (also XMSS^MT), LMS as names carry them. */
-const PQ_SIGNATURE_NAMED = '\\b(ML-?DSA|ml-?dsa|SLH-?DSA|slh-?dsa|XMSS|xmss|LMS|lms)\\b';
+/** ML-DSA, SLH-DSA, XMSS (also XMSSMT), LMS as names carry them: MLDSA65, mldsa65, XMSSMT-SHA2_20/2_256, LMS_SHA256_M32_H5. */
+const PQ_SIGNATURE_NAMED = '\\b(ML-?DSA|ml-?dsa|SLH-?DSA|slh-?dsa|XMSS|xmss|LMS|lms)';
 const AES_NAMED = '(AES|aes)';
-/** SHA-2 (SHA-224 to SHA-512/256) and SHA-3 (SHA3-224 to SHA3-512) as names carry them; SHA-1 does not match. */
-const SHA2_OR_SHA3_NAMED = '(SHA|sha)-?(2|3|224|256|384|512)';
+/**
+ * The functions Table 4.1 lists, as names carry them: SHA-256, SHA-384,
+ * SHA-512, SHA-512/256 (also sha256, SHA2-256) and SHA3-256/384/512 (also
+ * sha3_256). SHA-224, SHA3-224 and SHA-1 are not in the table and do not match.
+ */
+const SHA2_OR_SHA3_NAMED = '(SHA|sha)[-_]?2?[-_]?(256|384|512)|(SHA|sha)[-_]?3[-_]?(256|384|512)';
 
 export const CRYPTO_BSI_TR02102_PROFILE: ComplianceProfile = {
   schema: PROFILE_SCHEMA_V5,
@@ -99,7 +103,8 @@ export const CRYPTO_BSI_TR02102_PROFILE: ComplianceProfile = {
       assetTypes: ['algorithm'],
       families: RSA,
       pattern: AT_LEAST_3000,
-      label: 'RSA: modulus of at least 3000 bits (Table 2.2 and 5.3.1; key transport until end of 2031, signatures until end of 2035)',
+      label:
+        'RSA: modulus of at least 3000 bits (Table 2.2 and 5.3.1; key transport until end of 2031, signatures until end of 2035; the padding scheme is not read)',
     },
     {
       id: 'dh-modulus',
@@ -117,7 +122,7 @@ export const CRYPTO_BSI_TR02102_PROFILE: ComplianceProfile = {
       assetTypes: ['algorithm'],
       families: EC,
       pattern: EC_ORDER_AT_LEAST_250,
-      label: 'EC mechanisms: curve with an order of at least 250 bits (Table 2.2, 5.3.3)',
+      label: 'EC mechanisms: curve with an order of at least 250 bits, read off the curve name (Table 2.2, 5.3.3)',
     },
     {
       id: 'ec-brainpool',
@@ -183,7 +188,7 @@ export const CRYPTO_BSI_TR02102_PROFILE: ComplianceProfile = {
       assetTypes: ['algorithm'],
       primitives: ['block-cipher', 'ae'],
       pattern: AES_NAMED,
-      label: 'Block ciphers: AES named, the only block cipher Table 3.1 recommends',
+      label: 'Block ciphers and AEAD modes: AES named (Table 3.1 recommends AES as the block cipher)',
     },
     // --- Hash functions: Table 4.1 -----------------------------------------
     {

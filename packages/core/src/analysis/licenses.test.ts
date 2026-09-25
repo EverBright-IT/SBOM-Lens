@@ -97,3 +97,23 @@ describe('licenseInventory', () => {
     expect(md).toContain('With a value that is not an SPDX expression: 1');
   });
 });
+
+describe('licenseInventory on SPDX 3', () => {
+  it('reads the 3.0.1 expression dialect instead of counting it as unparseable', () => {
+    const ci = '_:ci';
+    const graph = JSON.stringify({
+      '@context': 'https://spdx.org/rdf/3.0.1/spdx-context.jsonld',
+      '@graph': [
+        { type: 'CreationInfo', '@id': ci, specVersion: '3.0.1', created: '2026-06-01T10:00:00Z' },
+        { type: 'SpdxDocument', spdxId: 'https://acme.example/doc/inv', creationInfo: ci, name: 'inv' },
+        { type: 'software_Package', spdxId: 'https://acme.example/pkg/a', creationInfo: ci, name: 'a' },
+        { type: 'simplelicensing_LicenseExpression', spdxId: 'https://acme.example/lic/1', creationInfo: ci, simplelicensing_licenseExpression: 'GPL-2.0-only with DocumentRef-d:AdditionRef-x' },
+        { type: 'Relationship', spdxId: 'https://acme.example/rel/1', creationInfo: ci, from: 'https://acme.example/pkg/a', relationshipType: 'hasDeclaredLicense', to: ['https://acme.example/lic/1'] },
+      ],
+    });
+    const ws = addDocument(emptyWorkspace, loadedFromText('inv.spdx3.json', graph)).workspace;
+    const inv = licenseInventory(ws);
+    expect(inv.unparseable).toBe(0);
+    expect(inv.rows.map((r) => r.id)).toEqual(['GPL-2.0-only']);
+  });
+});

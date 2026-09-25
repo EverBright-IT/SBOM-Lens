@@ -6,8 +6,10 @@ import type {
   TreeNode,
   WorkspaceState,
 } from '@sbomlens/core';
+import type { Diagnostic } from '@sbomlens/core';
 import { filterTree, findVersionConflicts, flattenVisible, searchWorkspace } from '@sbomlens/core';
 import { memoLast } from './memo';
+import type { IngestFailure } from './store';
 import { useAppStore } from './store';
 
 /**
@@ -106,18 +108,27 @@ export interface WorkspaceStats {
   diagnostics: { errors: number; warnings: number; infos: number };
 }
 
-const statsMemo = memoLast((ws: WorkspaceState, _version: number, failureDiagnostics: number): WorkspaceStats => {
+const statsMemo = memoLast((ws: WorkspaceState, _version: number, failures: readonly IngestFailure[]): WorkspaceStats => {
   let packages = 0;
   let files = 0;
-  const diagnostics = { errors: failureDiagnostics, warnings: 0, infos: 0 };
-  for (const loaded of ws.documents.values()) {
-    packages += loaded.indexes.packageCount;
-    files += loaded.indexes.fileCount;
-    for (const d of loaded.document.diagnostics) {
+  const diagnostics = { errors: 0, warnings: 0, infos: 0 };
+  const count = (list: readonly Diagnostic[]) => {
+    for (const d of list) {
       if (d.severity === 'error') diagnostics.errors++;
       else if (d.severity === 'warning') diagnostics.warnings++;
       else diagnostics.infos++;
     }
+  };
+  // A file that did not load is one error; an overlay that loaded with
+  // findings counts those findings by their own severity.
+  for (const failure of failures) {
+    if (failure.loaded) count(failure.diagnostics);
+    else diagnostics.errors++;
+  }
+  for (const loaded of ws.documents.values()) {
+    packages += loaded.indexes.packageCount;
+    files += loaded.indexes.fileCount;
+    count(loaded.document.diagnostics);
   }
   let unresolvedStructural = 0;
   for (const r of ws.resolutions.values()) {
@@ -130,7 +141,7 @@ export function useWorkspaceStats(): WorkspaceStats {
   const ws = useAppStore((s) => s.ws);
   const version = useAppStore((s) => s.wsVersion);
   const failures = useAppStore((s) => s.failures);
-  return statsMemo(ws, version, failures.length);
+  return statsMemo(ws, version, failures);
 }
 
 const conflictsMemo = memoLast((ws: WorkspaceState, version: number): ConflictGroup[] => {

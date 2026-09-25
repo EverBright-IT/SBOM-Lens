@@ -125,7 +125,15 @@ validator; the OASIS csaf-validator owns that.
 Load as many VEX documents as you like. When several statements target the
 same (vulnerability, package) pair, the one with the **newest timestamp**
 wins — the OpenVEX time rule; a statement's own timestamp beats the
-document's. Ties fall to the later-loaded document, so the hand-over
+document's. A tie *within one document* falls to the more cautious status:
+a CSAF product tree that installs one component on two hosts, affected on
+one and fixed on the other, yields two statements about the same package
+with the same date, and the finding then reads *affected* with a
+superseded count of one, so the conflict stays visible instead of the
+reassuring half hiding the alarming one. One statement that names several
+products of the same package (both hosts affected) is one finding, matched
+by the first of purl, CPE, hash. Ties across documents fall to the
+later-loaded document, so the hand-over
 **order is part of the contract**: the app matches in ingest order, and a
 programmatic consumer should sort its inputs stably (e.g. by path) before
 calling `matchVex`. Re-loading a document with the same `@id` replaces the

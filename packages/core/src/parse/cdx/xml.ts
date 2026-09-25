@@ -220,25 +220,37 @@ function readProperties(el: XmlElement): Record<string, unknown>[] {
  * every nested element with children of its own becomes an entry too.
  */
 function readDependencies(el: XmlElement): Record<string, unknown>[] {
-  const out: Record<string, unknown>[] = [];
+  // One entry per ref: a ref nested in several places merges its dependsOn
+  // and provides sets instead of yielding duplicate edges.
+  const entries = new Map<string, { dependsOn: Set<string>; provides: Set<string> }>();
+  const refOf = (node: XmlElement): string | undefined =>
+    typeof node.attrs.ref === 'string' && node.attrs.ref.length > 0 ? node.attrs.ref : undefined;
   const stack = ownChildren(el).filter((c) => c.name === 'dependency');
   while (stack.length > 0) {
     const node = stack.shift()!;
-    const entry: Record<string, unknown> = {};
-    setIf(entry, 'ref', node.attrs.ref);
+    const ref = refOf(node);
+    if (ref === undefined) continue;
+    let entry = entries.get(ref);
+    if (!entry) {
+      entry = { dependsOn: new Set(), provides: new Set() };
+      entries.set(ref, entry);
+    }
     const children = ownChildren(node).filter((c) => c.name === 'dependency');
-    entry.dependsOn = children
-      .map((c) => c.attrs.ref)
-      .filter((ref): ref is string => typeof ref === 'string' && ref.length > 0);
-    const provides = ownChildren(node)
-      .filter((c) => c.name === 'provides')
-      .map((c) => c.attrs.ref)
-      .filter((ref): ref is string => typeof ref === 'string' && ref.length > 0);
-    if (provides.length > 0) entry.provides = provides;
-    out.push(entry);
+    for (const child of children) {
+      const childRef = refOf(child);
+      if (childRef !== undefined) entry.dependsOn.add(childRef);
+    }
+    for (const provided of ownChildren(node).filter((c) => c.name === 'provides')) {
+      const providedRef = refOf(provided);
+      if (providedRef !== undefined) entry.provides.add(providedRef);
+    }
     for (const child of children) if (ownChildren(child).length > 0) stack.push(child);
   }
-  return out;
+  return [...entries].map(([ref, entry]) => ({
+    ref,
+    dependsOn: [...entry.dependsOn],
+    ...(entry.provides.size > 0 ? { provides: [...entry.provides] } : {}),
+  }));
 }
 
 /**

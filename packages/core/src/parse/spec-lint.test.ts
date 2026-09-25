@@ -309,6 +309,7 @@ describe('spec lint, end to end', () => {
       // csaf overlay (parser notes; the TR-03191 measurement has no code at all)
       'CSAF_VULN_SKIPPED',
       'CSAF_PRODUCT_UNRESOLVED',
+      'CSAF_TREE_CAPPED',
       // ocm
       'OCM_V3ALPHA1',
       'OCM_DIGEST_MISMATCH',

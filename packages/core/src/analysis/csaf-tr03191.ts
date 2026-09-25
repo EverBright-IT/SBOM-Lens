@@ -94,19 +94,25 @@ export function lintCsafTr03191(raw: unknown, resolved?: ReadonlyMap<string, Csa
     category !== undefined && (ADVISORY_PROFILES.has(category) || (noVulnerabilities && NO_VULNERABILITY_PROFILES.has(category)));
   findings.push({
     id: 'tr03191-profile',
-    clause: '4.2',
-    label: 'Security Advisory, VEX or Security Incident Response profile for vulnerability information',
+    clause: '4.2, 4.5',
+    label: 'Security Advisory or VEX profile for vulnerability information (4.2); Security Incident Response for incidents (4.5)',
     pass: profileOk,
     actual: category ?? 'no document.category',
     ...(profileApplicable ? {} : { applicable: false }),
   });
 
   const withAffected = vulnerabilities.filter((v) => bucketIds(v, AFFECTED_BUCKETS).length > 0);
-  const withFix = withAffected.filter(
-    (v) =>
-      bucketIds(v, FIXED_BUCKETS).length > 0 ||
-      asRecordArray(v.remediations).some((r) => NO_FIX_CATEGORIES.has(asString(r.category) ?? '')),
-  ).length;
+  const groups = productGroups(tree);
+  const withFix = withAffected.filter((v) => {
+    if (bucketIds(v, FIXED_BUCKETS).length > 0) return true;
+    // A no-fix remediation counts only when it addresses an affected product.
+    const affected = new Set(bucketIds(v, AFFECTED_BUCKETS));
+    return asRecordArray(v.remediations).some(
+      (r) =>
+        NO_FIX_CATEGORIES.has(asString(r.category) ?? '') &&
+        remediationTargets(r, groups).some((pid) => affected.has(pid)),
+    );
+  }).length;
   findings.push({
     id: 'tr03191-fixed-versions',
     clause: '4.2',
@@ -132,12 +138,17 @@ export function lintCsafTr03191(raw: unknown, resolved?: ReadonlyMap<string, Csa
 
   // --- 4.4 Product tree -------------------------------------------------------
   const { chains, ranges } = branchFacts(asRecordArray(tree.branches));
+  const treeEmpty =
+    asRecordArray(tree.branches).length === 0 &&
+    asRecordArray(tree.full_product_names).length === 0 &&
+    asRecordArray(tree.relationships).length === 0;
   findings.push({
     id: 'tr03191-hierarchy',
     clause: '4.4',
     label: 'Product tree structured vendor / product_name / product_version',
     pass: chains > 0,
-    actual: `${chains} complete chain${chains === 1 ? '' : 's'}`,
+    actual: treeEmpty ? 'no product tree' : `${chains} complete chain${chains === 1 ? '' : 's'}`,
+    ...(treeEmpty ? { applicable: false } : {}),
   });
 
   findings.push({
@@ -182,6 +193,24 @@ function hasCvss(vuln: Record<string, unknown>): boolean {
     isRecord(node.cvss_v4) || isRecord(node.cvss_v3) || isRecord(node.cvss_v2);
   if (asRecordArray(vuln.scores).some(carries)) return true;
   return asRecordArray(vuln.metrics).some((m) => isRecord(m.content) && carries(m.content));
+}
+
+/** product_groups: group_id -> member product ids. */
+function productGroups(tree: Record<string, unknown>): Map<string, string[]> {
+  const groups = new Map<string, string[]>();
+  for (const group of asRecordArray(tree.product_groups)) {
+    const id = asString(group.group_id);
+    if (id) groups.set(id, asStringArray(group.product_ids));
+  }
+  return groups;
+}
+
+/** The products a remediation addresses, group members included. */
+function remediationTargets(remediation: Record<string, unknown>, groups: ReadonlyMap<string, string[]>): string[] {
+  return [
+    ...asStringArray(remediation.product_ids),
+    ...asStringArray(remediation.group_ids).flatMap((g) => groups.get(g) ?? []),
+  ];
 }
 
 function bucketIds(vuln: Record<string, unknown>, buckets: readonly string[]): string[] {

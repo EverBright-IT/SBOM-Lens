@@ -184,7 +184,19 @@ export function parseCsaf(fileName: string, raw: unknown): VexDocument {
     }
   });
 
-  diagnostics.push(...csafSchemaFindings(root, definedProductIds(root.product_tree)));
+  // Beyond the depth cap the tree is not read; saying so beats reporting the
+  // unread products as undefined.
+  const capped = treeCapped(root.product_tree);
+  if (capped) {
+    diagnostics.push(
+      diag(
+        'warning',
+        'CSAF_TREE_CAPPED',
+        `product_tree nests deeper than ${MAX_BRANCH_DEPTH} levels; products below that depth are not read and mandatory test 6.1.1 is not measured.`,
+      ),
+    );
+  }
+  diagnostics.push(...csafSchemaFindings(root, definedProductIds(root.product_tree), capped));
 
   const publisher = isRecord(docNode.publisher) ? docNode.publisher : undefined;
   const trackingVersion = asString(tracking.version);
@@ -230,7 +242,7 @@ export function parseCsaf(fileName: string, raw: unknown): VexDocument {
  * product id used in a vulnerability that the product tree never defines
  * (CSAF 2.0 mandatory test 6.1.1).
  */
-function csafSchemaFindings(root: Record<string, unknown>, defined: ReadonlySet<string>): Diagnostic[] {
+function csafSchemaFindings(root: Record<string, unknown>, defined: ReadonlySet<string>, capped = false): Diagnostic[] {
   const lint = createLint();
   const docNode = isRecord(root.document) ? root.document : {};
   const tracking = isRecord(docNode.tracking) ? docNode.tracking : {};
@@ -289,11 +301,13 @@ function csafSchemaFindings(root: Record<string, unknown>, defined: ReadonlySet<
     for (const entry of asRecordArray(vuln.flags)) if (untargeted(entry)) untargetedFlag.add(name);
   });
   lint.warnTally('CSAF_SCHEMA_BAD_CVE_ID', badCve, (count, list) => `${count} cve value(s) do not follow CVE-YYYY-NNNN: ${list}.`);
-  lint.warnTally(
-    'CSAF_SCHEMA_UNDEFINED_PRODUCT_ID',
-    undefinedProduct,
-    (count, list) => `${count} product id(s) referenced but not defined in the product tree (mandatory test 6.1.1): ${list}.`,
-  );
+  if (!capped) {
+    lint.warnTally(
+      'CSAF_SCHEMA_UNDEFINED_PRODUCT_ID',
+      undefinedProduct,
+      (count, list) => `${count} product id(s) referenced but not defined in the product tree (mandatory test 6.1.1): ${list}.`,
+    );
+  }
   lint.warnTally(
     'CSAF_SCHEMA_UNTARGETED_REMEDIATION',
     untargetedRemediation,
@@ -412,6 +426,22 @@ function resolveProductTree(tree: unknown): Map<string, ProductIdent> {
 
 /** Branch trees are walked iteratively with a depth cap: a hostile document must not exhaust the stack. */
 const MAX_BRANCH_DEPTH = 64;
+
+/** True when a branch at the cap still has children, i.e. the walks stopped short of the tree. */
+function treeCapped(tree: unknown): boolean {
+  if (!isRecord(tree)) return false;
+  const stack = asRecordArray(tree.branches).map((branch) => ({ branch, depth: 0 }));
+  while (stack.length > 0) {
+    const { branch, depth } = stack.pop()!;
+    const children = asRecordArray(branch.branches);
+    if (depth >= MAX_BRANCH_DEPTH) {
+      if (children.length > 0) return true;
+      continue;
+    }
+    for (const child of children) stack.push({ branch: child, depth: depth + 1 });
+  }
+  return false;
+}
 
 function walkBranches(branches: readonly Record<string, unknown>[], ids: Map<string, ProductIdent>): void {
   const stack = branches.map((branch) => ({ branch, depth: 0 }));

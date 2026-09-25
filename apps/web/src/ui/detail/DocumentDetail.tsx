@@ -309,7 +309,7 @@ function QualitySection({ ws, loaded }: { ws: WorkspaceState; loaded: LoadedDocu
       <p className="mt-2 text-[11px] text-slate-400">
         Across {formatCount(report.packagesTotal)} package{report.packagesTotal === 1 ? '' : 's'}
         {cryptoMeters.length > 0
-          ? ` and ${formatCount(report.cryptoAssetsTotal)} cryptographic asset${report.cryptoAssetsTotal === 1 ? '' : 's'}`
+          ? `, ${formatCount(report.cryptoAssetsTotal)} of them cryptographic asset${report.cryptoAssetsTotal === 1 ? '' : 's'},`
           : ''}{' '}
         in this document.
         {report.noneInScope > 0

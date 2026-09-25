@@ -161,8 +161,8 @@ interface AppState {
 
     /** Add or update (same @id) a VEX document; returns matched element count. */
     addVexDocument(doc: VexDocument): { matched: number };
-    /** Batch form: one overlay recompute for a folder of advisories; same ids replace, later entries win. */
-    addVexDocuments(docs: readonly VexDocument[]): { matched: number };
+    /** Batch form: one overlay recompute for a folder of advisories; same ids replace, later entries win. `committed` counts distinct ids. */
+    addVexDocuments(docs: readonly VexDocument[]): { matched: number; committed: number };
     removeVexDocument(id: string): void;
 
     /** Store (or clear with null) the latest delivery-acceptance report. */
@@ -458,11 +458,12 @@ export const useAppStore = create<AppState>()((set, get) => ({
     },
 
     addVexDocument(doc) {
-      return get().actions.addVexDocuments([doc]);
+      const { matched } = get().actions.addVexDocuments([doc]);
+      return { matched };
     },
     addVexDocuments(docs) {
       const { ws, vex } = get();
-      if (docs.length === 0) return { matched: vex.findings.size };
+      if (docs.length === 0) return { matched: vex.findings.size, committed: 0 };
       // Same @id replaces (a newer version of the same document); within one
       // batch the later entry wins, so a folder with two versions of an
       // advisory ends up with the one listed last.
@@ -470,7 +471,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
       const documents = [...vex.documents.filter((d) => !incoming.has(d.id)), ...incoming.values()];
       const findings = vexFindingsFor(ws, documents);
       set({ vex: { documents, findings } });
-      return { matched: findings.size };
+      return { matched: findings.size, committed: incoming.size };
     },
     removeVexDocument(id) {
       const { ws, vex } = get();

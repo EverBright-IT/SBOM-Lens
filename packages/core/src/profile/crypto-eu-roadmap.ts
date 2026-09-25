@@ -61,7 +61,7 @@ export const CRYPTO_EU_ROADMAP_PROFILE: ComplianceProfile = {
       field: 'name',
       assetTypes: ['algorithm'],
       primitives: ['kem', 'key-agree'],
-      pattern: '(ML-?KEM|ml-?kem|[Ff]rodo|[Cc]lassic[- ]?[Mm]c[Ee]liece|mceliece|\\bHQC\\b|\\bhqc\\b)',
+      pattern: '(ML-?KEM|ml-?kem|[Ff]rodo|[Cc]lassic[- ]?[Mm]c[Ee]liece|mceliece|\\bHQC|\\bhqc)',
       label: 'Key agreement and encapsulation: quantum-safe scheme named, ML-KEM, FrodoKEM, Classic McEliece or HQC (share of the inventory)',
     },
     {
@@ -70,7 +70,7 @@ export const CRYPTO_EU_ROADMAP_PROFILE: ComplianceProfile = {
       field: 'name',
       assetTypes: ['algorithm'],
       primitives: ['signature'],
-      pattern: '\\b(ML-?DSA|ml-?dsa|SLH-?DSA|slh-?dsa|XMSS|xmss|LMS|lms)\\b',
+      pattern: '\\b(ML-?DSA|ml-?dsa|SLH-?DSA|slh-?dsa|XMSS|xmss|LMS|lms)',
       label: 'Signatures: quantum-safe scheme named, ML-DSA, SLH-DSA, XMSS or LMS (share of the inventory)',
     },
     { id: 'certificate-subject', type: 'crypto-coverage', field: 'certificateSubject', assetTypes: ['certificate'], label: 'Certificates: subject stated' },

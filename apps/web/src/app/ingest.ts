@@ -264,14 +264,18 @@ function parseOverlay(fileName: string, raw: unknown, format: OverlayFormat): Ve
 function commitOverlays(docs: readonly VexDocument[]): void {
   if (docs.length === 0) return;
   const { actions } = useAppStore.getState();
-  const { matched } = actions.addVexDocuments(docs);
+  const { matched, committed } = actions.addVexDocuments(docs);
   const statements = docs.reduce((n, d) => n + d.statements.length, 0);
   const label =
     docs.length === 1
       ? `${docs[0]!.format === 'csaf' ? 'CSAF' : 'VEX'} loaded`
-      : `${docs.length} advisory documents loaded`;
+      : `${committed} advisory document${committed === 1 ? '' : 's'} loaded`;
+  // Two files with one id (same tracking id, or no id and the same file name)
+  // displace each other; the toast says so instead of counting both.
+  const displaced = docs.length - committed;
+  const note = displaced > 0 ? `, ${displaced} replaced by a later file with the same id` : '';
   actions.toast(
-    `${label}: ${statements} statement${statements === 1 ? '' : 's'}, ${matched} package${matched === 1 ? '' : 's'} matched`,
+    `${label}: ${statements} statement${statements === 1 ? '' : 's'}, ${matched} package${matched === 1 ? '' : 's'} matched${note}`,
     matched > 0 ? 'success' : 'info',
   );
 }

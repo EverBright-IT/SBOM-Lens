@@ -65,7 +65,13 @@ export function profileReportToMarkdown(
   // Package meters and crypto-asset meters count different things; one table
   // headed "packages" would misstate what a CBOM row's total is.
   const coverages = report.results.filter((r) => r.coverage);
-  coverageTable(`## Package coverage (${report.packagesTotal} packages)`, coverages.filter((r) => r.subject !== 'crypto'));
+  // Cryptographic assets are packages too (CycloneDX components), so the two
+  // totals overlap rather than add up.
+  const packagesLabel =
+    report.cryptoAssetsTotal > 0
+      ? `${report.packagesTotal} packages, ${report.cryptoAssetsTotal} of them cryptographic assets`
+      : `${report.packagesTotal} packages`;
+  coverageTable(`## Package coverage (${packagesLabel})`, coverages.filter((r) => r.subject !== 'crypto'));
   coverageTable(
     `## Cryptographic asset coverage (${report.cryptoAssetsTotal} assets)`,
     coverages.filter((r) => r.subject === 'crypto'),

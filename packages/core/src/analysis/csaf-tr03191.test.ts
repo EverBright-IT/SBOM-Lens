@@ -91,7 +91,7 @@ describe('lintCsafTr03191', () => {
     expect(findings).toHaveLength(9);
     expect(findings.every((f) => f.pass)).toBe(true);
     expect(findings.every((f) => f.applicable !== false)).toBe(true);
-    expect(findings.map((f) => f.clause)).toEqual(['4.2', '4.2', '4.2', '4.2', '4.3', '4.4', '4.4', '4.4', '4.6']);
+    expect(findings.map((f) => f.clause)).toEqual(['4.2', '4.2', '4.2, 4.5', '4.2', '4.3', '4.4', '4.4', '4.4', '4.6']);
     expect(findings.filter((f) => f.informational).map((f) => f.id)).toEqual(['tr03191-version-ranges']);
   });
 

@@ -49,9 +49,11 @@ export const BSI_LICENSING_PROFILE: ComplianceProfile = {
     'CycloneDX licence acknowledged as concluded) is gated at 100 %, the ' +
     'original licence (5.2.4, required where it exists; hasDeclaredLicense, ' +
     'acknowledgement declared) is a meter, and the effective licence (5.2.5, ' +
-    'optional) is a meter read from the CycloneDX property ' +
-    'bsi:component:effectiveLicense; its SPDX 3 form, a relationship of ' +
-    'type other with the comment hasEffectiveLicense, is not read. A ' +
+    'optional) is a meter on the presence of the CycloneDX property ' +
+    'bsi:component:effectiveLicense (NOASSERTION and NONE count as absent; ' +
+    'a property value is not checked against the License List); its SPDX 3 ' +
+    'form, a relationship of type other with the comment hasEffectiveLicense, ' +
+    'is not read. A ' +
     'CycloneDX licence entry without acknowledgement counts as declared, so ' +
     'a BOM that omits the acknowledgement the mapping names fails the ' +
     'distribution gate. Identifiers are checked against the SPDX License ' +
@@ -88,8 +90,9 @@ export const BSI_LICENSING_PROFILE: ComplianceProfile = {
       id: 'effective-licence',
       type: 'package-coverage',
       field: 'properties',
-      pattern: '(^|\\n)bsi:component:effectiveLicense=\\S',
-      label: 'Effective licence where stated (5.2.5: CycloneDX property bsi:component:effectiveLicense; the SPDX 3 form is not read)',
+      pattern: '(^|\\n)bsi:component:effectiveLicense=(?!(NOASSERTION|NONE)(\\n|$))\\S',
+      label:
+        'Effective licence property present (5.2.5: CycloneDX property bsi:component:effectiveLicense, presence only; the SPDX 3 form is not read)',
     },
   ],
 };

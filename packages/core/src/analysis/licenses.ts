@@ -67,6 +67,8 @@ export function licenseInventory(ws: WorkspaceState): LicenseInventory {
   };
 
   for (const [docId, loaded] of ws.documents) {
+    // SPDX 3 documents may carry the 3.0.1 additions the 2.x grammar lacks.
+    const dialect = { spdx3: loaded.document.spec.model === 'spdx-3' };
     for (const element of loaded.document.elements) {
       if (element.kind !== 'package') continue;
       packagesTotal++;
@@ -79,11 +81,11 @@ export function licenseInventory(ws: WorkspaceState): LicenseInventory {
           else withoutConcluded++;
           continue;
         }
-        if (licenseExpressionError(value) !== undefined) {
+        if (licenseExpressionError(value, dialect) !== undefined) {
           broken = true;
           continue;
         }
-        for (const id of licenseIdsInExpression(value)) {
+        for (const id of licenseIdsInExpression(value, dialect)) {
           const row = entry(id);
           row[field]++;
           row.packages.add(element.id);

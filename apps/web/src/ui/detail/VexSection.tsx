@@ -181,6 +181,7 @@ export function VexDocumentRow({ doc, onRemove }: { doc: VexDocument; onRemove?:
   const total = measured.length;
   const notApplicable = doc.tr03191?.filter((f) => f.applicable === false).length ?? 0;
   const tlp = doc.tlp ? doc.tlp.toUpperCase().replace(/^TLP:/, '') : undefined;
+  const tlpKnown = tlp !== undefined && Object.hasOwn(TLP_CLASS, tlp);
   return (
     <div className="text-xs">
       <div className="flex items-baseline gap-2">
@@ -189,9 +190,17 @@ export function VexDocumentRow({ doc, onRemove }: { doc: VexDocument; onRemove?:
             {doc.format === 'csaf' ? 'CSAF' : 'OpenVEX'}
           </span>
         )}
-        {tlp && (
-          <span className={clsx('shrink-0 rounded px-1 text-[9px] font-semibold tracking-wide', TLP_CLASS[tlp] ?? 'bg-slate-200 text-slate-800')}>
+        {tlp && tlpKnown && (
+          <span className={clsx('shrink-0 rounded px-1 text-[9px] font-semibold tracking-wide', TLP_CLASS[tlp])}>
             TLP:{tlp}
+          </span>
+        )}
+        {tlp && !tlpKnown && (
+          <span
+            className="shrink-0 rounded bg-slate-200 px-1 text-[9px] font-medium text-slate-600 dark:bg-slate-700 dark:text-slate-300"
+            title="distribution.tlp.label is not a label the standard defines (AMBER, GREEN, RED, WHITE; AMBER+STRICT and CLEAR in 2.1)"
+          >
+            {doc.tlp}
           </span>
         )}
         <span className="min-w-0 flex-1 truncate font-mono text-slate-600 dark:text-slate-300" title={doc.title ? `${doc.id}: ${doc.title}` : doc.id}>

@@ -84,6 +84,7 @@ export function LicensesView() {
   // inventory shows exactly the packages this row counted. Other facets and
   // a subtree scope would silently shrink that set, so they are cleared.
   const showPackages = (row: LicenseIdRow) => {
+    actions.setQuery(''); // the box filtered identifiers here; in the inventory it would filter names
     actions.clearFacets();
     actions.setInventoryScope(null);
     actions.setFacetLicenseIds(new Set([row.id]));
