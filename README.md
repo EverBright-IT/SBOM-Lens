@@ -68,7 +68,7 @@ Click **Load example** for a bundled four-document demo cascade, or drop your ow
 | Drag & drop | Anywhere in the window; folders are walked recursively |
 | Open ▸ Files / Folder | Standard pickers |
 | Open ▸ From URL | Fetches a document over HTTP(S), e.g. from a GitLab generic package registry |
-| `?url=` deep link | `https://sbom-lens.everbright-it.de/?url=<sbom-url>` opens a document straight from the address bar. Repeatable, so a cascade travels in one link |
+| `?url=` deep link | `https://sbom-lens.everbright-it.de/app/?url=<sbom-url>` opens a document straight from the address bar. Repeatable, so a cascade travels in one link |
 | Placeholder ▸ Fetch | Each unresolved reference offers a one-click fetch of its recorded URL |
 | **Fetch all** (status bar) | Downloads every referenced document **recursively** until the cascade is complete. One click for the full tree instead of one per placeholder |
 
@@ -81,7 +81,7 @@ page can point at "this document, rendered" instead of "download this file,
 then find a viewer". Repeat the parameter for a whole cascade:
 
 ```
-https://sbom-lens.everbright-it.de/?url=<release.spdx.json>&url=<component.spdx.json>
+https://sbom-lens.everbright-it.de/app/?url=<release.spdx.json>&url=<component.spdx.json>
 ```
 
 A deep link is input from whoever sent it, so three rules apply, and they are

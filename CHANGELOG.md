@@ -4,6 +4,24 @@ All notable changes to SBOM Lens. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [SemVer](https://semver.org) (0.x: the API surface is the app itself).
 
+## [0.29.4] - 2026-10-10
+
+### Security
+- **brace-expansion 5.0.12, markdown-it 14.3.1, source-map-js 1.2.2, undici 7.29.1**
+  (16 advisories, all build-time, accumulated in the 15 days since v0.29.3). Nothing
+  shipped carried them. `braces` 3.0.3 (GHSA-vfj7-8cjw-p6xm) has no fixed release,
+  so it enters `osv-scanner.toml` with a reason and an expiry of 2026-12-31; it is
+  reached only through vsce's secretlint on repository paths.
+
+### Fixed
+- README deep-link examples pointed at the landing page root, which does not
+  forward `?url=`; the app lives at `/app/`, and the examples now say so.
+
+### Changed
+- SBOM Lens extension: marketplace keywords now name what v0.28 and v0.29
+  added (CBOM, CSAF, CycloneDX XML, FDA 524B, DORA, license compliance), so the
+  in-editor search can find them.
+
 ## [0.29.3] - 2026-09-25
 
 ### Fixed

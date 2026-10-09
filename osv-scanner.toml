@@ -1,0 +1,7 @@
+# Findings the gate may skip. Every entry names why and expires, so a
+# forgotten ignore cannot outlive its reason. See docs/ci-security.md.
+
+[[IgnoredVulns]]
+id = "GHSA-vfj7-8cjw-p6xm"
+ignoreUntil = 2026-12-31
+reason = "braces 3.0.3 stack exhaustion on deeply nested glob patterns; no fixed release exists (last_affected 3.0.3). Build-time only, reached through vsce > secretlint > globby > fast-glob with repository paths as input, never untrusted patterns; nothing shipped carries it. Re-check at expiry."
