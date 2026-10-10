@@ -58,12 +58,17 @@ osv-scan:
 
 # The security templates run per push too, but never in the Renovate schedule.
 semgrep-sast:
+  # Analyzer image: the default npm before_script and cache must not apply.
+  cache: []
+  before_script: []
   rules:
     - if: $RENOVATE_RUN == "true"
       when: never
     - if: $CI_COMMIT_BRANCH || $CI_COMMIT_TAG
 
 secret_detection:
+  cache: []
+  before_script: []
   variables:
     # The signature-verification tests need a committed keypair to sign the
     # fixture. It is a throwaway test key (fixtures/ocm/keys/README.md says so),
@@ -212,7 +217,7 @@ publish-sbomlens:
     - npx --yes ovsx@$OVSX_VERSION verify-pat everbright-it
     # A tag that disagrees with the manifest would publish a mislabelled
     # extension under a version number nobody can correct afterwards.
-    - node -e "const v=require('./apps/vscode/package.json').version; if ('v'+v !== process.env.CI_COMMIT_TAG) { console.error(`vsix is ${v}, tag is ${process.env.CI_COMMIT_TAG}`); process.exit(1); }"
+    - node -e "const v=require('./apps/vscode/package.json').version; if ('v'+v !== process.env.CI_COMMIT_TAG) { console.error('vsix is '+v+', tag is '+process.env.CI_COMMIT_TAG); process.exit(1); }"
     - npx --yes ovsx@$OVSX_VERSION publish sbomlens.vsix
 
 publish-ocmlens:
@@ -221,7 +226,7 @@ publish-ocmlens:
   script:
     - test -n "$OVSX_TOKEN" || { echo "OVSX_TOKEN is not set. Add it as a masked CI variable."; exit 1; }
     - npx --yes ovsx@$OVSX_VERSION verify-pat everbright-it
-    - node -e "const v=require('./apps/vscode-ocm/package.json').version; if ('v'+v !== process.env.CI_COMMIT_TAG) { console.error(`vsix is ${v}, tag is ${process.env.CI_COMMIT_TAG}`); process.exit(1); }"
+    - node -e "const v=require('./apps/vscode-ocm/package.json').version; if ('v'+v !== process.env.CI_COMMIT_TAG) { console.error('vsix is '+v+', tag is '+process.env.CI_COMMIT_TAG); process.exit(1); }"
     - npx --yes ovsx@$OVSX_VERSION publish ocmlens.vsix
 
 # VS Code Marketplace publishing, one job per product. Same shape, same manual
@@ -265,7 +270,7 @@ publish-vsce-sbomlens:
     - npx --yes @vscode/vsce@$VSCE_VERSION verify-pat everbright-it
     # A tag that disagrees with the manifest would publish a mislabelled
     # extension under a version number nobody can correct afterwards.
-    - node -e "const v=require('./apps/vscode/package.json').version; if ('v'+v !== process.env.CI_COMMIT_TAG) { console.error(`vsix is ${v}, tag is ${process.env.CI_COMMIT_TAG}`); process.exit(1); }"
+    - node -e "const v=require('./apps/vscode/package.json').version; if ('v'+v !== process.env.CI_COMMIT_TAG) { console.error('vsix is '+v+', tag is '+process.env.CI_COMMIT_TAG); process.exit(1); }"
     # --packagePath reads the manifest out of the vsix, so this needs no cwd
     # inside the extension. No --skip-duplicate: a republished version must
     # fail loudly rather than look like a success that did nothing.
@@ -277,7 +282,7 @@ publish-vsce-ocmlens:
   script:
     - test -n "$VSCE_TOKEN" || { echo "VSCE_TOKEN is not set. Add it as a masked, protected CI variable, and protect the release tags."; exit 1; }
     - npx --yes @vscode/vsce@$VSCE_VERSION verify-pat everbright-it
-    - node -e "const v=require('./apps/vscode-ocm/package.json').version; if ('v'+v !== process.env.CI_COMMIT_TAG) { console.error(`vsix is ${v}, tag is ${process.env.CI_COMMIT_TAG}`); process.exit(1); }"
+    - node -e "const v=require('./apps/vscode-ocm/package.json').version; if ('v'+v !== process.env.CI_COMMIT_TAG) { console.error('vsix is '+v+', tag is '+process.env.CI_COMMIT_TAG); process.exit(1); }"
     - npx --yes @vscode/vsce@$VSCE_VERSION publish --packagePath ocmlens.vsix
 
 # GitLab releases for the tag, on BOTH instances. Releases are project
@@ -348,7 +353,10 @@ release-gitlab:
           url: '$CI_API_V4_URL/projects/$CI_PROJECT_ID/packages/generic/self-sbom/$CI_COMMIT_TAG/sbomlens-$CI_COMMIT_TAG.spdx.json'
           link_type: other
   rules:
-    - if: $CI_COMMIT_TAG
+      # Only where the release keyword works: the internal custom executor
+      # cannot run release-cli (every tag pipeline since v0.28.0 failed here);
+      # the gitlab.com mirror creates the release, GitHub gets its own.
+      - if: $CI_COMMIT_TAG && $CI_SERVER_HOST == "gitlab.com"
 
 # Self-hosting image, pushed to the project's container registry on tags.
 docker:

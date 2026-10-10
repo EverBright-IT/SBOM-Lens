@@ -4,6 +4,20 @@ All notable changes to SBOM Lens. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [SemVer](https://semver.org) (0.x: the API surface is the app itself).
 
+## [0.29.6] - 2026-10-10
+
+### Fixed
+- CI only, no product change. `semgrep-sast` and `secret_detection` inherited the
+  default `npm ci` before_script and npm cache; the analyzer images carry no npm,
+  so the scan never ran and the report upload failed on every pipeline. Both jobs
+  now reset `before_script` and `cache` like every other foreign-image job.
+- The tag-versus-manifest guard in the four publish jobs used a template literal
+  inside a double-quoted shell line; Alpine `sh` rejected it ("bad substitution")
+  and the guard never ran. It now concatenates strings and actually guards.
+- `release-gitlab` runs only on gitlab.com, where the `release` keyword works; the
+  internal custom executor cannot run release-cli and failed every tag pipeline
+  since v0.28.0. GitHub releases come from the workflow as before.
+
 ## [0.29.5] - 2026-10-10
 
 ### Security
