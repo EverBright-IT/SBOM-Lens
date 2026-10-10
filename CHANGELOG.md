@@ -4,6 +4,32 @@ All notable changes to SBOM Lens. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [SemVer](https://semver.org) (0.x: the API surface is the app itself).
 
+## [0.29.5] - 2026-10-10
+
+### Security
+- **@vscode/vsce 4.0.0** in both extensions. vsce 4 no longer depends on secretlint,
+  which removes the whole `braces` chain (GHSA-vfj7-8cjw-p6xm) and 162 packages
+  from the dev tree; `osv-scanner.toml` is gone with it, and `npm audit` reports
+  zero findings for the first time since v0.28.0. vsce 4 requires Node 22, which
+  every CI job already used; `engines.node` now says so (`>=22`). The CI publish
+  jobs pin vsce 4.0.0. The new credential migration in vsce 4 only prompts on a
+  TTY, so the `VSCE_PAT`-driven publish jobs stay non-interactive (checked in
+  `out/keytarMigration.js`).
+
+### Fixed
+- v0.29.4 release notes named markdown-it 14.3.1 and undici 7.29.1; the lockfile
+  actually moved to 14.3.2 and 7.30.0. The fix columns of the scanner had been
+  copied instead of the lockfile.
+- The deep-link example in `deepLink.ts` still pointed at the landing page root;
+  it now says `/app/?url=` like the README.
+
+### Noted
+- `npm ci` warns that glob 11.1.0 is deprecated. It arrives through
+  vite-plugin-pwa and workbox-build, which pin glob 11 even in their newest
+  releases, and OSV lists no advisory for 11.1.0 (the one glob advisory,
+  GHSA-5j98-mcp5-4vw2, is fixed in exactly that version). The warning is
+  upstream deprecation noise, not a finding; nothing to override.
+
 ## [0.29.4] - 2026-10-10
 
 ### Security

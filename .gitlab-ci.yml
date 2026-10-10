@@ -249,7 +249,7 @@ publish-ocmlens:
   cache: []
   before_script: []
   variables:
-    VSCE_VERSION: '3.9.2'
+    VSCE_VERSION: '4.0.0'
     VSCE_PAT: $VSCE_TOKEN
   rules:
     - if: $CI_COMMIT_TAG

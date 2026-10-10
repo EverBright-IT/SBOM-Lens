@@ -7,7 +7,7 @@ import { useAppStore } from './store';
  * rendered" instead of "download this file, then find a viewer". Repeatable,
  * so a whole cascade can be linked at once:
  *
- *   https://sbom-lens.everbright-it.de/?url=<release>&url=<component>
+ *   https://sbom-lens.everbright-it.de/app/?url=<release>&url=<component>
  *
  * The query survives a reload, which is the point of a shareable link.
  *
