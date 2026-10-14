@@ -3,7 +3,7 @@ import { diag } from '../model/diagnostics';
 import type { SbomElement } from '../model/document';
 import type { ElementId } from '../model/ids';
 import type { WorkspaceState } from '../workspace/workspace';
-import { cpeMatchKey } from './cpe';
+import { cpeMatchKey, elementCpeKeys } from './cpe';
 
 /**
  * OpenVEX overlay: what the supplier COMMUNICATES about known
@@ -550,16 +550,12 @@ function identifierMatchKeys(element: SbomElement): MatchKey[] {
     const purl = purlMatchKey(element.purl);
     if (purl) keys.push(purl.version !== undefined ? { id: purl.pkg, kind: 'purl', version: purl.version } : { id: purl.pkg, kind: 'purl' });
   }
-  for (const ref of element.externalRefs ?? []) {
-    if (!ref.locator.toLowerCase().startsWith('cpe:')) continue;
-    const cpe = cpeMatchKey(ref.locator);
-    if (cpe) {
-      keys.push(
-        cpe.version !== undefined
-          ? { id: `cpe|${cpe.key}`, kind: 'cpe', version: cpe.version }
-          : { id: `cpe|${cpe.key}`, kind: 'cpe' },
-      );
-    }
+  for (const cpe of elementCpeKeys(element)) {
+    keys.push(
+      cpe.version !== undefined
+        ? { id: `cpe|${cpe.key}`, kind: 'cpe', version: cpe.version }
+        : { id: `cpe|${cpe.key}`, kind: 'cpe' },
+    );
   }
   return keys;
 }

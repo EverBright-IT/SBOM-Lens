@@ -12,11 +12,39 @@
  * guessed.
  */
 
+import type { SbomElement } from '../model/document';
+
 export interface CpeMatchKey {
   /** `part:vendor:product`, lowercase, unescaped/decoded. */
   key: string;
   /** Concrete version; undefined covers every version (ANY). */
   version?: string;
+}
+
+/**
+ * The CPEs an inventory element carries: its external references whose
+ * locator is a CPE (SPDX SECURITY cpe22Type/cpe23Type, the CycloneDX `cpe`
+ * field), parsed. Unparseable or wildcarded ones are dropped, never guessed.
+ */
+export function elementCpeKeys(element: SbomElement): CpeMatchKey[] {
+  const keys: CpeMatchKey[] = [];
+  for (const ref of element.externalRefs ?? []) {
+    if (!ref.locator.toLowerCase().startsWith('cpe:')) continue;
+    const key = cpeMatchKey(ref.locator);
+    if (key) keys.push(key);
+  }
+  return keys;
+}
+
+/**
+ * Whether `wanted` (a statement or a search query) identifies an element
+ * carrying `held`: same part:vendor:product, and either a versionless
+ * `wanted` (every version) or the identical concrete version. The same rule
+ * the VEX overlay applies, so search and matching never disagree.
+ */
+export function cpeCovers(wanted: CpeMatchKey, held: CpeMatchKey): boolean {
+  if (wanted.key !== held.key) return false;
+  return wanted.version === undefined || (held.version !== undefined && held.version === wanted.version);
 }
 
 /**

@@ -48,6 +48,13 @@ on [Open VSX](https://open-vsx.org/extension/everbright-it/sbomlens).
 - **Answers questions, not just files.** Beyond browsing: an exportable
   cross-cascade inventory, version-conflict detection, release-to-release
   diffs, and a per-document NTIA quality report.
+- **Useful for Cyber Resilience Act work.** Search every loaded SBOM by name,
+  purl or CPE to answer the first question of an Article 14 early warning:
+  which of our products contain the exploited component? A CPE matches by
+  identity, so an advisory's versionless CPE finds every version you ship.
+  Measure SBOMs against BSI TR-03183-2 and read suppliers' CSAF advisories
+  next to them. [docs/cra.md](docs/cra.md) maps the obligations onto these
+  features and says what SBOM Lens does not do.
 
 ## Quick start
 
@@ -139,7 +146,7 @@ documents** without nagging you to resolve them.
 | --- | --- |
 | **Explore** | "What does this release contain?" The cascading tree, detail pane, and raw source. Shift+click a chevron (or press `*`) to expand an entire subtree including resolved sub-SBOMs; the funnel next to the search box filters the tree in place, leaving matches plus their ancestors and hiding everything else |
 | **Map** | "How is this cascade wired?" The document topology as a collapsible left-to-right tree: documents as nodes, resolved references as method-styled edges, missing documents as dashed stubs. Nodes fold their subtree behind a `+N` badge (large workspaces start folded), search force-reveals matches, pan/zoom, click selects, double-click jumps into Explore |
-| **Inventory** | "Give me the parts list as a file." One sortable table across all documents, filtered by the same search + facet chips (documents, kinds, purposes, licenses), exportable as CSV/JSON |
+| **Inventory** | "Give me the parts list as a file." One sortable table across all documents, filtered by the same search (name, purl or CPE) + facet chips (documents, kinds, purposes, licenses), exportable as CSV/JSON |
 | **Licenses** | "Which licence identifiers does this release name, and are they real ones?" Every SPDX identifier across the cascade with declared/concluded counts, packages and documents, and whether it is on the SPDX License List, deprecated there, a `LicenseRef-`, or not on the list; click through to the packages, export as CSV/Markdown. Identifier facts and counts only, no judgement about what a licence obliges |
 | **Conflicts** | "Which packages ship in more than one version?" Grouped by purl identity across the whole cascade, each occurrence one click from its place in the tree |
 | **Diff** | "What changed between these two releases?" Added, removed and version-changed packages between two cascades (each side is a document plus everything reachable through its resolved references), copyable as Markdown for release notes |
@@ -225,10 +232,11 @@ conformance verdict: for authoritative validation use
   profiles outside core/software (AI, dataset, build) are counted in a
   notice rather than shown. Tag-value has no 3.x serialization; other 3.x
   serializations are not parsed.
-- **CycloneDX 1.x** as JSON: components (including nested assemblies),
-  dependencies, purl and CPE identity, hashes, licenses, and BOM-Links —
-  a reference of type `bom` (`urn:cdx:...`) resolves across loaded BOMs
-  through the same cascade machinery. Read-only viewing, no conversion.
+- **CycloneDX 1.x** as JSON or XML: components (including nested
+  assemblies), dependencies, purl and CPE identity, hashes, licenses,
+  cryptographic assets (CBOM), and BOM-Links. A reference of type `bom`
+  (`urn:cdx:...`) resolves across loaded BOMs through the same cascade
+  machinery. Read-only viewing, no conversion.
 - **Trivy-native JSON**: recognized with a pointer to the right conversion
   (`trivy --format spdx-json`).
 
@@ -439,8 +447,6 @@ host anything. It is the reading half of the SBOM workflow.
   [docs/extension-architecture.md](docs/extension-architecture.md).
 - Workspace persistence (File System Access API), shareable deep links
   (deep links require addressable sources: catalog or URL-loaded documents)
-- CSAF 2.0 as the next vulnerability-communication format (the OpenVEX
-  overlay landed in v0.19.0, kept out of the core model as designed)
 
 ## Repository & mirrors
 

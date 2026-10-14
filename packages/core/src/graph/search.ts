@@ -1,4 +1,6 @@
-import type { SbomElement } from '../model/document';
+import type { CpeMatchKey } from '../analysis/cpe';
+import { cpeCovers, cpeMatchKey, elementCpeKeys } from '../analysis/cpe';
+import type { SbomDocument, SbomElement } from '../model/document';
 import { effectiveLicense } from '../model/document';
 import type { LicenseExpressionOptions } from '../parse/spec-lint';
 import { licenseIdsInExpression } from '../parse/spec-lint';
@@ -37,11 +39,37 @@ export interface SearchResult {
   total: number;
 }
 
+/** A CPE identity hit ranks just below an exact name: the query named this element. */
+const CPE_IDENTITY_SCORE = 900;
+
+/**
+ * Per-document element CPE keys, built on the first CPE query only, so a
+ * document that is never searched by CPE never pays for parsing its CPEs.
+ * Keyed by the immutable document object: a reload rebuilds the entry and a
+ * removed document's entry is garbage-collected with it.
+ */
+const cpeKeysCache = new WeakMap<SbomDocument, ReadonlyArray<readonly CpeMatchKey[]>>();
+
+function cpeKeysOf(doc: SbomDocument): ReadonlyArray<readonly CpeMatchKey[]> {
+  let keys = cpeKeysCache.get(doc);
+  if (!keys) {
+    keys = doc.elements.map(elementCpeKeys);
+    cpeKeysCache.set(doc, keys);
+  }
+  return keys;
+}
+
 /**
  * One linear pass over precomputed lowercase blobs. At ~50k elements this is
  * single-digit milliseconds — the old implementation's jank came from
  * re-rendering, not from scanning. Kept behind a small interface so an
  * inverted index could replace it if profiling ever demands one.
+ *
+ * A query that parses as a CPE (2.3 formatted string or 2.2 URI) searches by
+ * identity instead of substring: an advisory's `cpe:2.3:a:acme:thing:*:...`
+ * must find the element carrying `...:thing:1.0:...`, or the 2.2 URI of it,
+ * and no substring match does that. Same normalisation and version rule as
+ * the VEX overlay, so search and matching never disagree.
  */
 export function searchWorkspace(
   ws: WorkspaceState,
@@ -50,6 +78,7 @@ export function searchWorkspace(
   limit = 500,
 ): SearchResult {
   const q = query.trim().toLowerCase();
+  const cpeQuery = q === '' ? undefined : cpeMatchKey(q);
   const hits: SearchHit[] = [];
 
   for (const docId of ws.order) {
@@ -58,6 +87,7 @@ export function searchWorkspace(
     if (!loaded) continue;
     const { elements } = loaded.document;
     const blobs = loaded.indexes.searchBlobs;
+    const elementCpes = cpeQuery ? cpeKeysOf(loaded.document) : null;
     const dialect = { spdx3: loaded.document.spec.model === 'spdx-3' };
 
     for (let i = 0; i < elements.length; i++) {
@@ -74,7 +104,10 @@ export function searchWorkspace(
         hits.push({ element, docId, score: 0 });
         continue;
       }
-      const score = scoreMatch(q, element.name.toLowerCase(), blobs[i]!);
+      const score =
+        cpeQuery && elementCpes
+          ? cpeScore(cpeQuery, elementCpes[i]!, element.name)
+          : scoreMatch(q, element.name.toLowerCase(), blobs[i]!);
       if (score > 0) hits.push({ element, docId, score });
     }
   }
@@ -82,6 +115,11 @@ export function searchWorkspace(
   const total = hits.length;
   if (q !== '') hits.sort((a, b) => b.score - a.score);
   return { hits: hits.slice(0, limit), total };
+}
+
+function cpeScore(query: CpeMatchKey, held: readonly CpeMatchKey[], name: string): number {
+  if (!held.some((key) => cpeCovers(query, key))) return 0;
+  return CPE_IDENTITY_SCORE - Math.min(name.length, 200) / 1000;
 }
 
 function scoreMatch(q: string, name: string, blob: string): number {

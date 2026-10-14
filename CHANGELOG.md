@@ -4,6 +4,34 @@ All notable changes to SBOM Lens. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [SemVer](https://semver.org) (0.x: the API surface is the app itself).
 
+## [0.29.7] - 2026-10-14
+
+### Added
+- **Search by CPE.** A query that parses as a CPE (2.3 formatted string or 2.2
+  URI) now matches by identity instead of as text: same part, vendor and
+  product after normalisation; a versionless CPE finds every version, a CPE
+  with a version finds exactly that one. That answers the first question of a
+  CRA Article 14 early warning (which of our products contain the exploited
+  component?) for advisories that name a product only by CPE, which no
+  substring search could: the advisory's `cpe:2.3:a:acme:thing:*:...` never
+  occurs in an SBOM that says `...:thing:1.0:...` or uses the 2.2 form.
+  Search results, the in-place tree filter and the Inventory with its CSV and
+  JSON export share one search, so all three follow, under the same rule the
+  VEX overlay matches CPEs with. A wildcarded vendor or product matches
+  nothing rather than everything, and queries that are not a CPE search as
+  before. The search box in Explore and Inventory now says name, purl or CPE.
+- `docs/cra.md`: what the Cyber Resilience Act asks for and what SBOM Lens
+  covers, from the Article 14 reporting that applies since 11 September 2026
+  to the SBOM obligation from 11 December 2027, with a worked example on the
+  demo catalog and a plain list of what SBOM Lens does not do. Linked from the
+  README.
+
+### Fixed
+- README: CycloneDX is read as JSON and XML (the format list still said JSON
+  only), and the roadmap no longer lists CSAF 2.0, which shipped in v0.21.0.
+- `apps/vscode/DEVELOPMENT.md` still said the Marketplace CI jobs sit unused;
+  `VSCE_TOKEN` is set and the jobs publish both extensions.
+
 ## [0.29.6] - 2026-10-10
 
 ### Fixed

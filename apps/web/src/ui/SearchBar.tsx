@@ -10,9 +10,9 @@ import { formatCount } from './nodeInfo';
 export const SEARCH_INPUT_ID = 'sbomlens-search';
 
 const PLACEHOLDERS = {
-  explore: 'Search packages across all documents...',
+  explore: 'Search by name, purl or CPE across all documents...',
   map: 'Highlight documents in the map...',
-  inventory: 'Filter the inventory...',
+  inventory: 'Filter the inventory by name, purl or CPE...',
   licenses: 'Filter licence identifiers...',
   conflicts: 'Search packages across all documents...',
   diff: 'Search packages across all documents...',

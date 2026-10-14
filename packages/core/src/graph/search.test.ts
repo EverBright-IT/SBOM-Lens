@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { loadFixtureDocument, loadedFromText } from '../test-fixtures';
 import type { WorkspaceState } from '../workspace/workspace';
 import { addDocument, emptyWorkspace } from '../workspace/workspace';
+import { inventoryRows } from '../analysis/inventory';
 import { emptyFacets, searchWorkspace } from './search';
 
 function loadAll(...names: string[]): WorkspaceState {
@@ -134,5 +135,65 @@ describe('licenseIds facet', () => {
     expect(names(['MIT'])).toEqual(['b']);
     expect(names(['GPL-2.0-only', 'MIT'])).toEqual(['a', 'b']);
     expect(names(['AdditionRef-x'])).toEqual([]); // the addition after WITH is not a licence
+  });
+});
+
+describe('searchWorkspace: a CPE query matches by identity', () => {
+  // The CRA Article 14 question in its first hours: "which of our products
+  // contain the component this advisory names?" Advisories name it by CPE,
+  // usually versionless, while SBOMs carry concrete versions in either form.
+  const lines = [
+    'SPDXVersion: SPDX-2.3',
+    'SPDXID: SPDXRef-DOCUMENT',
+    'DocumentName: cpe-search',
+    'DocumentNamespace: https://example.org/spdxdocs/cpe-search',
+    'PackageName: libthing',
+    'SPDXID: SPDXRef-P0',
+    'PackageVersion: 1.0',
+    'PackageDownloadLocation: NOASSERTION',
+    'ExternalRef: SECURITY cpe23Type cpe:2.3:a:acme:thing:1.0:*:*:*:*:*:*:*',
+    'PackageName: thing-legacy',
+    'SPDXID: SPDXRef-P1',
+    'PackageVersion: 2.0',
+    'PackageDownloadLocation: NOASSERTION',
+    'ExternalRef: SECURITY cpe22Type cpe:/a:acme:thing:2.0',
+    'PackageName: thing-fork',
+    'SPDXID: SPDXRef-P2',
+    'PackageVersion: 1.0',
+    'PackageDownloadLocation: NOASSERTION',
+    'ExternalRef: SECURITY cpe23Type cpe:2.3:a:other:thing:1.0:*:*:*:*:*:*:*',
+    'PackageName: unrelated',
+    'SPDXID: SPDXRef-P3',
+    'PackageVersion: 2.3',
+    'PackageDownloadLocation: NOASSERTION',
+  ];
+  const ws = addDocument(emptyWorkspace, loadedFromText('cpe-search.spdx', lines.join('\n') + '\n')).workspace;
+  const names = (query: string) =>
+    searchWorkspace(ws, query)
+      .hits.map((h) => h.element.name)
+      .sort();
+
+  it('a versionless CPE finds every version, across the 2.2 and 2.3 forms', () => {
+    expect(names('cpe:2.3:a:acme:thing:*:*:*:*:*:*:*:*')).toEqual(['libthing', 'thing-legacy']);
+    expect(names('cpe:/a:acme:thing')).toEqual(['libthing', 'thing-legacy']);
+  });
+
+  it('a versioned CPE finds only that version, whatever form either side uses', () => {
+    expect(names('cpe:2.3:a:acme:thing:2.0:*:*:*:*:*:*:*')).toEqual(['thing-legacy']);
+    expect(names('CPE:/A:ACME:THING:1.0')).toEqual(['libthing']);
+  });
+
+  it('never crosses vendors and treats a wildcarded vendor as no identity at all', () => {
+    expect(names('cpe:2.3:a:acme:thing:1.0:*:*:*:*:*:*:*')).not.toContain('thing-fork');
+    expect(names('cpe:2.3:a:*:thing:1.0:*:*:*:*:*:*:*')).toEqual([]);
+  });
+
+  it('leaves ordinary queries alone: "2.3" is a version, not every cpe:2.3 identifier', () => {
+    expect(names('2.3')).toEqual(['unrelated']);
+  });
+
+  it('drives the inventory too, so the hits export as the impact list', () => {
+    const rows = inventoryRows(ws, 'cpe:2.3:a:acme:thing:*:*:*:*:*:*:*:*', emptyFacets);
+    expect(rows.map((r) => r.element.name).sort()).toEqual(['libthing', 'thing-legacy']);
   });
 });

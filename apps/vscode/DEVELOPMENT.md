@@ -146,9 +146,10 @@ version even when it is a pre-release: its listing and version badge show
    creating a *new* organization now requires an active Azure subscription.
    Without an organization <https://dev.azure.com/_usersSettings/tokens> is a
    plain 404: there is no token page to find. The Azure *portal*
-   (portal.azure.com) is a different product and never has one. So the web
-   upload is the way in until someone decides an Azure subscription is worth
-   it; the CI jobs exist and sit unused until then.
+   (portal.azure.com) is a different product and never has one. This
+   project has the token: `VSCE_TOKEN` is set, and the manual CI jobs
+   publish both extensions from their tag pipelines. The web upload stays
+   the fallback for when the PAT expires or the jobs cannot run.
 
 3. Build fresh, then publish:
 
