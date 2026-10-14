@@ -133,6 +133,26 @@ build-ocm:
     paths: [apps/web/dist-ocm]
     expire_in: 1 week
 
+# OCM Lens 2.0: the OCM-native rebuild, its own app on its own version line.
+build-ocm2:
+  stage: build
+  rules:
+    - if: $RENOVATE_RUN == "true"
+      when: never
+    - when: on_success
+  script:
+    - npm run build -w @sbomlens/ocm-lens
+    # No 1.x-style brand-ban here: 2.0 deliberately points at SBOM Lens for
+    # deep SBOM analysis (the products are siblings, not strangers). The gate
+    # that matters is structural: the bundle model's marker must be present,
+    # proving the OCM walk is actually in the build.
+    - 'grep -raq "artifact-index.json" apps/ocm-lens/dist/assets'
+    # The demo delivery ships with the app and must match the core fixture.
+    - 'cmp apps/ocm-lens/public/examples/ecme-delivery.ctf.tar packages/core/fixtures/ocm/ecme-delivery.ctf.tar'
+  artifacts:
+    paths: [apps/ocm-lens/dist]
+    expire_in: 1 week
+
 # Pages serves the viewer itself: https://<namespace>.gitlab.io/<project>/
 # IS the app (vite base './' keeps the build relocatable). No landing-repo
 # clone, no redirect: the landing page deploys to its own host from its own

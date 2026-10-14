@@ -1,0 +1,176 @@
+import type { BundleWalkOptions, DigestCheckRequest, WorkerRequest, WorkerResponse } from '../worker/protocol';
+import type { ArtifactRef, SourceRef } from './store';
+import { useAppStore } from './store';
+
+/** File → worker → store. One worker, jobs correlated by id. */
+
+let worker: Worker | null = null;
+let nextId = 1;
+interface Pending {
+  resolve: (response: WorkerResponse) => void;
+  onProgress?: (done: number, total: number) => void;
+}
+const pending = new Map<number, Pending>();
+
+function getWorker(): Worker {
+  if (worker) return worker;
+  worker = new Worker(new URL('../worker/bundle.worker.ts', import.meta.url), { type: 'module' });
+  worker.onmessage = (event: MessageEvent<WorkerResponse>) => {
+    const entry = pending.get(event.data.id);
+    if (!entry) return;
+    if (event.data.kind === 'digests-progress') {
+      entry.onProgress?.(event.data.done, event.data.total);
+      return; // not final — keep the correlation alive
+    }
+    pending.delete(event.data.id);
+    entry.resolve(event.data);
+  };
+  return worker;
+}
+
+/** Omit that distributes over the request union (plain Omit collapses it). */
+type RequestInput = WorkerRequest extends infer T ? (T extends WorkerRequest ? Omit<T, 'id'> : never) : never;
+
+function run(
+  request: RequestInput,
+  transfer?: Transferable[],
+  onProgress?: (done: number, total: number) => void,
+): Promise<WorkerResponse> {
+  return new Promise((resolve) => {
+    const id = nextId++;
+    pending.set(id, { resolve, ...(onProgress ? { onProgress } : {}) });
+    getWorker().postMessage({ ...request, id } as WorkerRequest, transfer ?? []);
+  });
+}
+
+/** Re-acquire the delivery bytes for a follow-up worker job. */
+async function jobSource(): Promise<{ blob?: Blob; buffer?: ArrayBuffer } | null> {
+  const { sourceRef } = useAppStore.getState();
+  if (!sourceRef) return null;
+  if (sourceRef.kind === 'file') return { blob: sourceRef.file };
+  const fetched = await fetch(sourceRef.url);
+  if (!fetched.ok) return null;
+  return { buffer: await fetched.arrayBuffer() };
+}
+
+async function commit(fileName: string, response: WorkerResponse, sourceRef: SourceRef | null): Promise<void> {
+  if (response.kind !== 'bundle') return;
+  const { actions } = useAppStore.getState();
+  if (response.bundle) {
+    actions.loadSucceeded(
+      { bundle: response.bundle, extracted: response.extracted, diagnostics: response.diagnostics },
+      sourceRef,
+    );
+  } else {
+    actions.loadFailed(fileName, response.diagnostics);
+  }
+}
+
+/** Open one delivery file (CTF/component archive/.tgz or a bare descriptor). */
+export async function openFile(file: File, options?: BundleWalkOptions): Promise<void> {
+  const { actions } = useAppStore.getState();
+  actions.loadStarted(file.name);
+  // A File is a Blob: the worker streams archives from disk via slice().
+  await commit(
+    file.name,
+    await run({ kind: 'bundle', fileName: file.name, blob: file, ...(options ? { options } : {}) }),
+    { kind: 'file', file },
+  );
+}
+
+/** Open a delivery served next to the app (demo, or the `?open=` dev hook). */
+export async function openFromUrl(url: string, options?: BundleWalkOptions): Promise<void> {
+  const fileName = url.split('/').pop() ?? url;
+  const { actions } = useAppStore.getState();
+  actions.loadStarted(fileName);
+  try {
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const buffer = await response.arrayBuffer();
+    await commit(
+      fileName,
+      await run({ kind: 'bundle', fileName, buffer, ...(options ? { options } : {}) }, [buffer]),
+      { kind: 'url', url },
+    );
+  } catch (error) {
+    actions.loadFailed(fileName, [
+      { severity: 'error', code: 'URL_UNAVAILABLE', message: `Could not load ${url}: ${String(error)}` },
+    ]);
+  }
+}
+
+export const DEMO_FILE = 'ecme-delivery.ctf.tar';
+
+/** The bundled demo delivery — one click to a populated dashboard. */
+export async function openDemo(): Promise<void> {
+  await openFromUrl(`examples/${DEMO_FILE}`);
+}
+
+/**
+ * Pull one blob back out of the opened delivery (download-on-demand). The
+ * viewer never holds blob bytes; the archive is re-read from its source.
+ */
+export async function extractBlob(localReference: string): Promise<Uint8Array | null> {
+  const { delivery } = useAppStore.getState();
+  const source = await jobSource();
+  if (!source || !delivery) return null;
+  const response = await run(
+    { kind: 'extract', fileName: delivery.bundle.fileName, localReference, ...source },
+    source.buffer ? [source.buffer] : [],
+  );
+  return response.kind === 'extract' ? response.bytes : null;
+}
+
+/**
+ * Run the deferred digest checks — all pending ones, or an explicit subset.
+ * Verdicts land in the store; progress feeds the caller's UI.
+ */
+export async function runDigestChecks(
+  targets?: ArtifactRef[],
+  onProgress?: (done: number, total: number) => void,
+): Promise<boolean> {
+  const { delivery, actions } = useAppStore.getState();
+  if (!delivery) return false;
+  const wanted =
+    targets &&
+    new Set(targets.map((t) => `${t.cvId}\u0000${t.role}\u0000${t.index}`));
+  const checks: DigestCheckRequest[] = [];
+  for (const cv of delivery.bundle.componentVersions) {
+    const collect = (role: 'resource' | 'source', artifacts: typeof cv.resources) => {
+      artifacts.forEach((artifact, index) => {
+        if (artifact.blob?.digestCheck !== 'pending') return;
+        if (wanted && !wanted.has(`${cv.id}\u0000${role}\u0000${index}`)) return;
+        const access = artifact.access?.raw ?? {};
+        const localReference =
+          typeof access.localReference === 'string'
+            ? access.localReference
+            : typeof access.filename === 'string'
+              ? access.filename
+              : null;
+        const declared = artifact.raw.digest;
+        if (!localReference || typeof declared !== 'object' || declared === null) return;
+        checks.push({
+          cvId: cv.id,
+          role,
+          index,
+          localReference,
+          declared: declared as Record<string, unknown>,
+        });
+      });
+    };
+    collect('resource', cv.resources);
+    collect('source', cv.sources);
+  }
+  if (checks.length === 0) return true;
+
+  const source = await jobSource();
+  if (!source) return false;
+  const response = await run(
+    { kind: 'digests', fileName: delivery.bundle.fileName, checks, ...source },
+    source.buffer ? [source.buffer] : [],
+    onProgress,
+  );
+  if (response.kind !== 'digests') return false;
+  actions.applyDigestResults(response.results);
+  return true;
+}

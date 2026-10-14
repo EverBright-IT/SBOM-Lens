@@ -15,6 +15,33 @@ export type { OcmBlobContext } from './parse/ocm/cd';
 export { ocmNamespace, parseOcmComponentDescriptor } from './parse/ocm/cd';
 export type { DeliveryResult, PreparsedDoc } from './parse/ocm/archive';
 export { readOcmDelivery, readOcmDeliveryFrom } from './parse/ocm/archive';
+export type { DeliveryWalkOptions } from './parse/ocm/archive';
+
+// OCM Lens 2.0: the OCM-native bundle model, built on the same walk.
+export type {
+  OcmArtifact,
+  OcmArtifactSbom,
+  OcmBlobStat,
+  OcmBundle,
+  OcmBundleResult,
+  OcmCompleteness,
+  OcmCv,
+  OcmCvId,
+  OcmRef,
+  OcmTransport,
+} from './model/ocm-bundle';
+export { ocmCvId } from './model/ocm-bundle';
+export { bundleFromDescriptor, EAGER_HASH_BUDGET_DEFAULT, readOcmBundle, readOcmBundleFrom } from './parse/ocm/bundle';
+export type { BlobExtraction } from './parse/ocm/extract';
+export { digestDeliveryBlob, extractDeliveryBlob } from './parse/ocm/extract';
+export type {
+  AcceptanceReport,
+  AcceptanceReportInput,
+  AcceptanceSignatureEntry,
+} from './ocm/report';
+export { acceptanceReport, digestSummary } from './ocm/report';
+export type { DigestSummary } from './ocm/report';
+export { verifyRawSignatures } from './ocm/verify';
 export type { ByteSource } from './util/bytesource';
 export { blobSource } from './util/bytesource';
 

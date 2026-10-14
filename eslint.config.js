@@ -25,7 +25,12 @@ export default tseslint.config(
     languageOptions: { globals: { ...globals.browser } },
   },
   {
-    files: ['apps/web/src/**/*.tsx', 'apps/web/src/app/**/*.ts'],
+    files: [
+      'apps/web/src/**/*.tsx',
+      'apps/web/src/app/**/*.ts',
+      'apps/ocm-lens/src/**/*.tsx',
+      'apps/ocm-lens/src/app/**/*.ts',
+    ],
     plugins: { 'react-hooks': reactHooks },
     rules: {
       'react-hooks/rules-of-hooks': 'error',

@@ -42,7 +42,7 @@ export function ocmNamespace(name: string, version: string): string {
   return `ocm://${name}/${version}`;
 }
 
-interface NormalizedCd {
+export interface NormalizedCd {
   schemaLabel: string;
   name: string;
   version: string;
@@ -464,6 +464,19 @@ function repositoryContexts(contexts: Record<string, unknown>[]): OcmRepositoryC
   }));
   return list.length > 0 ? list : undefined;
 }
+
+// The v2/v3alpha1 normalizer and the small node mappers are shared with the
+// OCM-native bundle builder (./bundle.ts) — one reading of the spec, two
+// models on top of it.
+export {
+  normalize as normalizeCd,
+  artifactLocation,
+  ocmDigest,
+  ocmLabels,
+  repositoryContexts as mapRepositoryContexts,
+  signatures as mapSignatures,
+  stringRecord,
+};
 
 function signatures(nodes: Record<string, unknown>[]): OcmSignatureInfo[] | undefined {
   const list = nodes.map((node) => {

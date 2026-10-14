@@ -83,9 +83,12 @@ export interface OcmBlobInfo {
    * Result of checking the declared OCM digest against the actual bytes.
    * Only explicit genericBlobDigest/v1 and ociArtifactDigest/v1 are
    * computed — anything else stays 'unchecked' rather than risking a wrong
-   * verdict. Absent when the resource declares no digest.
+   * verdict. Absent when the resource declares no digest. 'pending' means
+   * the check was deferred at load time (large delivery, eager-hash budget
+   * exhausted) and can be run on demand — only the bundle path (OCM Lens
+   * 2.0) ever produces it.
    */
-  digestCheck?: 'match' | 'mismatch' | 'unchecked';
+  digestCheck?: 'match' | 'mismatch' | 'unchecked' | 'pending';
   /**
    * True when the blob exceeded the in-memory materialization cap and was
    * indexed without loading its content: no previews or file lists, but the

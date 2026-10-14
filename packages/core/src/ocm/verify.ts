@@ -176,6 +176,33 @@ function hexToBytes(hex: string): Uint8Array | null {
  * node (what the parser kept verbatim) and the mapped signature list — no
  * re-parsing, no extra model state. Returns one result per signature.
  */
+/**
+ * Verify every signature on a raw descriptor root against one public key.
+ * The OCM Lens 2.0 bundle model keeps the parsed root verbatim (`OcmCv.raw`),
+ * so this is the direct path: no document model in between.
+ */
+export async function verifyRawSignatures(
+  rootDescriptor: Record<string, unknown>,
+  publicKeyPem: string,
+): Promise<SignatureResult[]> {
+  const nodes = Array.isArray(rootDescriptor.signatures)
+    ? rootDescriptor.signatures.filter(isRecord)
+    : [];
+  return Promise.all(
+    nodes.map((node) =>
+      verifySignature(
+        rootDescriptor,
+        {
+          name: typeof node.name === 'string' ? node.name : undefined,
+          digest: isRecord(node.digest) ? (node.digest as SignatureNode['digest']) : undefined,
+          signature: isRecord(node.signature) ? (node.signature as SignatureNode['signature']) : undefined,
+        },
+        publicKeyPem,
+      ),
+    ),
+  );
+}
+
 export async function verifyDocumentSignatures(
   doc: SbomDocument,
   publicKeyPem: string,

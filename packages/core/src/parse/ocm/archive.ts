@@ -18,17 +18,23 @@ import { isSbomResource, parseOcmComponentDescriptor } from './cd';
 
 /**
  * Walks a local OCM delivery — CTF tar(.gz), component archive, or any tar
- * of SPDX files — and returns the component descriptors mapped to documents
- * plus the extracted SPDX blobs. The CDs' SBOM refs carry the SHA-1 of the
- * sibling blob bytes, so the workspace links them the moment both land in
- * one batch. Tolerant end to end: per-artifact failures degrade to
- * diagnostics and a content sweep, never a throw.
+ * of SPDX files. The walk itself is model-free: it discovers component
+ * descriptors, inspects every localBlob the delivery physically carries
+ * (kind, capped previews, digest verdicts), and extracts embedded SBOMs.
+ * Two consumers sit on top of it:
  *
- * Everything reads through a ByteSource, so a multi-GB delivery never has
- * to exist as one buffer: descriptors, indexes, and SBOMs (all small) are
- * materialized, large artifact blobs stay index entries that are hashed in
- * constant memory for their digest verdict. Nested plain tars (artifact
- * sets) are walked through source windows the same way.
+ * - `readOcmDelivery(From)` maps the descriptors onto the SPDX document
+ *   model (OCM Lens 1.x / the flavor pipeline), unchanged behavior.
+ * - `readOcmBundle(From)` (see ./bundle.ts) builds the OCM-native bundle
+ *   model of OCM Lens 2.0 from the same walk.
+ *
+ * Tolerant end to end: per-artifact failures degrade to diagnostics and a
+ * content sweep, never a throw. Everything reads through a ByteSource, so a
+ * multi-GB delivery never has to exist as one buffer: descriptors, indexes,
+ * and SBOMs (all small) are materialized, large artifact blobs stay index
+ * entries that are hashed in constant memory for their digest verdict.
+ * Nested plain tars (artifact sets) are walked through source windows the
+ * same way.
  */
 
 export interface PreparsedDoc {
@@ -47,6 +53,76 @@ export interface DeliveryResult {
   diagnostics: Diagnostic[];
 }
 
+/** An embedded SBOM pulled out of the archive, linked to its resource. */
+export interface CollectedSbom {
+  sha1: string;
+  fileName: string;
+  size: number;
+  format: 'spdx' | 'cyclonedx';
+  /** Index into the walk's `extracted` list. */
+  extractedIndex: number;
+}
+
+/** One non-descriptor blob a component version's manifest references. */
+export interface CollectedLayer {
+  /** Canonical `algo:hex` spelling. */
+  digest: string;
+  size: number;
+  mediaType?: string;
+}
+
+/**
+ * One component descriptor as discovered by the walk — raw node plus
+ * everything the walk learned about its surroundings, before any model
+ * mapping. `raw` is the verbatim parsed root; blob summaries are keyed by
+ * the artifact's own raw node (two artifacts may share a blob but declare
+ * different digests, so the verdict is theirs).
+ */
+export interface CollectedCd {
+  raw: Record<string, unknown>;
+  serialization: 'json' | 'yaml';
+  text: string;
+  sha1: string;
+  byteSize: number;
+  /** Input-style name: `<archive>!component-descriptor.yaml`. */
+  fileName: string;
+  blobInfos: Map<Record<string, unknown>, OcmBlobInfo>;
+  /**
+   * localReferences whose blob physically exists in the archive — distinct
+   * from blobInfos, whose entries can be missing when inspection failed.
+   */
+  blobPresent: Set<string>;
+  /** Extracted SBOMs by the resource's localReference. */
+  sbomByRef: Map<string, CollectedSbom>;
+  /** Non-descriptor blobs of this CV's manifest (for bundle blob stats). */
+  layers: CollectedLayer[];
+}
+
+export interface DeliveryWalkOptions extends TarStreamOptions {
+  /**
+   * Byte budget for hashing UNMATERIALIZED blobs at load time (the one
+   * full-byte read the walk otherwise performs). Blobs with a declared
+   * digest beyond the budget get `digestCheck: 'pending'` instead of a
+   * load-time verdict — checkable on demand via digestDeliveryBlob.
+   * Default: unlimited (the 1.x path keeps its eager behavior).
+   */
+  eagerHashBudget?: number;
+}
+
+export interface DeliveryWalk {
+  archiveName: string;
+  cds: CollectedCd[];
+  extracted: { fileName: string; bytes: Uint8Array }[];
+  diagnostics: Diagnostic[];
+  layout: 'ctf' | 'component-archive' | 'file-sweep' | 'empty';
+  /** Whether the container arrived gzip-compressed. */
+  compressed: boolean;
+  /** Size of the archive as handed in (compressed size for .tgz). */
+  archiveSize: number;
+  /** Internal: remaining eager-hash budget, spent as collectCd hashes. */
+  hashBudgetRemaining: number;
+}
+
 const CD_MEDIA_PREFIX = 'application/vnd.ocm.software.component-descriptor';
 /** An SBOM the walker will fetch in full even past the materialization cap. */
 const SBOM_FETCH_MAX = 512 * 1024 * 1024;
@@ -63,73 +139,120 @@ export async function readOcmDelivery(fileName: string, bytes: Uint8Array): Prom
   return readOcmDeliveryFrom(fileName, bufferSource(bytes));
 }
 
-/** Source entry point: a browser File/Blob streams from disk through here. */
+/**
+ * Source entry point: a browser File/Blob streams from disk through here.
+ * Walks the delivery, then maps every descriptor onto the SPDX model.
+ */
 export async function readOcmDeliveryFrom(
   fileName: string,
   source: ByteSource,
   options?: TarStreamOptions,
 ): Promise<DeliveryResult> {
-  const diagnostics: Diagnostic[] = [];
+  const walk = await walkOcmDelivery(fileName, source, options);
+  const result: DeliveryResult = {
+    documents: [],
+    extracted: walk.extracted,
+    diagnostics: walk.diagnostics,
+  };
+  for (const cd of walk.cds) {
+    const input: SourceInput = {
+      fileName: cd.fileName,
+      text: cd.text,
+      sha1: cd.sha1,
+      byteSize: cd.byteSize,
+    };
+    const parsed = parseOcmComponentDescriptor(input, cd.raw, cd.serialization, {
+      sbomChecksumFor: (ref) => cd.sbomByRef.get(ref)?.sha1,
+      blobInfoFor: (artifact) => cd.blobInfos.get(artifact),
+    });
+    if (parsed.document) {
+      const componentLabel = parsed.document.name;
+      result.documents.push({
+        fileName: `${walk.archiveName}!${componentLabel}/component-descriptor.yaml`,
+        sha1: cd.sha1,
+        byteSize: cd.byteSize,
+        text: cd.text,
+        document: parsed.document,
+        diagnostics: parsed.diagnostics,
+      });
+    } else {
+      result.diagnostics.push(...parsed.diagnostics);
+    }
+  }
+  return result;
+}
+
+/** Model-free walk of a delivery archive — the shared foundation. */
+export async function walkOcmDelivery(
+  fileName: string,
+  source: ByteSource,
+  options?: DeliveryWalkOptions,
+): Promise<DeliveryWalk> {
+  const walk: DeliveryWalk = {
+    archiveName: fileName,
+    cds: [],
+    extracted: [],
+    diagnostics: [],
+    layout: 'empty',
+    compressed: false,
+    archiveSize: source.size,
+    hashBudgetRemaining: options?.eagerHashBudget ?? Infinity,
+  };
 
   const head = await source.read(0, 512);
   let tarSource = source;
   if (sniffContainer(head) === 'gzip') {
+    walk.compressed = true;
     // Compressed deliveries decompress into memory (DecompressionStream has
     // no random access), so they are capped; past the cap the honest answer
     // is a repack hint — plain .tar streams without any of these limits.
     if (source.size > GUNZIP_MAX_BYTES) {
-      return {
-        documents: [],
-        extracted: [],
-        diagnostics: [
-          diag('error', 'GZIP_TOO_LARGE', `Compressed delivery exceeds ${GUNZIP_MAX_BYTES / (1024 * 1024 * 1024)} GiB. Repack it as plain .tar.`),
-        ],
-      };
+      walk.diagnostics.push(
+        diag('error', 'GZIP_TOO_LARGE', `Compressed delivery exceeds ${GUNZIP_MAX_BYTES / (1024 * 1024 * 1024)} GiB. Repack it as plain .tar.`),
+      );
+      return walk;
     }
     let tarBytes: Uint8Array;
     try {
       tarBytes = await gunzip(await source.read(0, source.size));
     } catch (error) {
-      return {
-        documents: [],
-        extracted: [],
-        diagnostics: [
-          error instanceof GunzipLimitError
-            ? diag('error', 'GZIP_TOO_LARGE', `${error.message} Repack the delivery as plain .tar.`)
-            : diag('error', 'GZIP_INVALID', 'Not a valid gzip stream.'),
-        ],
-      };
+      walk.diagnostics.push(
+        error instanceof GunzipLimitError
+          ? diag('error', 'GZIP_TOO_LARGE', `${error.message} Repack the delivery as plain .tar.`)
+          : diag('error', 'GZIP_INVALID', 'Not a valid gzip stream.'),
+      );
+      return walk;
     }
     if (sniffContainer(tarBytes) !== 'tar') {
-      return {
-        documents: [],
-        extracted: [],
-        diagnostics: [diag('error', 'GZIP_NOT_TAR', 'The gzip stream does not contain a tar archive.')],
-      };
+      walk.diagnostics.push(diag('error', 'GZIP_NOT_TAR', 'The gzip stream does not contain a tar archive.'));
+      return walk;
     }
     tarSource = bufferSource(tarBytes);
   }
 
-  const index = await indexTar(tarSource, diagnostics, options);
-  const result: DeliveryResult = { documents: [], extracted: [], diagnostics };
-  if (index.byName.size === 0) return result;
+  const index = await indexTar(tarSource, walk.diagnostics, options);
+  if (index.byName.size === 0) return walk;
 
   const indexEntry = index.byName.get('artifact-index.json') ?? index.byName.get('artifact-descriptor.json');
   if (indexEntry) {
-    await walkCtf(fileName, indexEntry, index, result);
+    walk.layout = 'ctf';
+    await walkCtf(indexEntry, index, walk);
   } else if (index.byName.has('component-descriptor.yaml')) {
-    await walkComponentArchive(fileName, index, result);
+    walk.layout = 'component-archive';
+    await walkComponentArchive(index, walk);
   }
 
-  if (result.documents.length === 0) {
-    await sweep(fileName, index, result);
-    if (result.documents.length === 0 && result.extracted.length === 0) {
-      result.diagnostics.push(
+  if (walk.cds.length === 0) {
+    await sweep(index, walk);
+    if (walk.extracted.length > 0) walk.layout = 'file-sweep';
+    if (walk.cds.length === 0 && walk.extracted.length === 0) {
+      walk.layout = 'empty';
+      walk.diagnostics.push(
         diag('error', 'ARCHIVE_NO_DOCUMENTS', 'No component descriptors or SPDX documents found in this archive.'),
       );
     }
   }
-  return result;
+  return walk;
 }
 
 async function indexTar(
@@ -144,21 +267,20 @@ async function indexTar(
 
 /** CTF: artifact-index.json → per-artifact OCI layout (flat or artifact set). */
 async function walkCtf(
-  archiveName: string,
   indexEntry: TarStreamEntry,
   index: TarIndex,
-  result: DeliveryResult,
+  walk: DeliveryWalk,
 ): Promise<void> {
   let parsedIndex: unknown;
   try {
     parsedIndex = JSON.parse(decode(indexEntry.bytes ?? new Uint8Array(0)));
   } catch {
-    result.diagnostics.push(diag('warning', 'CTF_INDEX_INVALID', 'artifact-index.json is not valid JSON: falling back to a content sweep.'));
+    walk.diagnostics.push(diag('warning', 'CTF_INDEX_INVALID', 'artifact-index.json is not valid JSON: falling back to a content sweep.'));
     return;
   }
   const artifacts = isRecord(parsedIndex) ? asRecordArray(parsedIndex.artifacts) : [];
   if (artifacts.length === 0) {
-    result.diagnostics.push(diag('warning', 'CTF_INDEX_INVALID', 'artifact-index.json lists no artifacts.'));
+    walk.diagnostics.push(diag('warning', 'CTF_INDEX_INVALID', 'artifact-index.json lists no artifacts.'));
     return;
   }
 
@@ -166,7 +288,7 @@ async function walkCtf(
     const digest = asString(artifact.digest);
     const blob = digest ? index.byName.get(`blobs/${digest.replace(':', '.')}`) : undefined;
     if (!blob) {
-      result.diagnostics.push(
+      walk.diagnostics.push(
         diag('warning', 'CTF_ARTIFACT_UNREADABLE', `Artifact ${asString(artifact.repository) ?? '?'}:${asString(artifact.tag) ?? '?'}: blob missing.`),
       );
       continue;
@@ -177,17 +299,17 @@ async function walkCtf(
         // Nested artifact-set archive: its own index + blobs, walked through
         // a window so its large layers stay unmaterialized too.
         const setSource = blob.bytes ? bufferSource(blob.bytes) : windowSource(index.source, blob.offset, blob.size);
-        const inner = await indexTar(setSource, result.diagnostics, index.options);
+        const inner = await indexTar(setSource, walk.diagnostics, index.options);
         const innerIndex =
           inner.byName.get('artifact-set-descriptor.json') ?? inner.byName.get('index.json');
         const manifestEntry = innerIndex ? manifestFromIndex(innerIndex, inner) : undefined;
-        await walkOciManifest(archiveName, manifestEntry, inner, result);
+        await walkOciManifest(manifestEntry, inner, walk);
       } else {
         // Flat layout: the blob IS the OCI manifest; layers are sibling blobs.
-        await walkOciManifest(archiveName, blob, index, result);
+        await walkOciManifest(blob, index, walk);
       }
     } catch {
-      result.diagnostics.push(
+      walk.diagnostics.push(
         diag('warning', 'CTF_ARTIFACT_UNREADABLE', `Artifact ${asString(artifact.repository) ?? '?'} could not be read.`),
       );
     }
@@ -210,10 +332,9 @@ function manifestFromIndex(indexEntry: TarStreamEntry, index: TarIndex): TarStre
 }
 
 async function walkOciManifest(
-  archiveName: string,
   manifestEntry: TarStreamEntry | undefined,
   index: TarIndex,
-  result: DeliveryResult,
+  walk: DeliveryWalk,
 ): Promise<void> {
   if (!manifestEntry?.bytes) return;
   let manifest: unknown;
@@ -250,45 +371,69 @@ async function walkOciManifest(
 
   // Local blob store: every non-CD layer, keyed by its digest spellings.
   const blobs = new Map<string, TarStreamEntry>();
+  const layerSummaries: CollectedLayer[] = [];
   for (const layer of layers) {
     const digest = asString(layer.digest);
     const entry = layerEntry(layer);
-    if (!digest || !entry || layer === cdLayer) continue;
-    blobs.set(digest, entry);
-    blobs.set(digest.replace(':', '.'), entry);
+    if (!digest || layer === cdLayer) continue;
+    if (entry) {
+      blobs.set(digest, entry);
+      blobs.set(digest.replace(':', '.'), entry);
+    }
+    const declaredSize = typeof layer.size === 'number' ? layer.size : undefined;
+    layerSummaries.push({
+      digest,
+      size: entry?.size ?? declaredSize ?? 0,
+      mediaType: asString(layer.mediaType),
+    });
   }
-  await emitCd(archiveName, cdText, { source: index.source, byName: blobs }, result);
+  await collectCd(cdText, { source: index.source, byName: blobs }, layerSummaries, walk);
 }
 
 /** Component archive: component-descriptor.yaml + blobs/<algo>.<hex>. */
-async function walkComponentArchive(
-  archiveName: string,
-  index: TarIndex,
-  result: DeliveryResult,
-): Promise<void> {
+async function walkComponentArchive(index: TarIndex, walk: DeliveryWalk): Promise<void> {
   const cd = index.byName.get('component-descriptor.yaml')!;
   if (!cd.bytes) return;
   const blobs = new Map<string, TarStreamEntry>();
+  const layerSummaries: CollectedLayer[] = [];
   for (const [name, entry] of index.byName) {
     if (!name.startsWith('blobs/')) continue;
     const base = name.slice('blobs/'.length);
     blobs.set(base, entry);
     blobs.set(base.replace('.', ':'), entry);
+    layerSummaries.push({ digest: base.replace('.', ':'), size: entry.size });
   }
-  await emitCd(archiveName, decode(cd.bytes), { source: index.source, byName: blobs }, result);
+  await collectCd(decode(cd.bytes), { source: index.source, byName: blobs }, layerSummaries, walk);
 }
 
-/** Parse one CD text, extract its SPDX blobs, wire refs by byte checksum. */
-async function emitCd(
-  archiveName: string,
+/**
+ * Collect one CD: detection, blob inspection (pass 1), SBOM extraction
+ * (pass 2). Model mapping is the consumers' business. Returns nothing; a
+ * successful collection lands in `walk.cds`, failures degrade to
+ * diagnostics exactly as before the walk/mapping split.
+ */
+async function collectCd(
   cdText: string,
   blobs: TarIndex,
-  result: DeliveryResult,
+  layers: CollectedLayer[],
+  walk: DeliveryWalk,
 ): Promise<void> {
   const detection = detect(cdText);
   if (detection.format !== 'ocm-cd') {
-    result.diagnostics.push(
+    walk.diagnostics.push(
       diag('warning', 'CTF_ARTIFACT_UNREADABLE', 'A component-descriptor layer did not parse as an OCM CD.'),
+    );
+    return;
+  }
+  // A descriptor the mapper could never name is not worth collecting: both
+  // consumers need name+version, and the pre-split code surfaced exactly
+  // this error at the archive level.
+  const component = componentNode(detection.parsed);
+  const metadataNode = isRecord(detection.parsed.metadata) ? detection.parsed.metadata : null;
+  const named = component ?? metadataNode;
+  if (!named || !asString(named.name) || !asString(named.version)) {
+    walk.diagnostics.push(
+      diag('error', 'OCM_CD_MALFORMED', 'Component descriptor has no component name/version.'),
     );
     return;
   }
@@ -300,7 +445,6 @@ async function emitCd(
   // inspection but still get a REAL digest verdict: their bytes are hashed
   // in constant memory straight off the source (cached per blob). Bytes stay
   // in this worker; only the summaries ride on the elements.
-  const component = componentNode(detection.parsed);
   const specNode = isRecord(detection.parsed.spec) ? detection.parsed.spec : {};
   const resources = asRecordArray(component?.resources ?? specNode.resources);
   const sources = asRecordArray(component?.sources ?? specNode.sources);
@@ -308,12 +452,14 @@ async function emitCd(
   const inspections = new Map<string, BlobInspection>();
   const indexedHashes = new Map<string, Promise<string>>();
   const blobInfos = new Map<Record<string, unknown>, OcmBlobInfo>();
+  const blobPresent = new Set<string>();
   for (const artifact of [...resources, ...sources]) {
     const access = isRecord(artifact.access) ? artifact.access : {};
     const localReference = asString(access.localReference) ?? asString(access.filename);
     if (!localReference) continue;
     const blob = blobs.byName.get(localReference);
     if (!blob) continue;
+    blobPresent.add(localReference);
     const declared = isRecord(artifact.digest) ? artifact.digest : undefined;
     try {
       if (blob.bytes) {
@@ -328,7 +474,23 @@ async function emitCd(
           mediaType: asString(access.mediaType) ?? inspection.info.mediaType,
           digestCheck,
         });
+      } else if (isRecord(declared) && asString(declared.value) && blob.size > walk.hashBudgetRemaining) {
+        // Over the eager-hash budget: the one full-byte read the walk would
+        // do is deferred. The verdict is honestly 'pending', checkable on
+        // demand — opening a transfer-medium-sized delivery stays instant.
+        blobInfos.set(artifact, {
+          size: blob.size,
+          mediaType: asString(access.mediaType),
+          kind: 'binary',
+          notInspected: true,
+          digestCheck: 'pending',
+        });
       } else {
+        if (isRecord(declared) && asString(declared.value)) {
+          // Budget is an upper bound on load-time reads; gzip short-circuits
+          // under-spend it, which only errs toward checking more.
+          walk.hashBudgetRemaining -= blob.size;
+        }
         const digestCheck = await checkDeclaredDigestIndexed(
           declared,
           () => {
@@ -361,7 +523,7 @@ async function emitCd(
   // mapper needs them while building the refs). An SBOM past the
   // materialization cap is worth a targeted full fetch: it is the reason
   // this product exists. Reuses pass 1's gunzip where available.
-  const sbomChecksums = new Map<string, string>();
+  const sbomByRef = new Map<string, CollectedSbom>();
   for (const resource of resources) {
     const access = isRecord(resource.access) ? resource.access : {};
     if (!isSbomResource(resource, access)) continue;
@@ -372,7 +534,7 @@ async function emitCd(
     let blob = inspections.get(localReference)?.subjects.uncompressed ?? stored.bytes ?? undefined;
     if (!blob) {
       if (stored.size > SBOM_FETCH_MAX) {
-        result.diagnostics.push(
+        walk.diagnostics.push(
           diag(
             'warning',
             'OCM_SBOM_TOO_LARGE',
@@ -394,7 +556,7 @@ async function emitCd(
       continue;
     }
     if (detect(decode(blob)).format === 'unsupported') {
-      result.diagnostics.push(
+      walk.diagnostics.push(
         diag(
           'warning',
           'OCM_SBOM_FORMAT_UNSUPPORTED',
@@ -405,43 +567,35 @@ async function emitCd(
     }
     const copy = new Uint8Array(blob); // detach from the archive buffer
     const sha1 = await sha1Hex(copy.buffer as ArrayBuffer);
-    sbomChecksums.set(localReference, sha1);
     // Detection is by content; the suffix only keeps the tree honest about
     // what the resource is.
     const mediaType = asString(access.mediaType)?.toLowerCase() ?? '';
     const suffix = mediaType.includes('cyclonedx') ? (mediaType.includes('xml') ? '.cdx.xml' : '.cdx.json') : '.spdx';
-    result.extracted.push({
-      fileName: `${archiveName}!${asString(resource.name) ?? localReference}${suffix}`,
-      bytes: copy,
+    const fileName = `${walk.archiveName}!${asString(resource.name) ?? localReference}${suffix}`;
+    sbomByRef.set(localReference, {
+      sha1,
+      fileName,
+      size: copy.byteLength,
+      format: suffix === '.spdx' ? 'spdx' : 'cyclonedx',
+      extractedIndex: walk.extracted.length,
     });
+    walk.extracted.push({ fileName, bytes: copy });
   }
 
-  // Pass 3: map the CD with checksums and blob summaries at hand.
   const cdBytes = new TextEncoder().encode(cdText);
   const sha1 = await sha1Hex(cdBytes.buffer as ArrayBuffer);
-  const input: SourceInput = {
-    fileName: `${archiveName}!component-descriptor.yaml`,
+  walk.cds.push({
+    raw: detection.parsed,
+    serialization: detection.serialization,
     text: cdText,
     sha1,
     byteSize: cdBytes.byteLength,
-  };
-  const parsed = parseOcmComponentDescriptor(input, detection.parsed, detection.serialization, {
-    sbomChecksumFor: (ref) => sbomChecksums.get(ref),
-    blobInfoFor: (artifact) => blobInfos.get(artifact),
+    fileName: `${walk.archiveName}!component-descriptor.yaml`,
+    blobInfos,
+    blobPresent,
+    sbomByRef,
+    layers,
   });
-  if (parsed.document) {
-    const componentLabel = parsed.document.name;
-    result.documents.push({
-      fileName: `${archiveName}!${componentLabel}/component-descriptor.yaml`,
-      sha1,
-      byteSize: cdBytes.byteLength,
-      text: cdText,
-      document: parsed.document,
-      diagnostics: parsed.diagnostics,
-    });
-  } else {
-    result.diagnostics.push(...parsed.diagnostics);
-  }
 }
 
 function componentNode(parsed: Record<string, unknown>): Record<string, unknown> | null {
@@ -449,15 +603,15 @@ function componentNode(parsed: Record<string, unknown>): Record<string, unknown>
 }
 
 /** Fallback: treat the tar as a plain bundle of SPDX/OCM files. */
-async function sweep(archiveName: string, index: TarIndex, result: DeliveryResult): Promise<void> {
+async function sweep(index: TarIndex, walk: DeliveryWalk): Promise<void> {
   for (const [name, entry] of index.byName) {
     if (!entry.bytes) continue; // an unmaterialized blob is never an SPDX text
     if (sniffContainer(entry.bytes) !== 'text') continue;
     const text = decode(entry.bytes);
     const detection = detect(text);
     if (detection.format === 'unsupported') continue;
-    result.extracted.push({
-      fileName: `${archiveName}!${name}`,
+    walk.extracted.push({
+      fileName: `${walk.archiveName}!${name}`,
       bytes: new Uint8Array(entry.bytes),
     });
   }

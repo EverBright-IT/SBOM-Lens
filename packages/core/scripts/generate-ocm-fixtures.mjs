@@ -11,7 +11,7 @@
  * matters here.
  */
 import { createHash } from 'node:crypto';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { writeTar } from './tar-writer.mjs';
 
 const outDir = new URL('../fixtures/ocm/', import.meta.url);
@@ -284,12 +284,259 @@ export function buildComponentArchive() {
   ]);
 }
 
+// --- OCM Lens 2.0 demo delivery -------------------------------------------
+// One bundle that shows every verdict the product can give: three levels of
+// aggregation (platform -> observability -> base), a diamond (base referenced
+// twice), the CLI-SIGNED webstack descriptor verbatim (signed with ocm CLI
+// v0.13.0 / RSASSA-PSS / jsonNormalisation-v4alpha1 against the committed
+// test keypair; verifiable in-app with keys/test-rsa.pub.pem), a deliberate
+// digest mismatch, one external ociArtifact, and two embedded SBOMs.
+// Narrative vendor is ECME Corp; content is entirely synthetic.
+
+const signedEcmeCd = readFileSync(new URL('../fixtures/ocm/signed-ecme-descriptor.json', import.meta.url));
+
+// The signed descriptor's localBlob references are content-addressed sha256
+// values of EXACTLY these strings (they were the input files of the signing
+// run). Guard against drift: change a byte here and the signed demo breaks.
+const ecmeSbomJson =
+  JSON.stringify(
+    {
+      spdxVersion: 'SPDX-2.3',
+      dataLicense: 'CC0-1.0',
+      SPDXID: 'SPDXRef-DOCUMENT',
+      name: 'ecme-webstack-delivery-sbom',
+      documentNamespace: 'https://sbom.ecme.example/webstack/2.1.0',
+      creationInfo: { created: '2026-03-01T00:00:00Z', creators: ['Tool: ecme-sbom-gen'] },
+      packages: [
+        { SPDXID: 'SPDXRef-Package-webstack', name: 'webstack', versionInfo: '2.1.0', downloadLocation: 'NOASSERTION' },
+        { SPDXID: 'SPDXRef-Package-nginx', name: 'nginx-gateway', versionInfo: '1.27.0', downloadLocation: 'NOASSERTION' },
+      ],
+      relationships: [
+        { spdxElementId: 'SPDXRef-Package-webstack', relationshipType: 'CONTAINS', relatedSpdxElement: 'SPDXRef-Package-nginx' },
+      ],
+    },
+    null,
+    2,
+  ) + '\n';
+const ecmeRuntimeConfig = 'logLevel: info\nregion: eu-central-1\nfeatureFlags:\n  newCheckout: true\n';
+
+const ECME_SBOM_REF = sha256(ecmeSbomJson);
+const ECME_CONFIG_REF = sha256(ecmeRuntimeConfig);
+if (ECME_SBOM_REF !== 'f16ad138ab42cef1c9df2aaed44f687fa9836d100aa95ff5fecdb02877d38508')
+  throw new Error('ecmeSbomJson drifted: the signed demo descriptor no longer matches its blobs');
+if (ECME_CONFIG_REF !== 'e9b7fe4a8a2c2d6ddce52ef6b5f012040dd9cae8726866a08606b0a5760e51c8')
+  throw new Error('ecmeRuntimeConfig drifted: the signed demo descriptor no longer matches its blobs');
+
+const obsChartTar = writeTar([
+  {
+    name: 'observability/Chart.yaml',
+    bytes: 'apiVersion: v2\nname: observability\ndescription: ECME metrics and dashboards\nversion: 1.4.0\n',
+  },
+  { name: 'observability/values.yaml', bytes: 'retentionDays: 30\nscrapeInterval: 15s\n' },
+]);
+const OBS_CHART_DIGEST = sha256(obsChartTar);
+const obsConfig = 'alerting: enabled\nreceivers:\n  - oncall@ecme.example\n';
+const OBS_CONFIG_STORED = sha256(obsConfig);
+/** Deliberately wrong declared digest - the demo's visible mismatch case. */
+const OBS_CONFIG_DECLARED = HEX('7');
+const obsSbom =
+  JSON.stringify(
+    {
+      spdxVersion: 'SPDX-2.3',
+      dataLicense: 'CC0-1.0',
+      SPDXID: 'SPDXRef-DOCUMENT',
+      name: 'ecme-observability-sbom',
+      documentNamespace: 'https://sbom.ecme.example/observability/1.4.0',
+      creationInfo: { created: '2026-02-01T00:00:00Z', creators: ['Tool: ecme-sbom-gen'] },
+      packages: [
+        {
+          SPDXID: 'SPDXRef-Package-grafana',
+          name: 'grafana',
+          versionInfo: '11.0.0',
+          downloadLocation: 'NOASSERTION',
+        },
+      ],
+    },
+    null,
+    2,
+  ) + '\n';
+const OBS_SBOM_DIGEST = sha256(obsSbom);
+const baseInfo = 'distro: wolfi\npackages: none\npurpose: minimal base image metadata\n';
+const BASE_INFO_DIGEST = sha256(baseInfo);
+
+const platform2Cd = `meta:
+  schemaVersion: v2
+component:
+  name: ecme.org/platform
+  version: 2.0.0
+  provider: ECME Corp
+  creationTime: "2026-03-01T08:00:00Z"
+  sources: []
+  resources:
+    - name: gateway-image
+      version: 2.0.0
+      type: ociImage
+      relation: external
+      access:
+        type: ociArtifact
+        imageReference: registry.ecme.example/ecme/gateway:2.0.0
+  componentReferences:
+    - name: webstack
+      componentName: ecme.org/webstack
+      version: 2.1.0
+    - name: observability
+      componentName: ecme.org/observability
+      version: 1.4.0
+    - name: base
+      componentName: ecme.org/base
+      version: 0.9.0
+`;
+
+const obsCd = `meta:
+  schemaVersion: v2
+component:
+  name: ecme.org/observability
+  version: 1.4.0
+  provider: ECME Corp
+  sources: []
+  resources:
+    - name: obs-chart
+      version: 1.4.0
+      type: helmChart
+      relation: local
+      access:
+        type: localBlob
+        localReference: sha256.${OBS_CHART_DIGEST}
+        mediaType: application/vnd.cncf.helm.chart.content.v1.tar
+      digest:
+        hashAlgorithm: SHA-256
+        normalisationAlgorithm: genericBlobDigest/v1
+        value: "${OBS_CHART_DIGEST}"
+    - name: obs-config
+      version: 1.4.0
+      type: plainText
+      relation: local
+      access:
+        type: localBlob
+        localReference: sha256.${OBS_CONFIG_STORED}
+        mediaType: application/yaml
+      digest:
+        hashAlgorithm: SHA-256
+        normalisationAlgorithm: genericBlobDigest/v1
+        value: "${OBS_CONFIG_DECLARED}"
+    - name: obs-sbom
+      version: 1.4.0
+      type: sbom
+      relation: local
+      access:
+        type: localBlob
+        localReference: sha256.${OBS_SBOM_DIGEST}
+        mediaType: application/spdx+json
+  componentReferences:
+    - name: base
+      componentName: ecme.org/base
+      version: 0.9.0
+`;
+
+const baseCd = `meta:
+  schemaVersion: v2
+component:
+  name: ecme.org/base
+  version: 0.9.0
+  provider: ECME Corp
+  sources: []
+  resources:
+    - name: base-info
+      version: 0.9.0
+      type: plainText
+      relation: local
+      access:
+        type: localBlob
+        localReference: sha256.${BASE_INFO_DIGEST}
+        mediaType: application/yaml
+      digest:
+        hashAlgorithm: SHA-256
+        normalisationAlgorithm: genericBlobDigest/v1
+        value: "${BASE_INFO_DIGEST}"
+  componentReferences: []
+`;
+
+const HEX2 = (pair) => pair.repeat(32);
+const P2_CD_DIGEST = HEX('b');
+const P2_MANIFEST_DIGEST = HEX('c');
+const OBS_CD_DIGEST = HEX('d');
+const OBS_MANIFEST_DIGEST = HEX('e');
+const BASE_CD_DIGEST = HEX('f');
+const BASE_MANIFEST_DIGEST = HEX2('a1');
+const WEB_CD_DIGEST = HEX2('b2');
+const WEB_MANIFEST_DIGEST = HEX2('c3');
+
+const flatManifest = (cdDigest, cdMediaType, extraLayers = []) =>
+  JSON.stringify({
+    schemaVersion: 2,
+    mediaType: 'application/vnd.oci.image.manifest.v1+json',
+    layers: [
+      { mediaType: cdMediaType, digest: `sha256:${cdDigest}`, size: 0 },
+      ...extraLayers,
+    ],
+  });
+
+export function buildDemoDeliveryCtf() {
+  const yamlCd = 'application/vnd.ocm.software.component-descriptor.v2+yaml';
+  const jsonCd = 'application/vnd.ocm.software.component-descriptor.v2+json';
+  const index = JSON.stringify({
+    schemaVersion: 1,
+    artifacts: [
+      { repository: 'component-descriptors/ecme.org/platform', tag: '2.0.0', digest: `sha256:${P2_MANIFEST_DIGEST}` },
+      { repository: 'component-descriptors/ecme.org/webstack', tag: '2.1.0', digest: `sha256:${WEB_MANIFEST_DIGEST}` },
+      { repository: 'component-descriptors/ecme.org/observability', tag: '1.4.0', digest: `sha256:${OBS_MANIFEST_DIGEST}` },
+      { repository: 'component-descriptors/ecme.org/base', tag: '0.9.0', digest: `sha256:${BASE_MANIFEST_DIGEST}` },
+    ],
+  });
+  return writeTar([
+    { name: 'artifact-index.json', bytes: index },
+    { name: `blobs/sha256.${P2_MANIFEST_DIGEST}`, bytes: flatManifest(P2_CD_DIGEST, yamlCd) },
+    { name: `blobs/sha256.${P2_CD_DIGEST}`, bytes: platform2Cd },
+    {
+      name: `blobs/sha256.${WEB_MANIFEST_DIGEST}`,
+      bytes: flatManifest(WEB_CD_DIGEST, jsonCd, [
+        { mediaType: 'application/spdx+json', digest: `sha256:${ECME_SBOM_REF}`, size: ecmeSbomJson.length },
+        { mediaType: 'application/yaml', digest: `sha256:${ECME_CONFIG_REF}`, size: ecmeRuntimeConfig.length },
+      ]),
+    },
+    { name: `blobs/sha256.${WEB_CD_DIGEST}`, bytes: signedEcmeCd },
+    { name: `blobs/sha256.${ECME_SBOM_REF}`, bytes: ecmeSbomJson },
+    { name: `blobs/sha256.${ECME_CONFIG_REF}`, bytes: ecmeRuntimeConfig },
+    {
+      name: `blobs/sha256.${OBS_MANIFEST_DIGEST}`,
+      bytes: flatManifest(OBS_CD_DIGEST, yamlCd, [
+        { mediaType: 'application/vnd.cncf.helm.chart.content.v1.tar', digest: `sha256:${OBS_CHART_DIGEST}`, size: obsChartTar.length },
+        { mediaType: 'application/yaml', digest: `sha256:${OBS_CONFIG_STORED}`, size: obsConfig.length },
+        { mediaType: 'application/spdx+json', digest: `sha256:${OBS_SBOM_DIGEST}`, size: obsSbom.length },
+      ]),
+    },
+    { name: `blobs/sha256.${OBS_CD_DIGEST}`, bytes: obsCd },
+    { name: `blobs/sha256.${OBS_CHART_DIGEST}`, bytes: obsChartTar },
+    { name: `blobs/sha256.${OBS_CONFIG_STORED}`, bytes: obsConfig },
+    { name: `blobs/sha256.${OBS_SBOM_DIGEST}`, bytes: obsSbom },
+    {
+      name: `blobs/sha256.${BASE_MANIFEST_DIGEST}`,
+      bytes: flatManifest(BASE_CD_DIGEST, yamlCd, [
+        { mediaType: 'application/yaml', digest: `sha256:${BASE_INFO_DIGEST}`, size: baseInfo.length },
+      ]),
+    },
+    { name: `blobs/sha256.${BASE_CD_DIGEST}`, bytes: baseCd },
+    { name: `blobs/sha256.${BASE_INFO_DIGEST}`, bytes: baseInfo },
+  ]);
+}
+
 const isMain = import.meta.url === new URL(`file://${process.argv[1]}`).href;
 if (isMain) {
   mkdirSync(outDir, { recursive: true });
   const files = [
     ['delivery.ctf.tar', buildDeliveryCtf()],
     ['component-archive.tar', buildComponentArchive()],
+    ['ecme-delivery.ctf.tar', buildDemoDeliveryCtf()],
   ];
   for (const [name, bytes] of files) {
     writeFileSync(new URL(name, outDir), bytes);

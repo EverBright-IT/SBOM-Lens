@@ -42,6 +42,7 @@ export function readTar(bytes: Uint8Array): TarResult {
   let offset = 0;
   let pendingLongName: string | null = null;
   let pendingPaxPath: string | null = null;
+  let pendingPaxSize: number | null = null;
 
   while (offset + BLOCK <= bytes.length) {
     const header = bytes.subarray(offset, offset + BLOCK);
@@ -59,10 +60,15 @@ export function readTar(bytes: Uint8Array): TarResult {
       break;
     }
 
-    const size = parseOctal(header.subarray(124, 136));
+    const headerSize = parseSize(header.subarray(124, 136));
+    const typeflag = String.fromCharCode(header[156]!);
+    // A PAX size record overrides the (possibly saturated) header field of
+    // the entry it precedes — but never of other meta headers.
+    const size =
+      (typeflag === '0' || typeflag === '\0') && pendingPaxSize !== null ? pendingPaxSize : headerSize;
     if (size === null) {
       diagnostics.push(
-        diag('warning', 'TAR_SIZE_UNSUPPORTED', 'Entry with non-octal (base-256) size skipped: files >8 GiB are unsupported.'),
+        diag('warning', 'TAR_SIZE_UNSUPPORTED', 'Entry size is not representable (> 2^53 bytes): remaining entries dropped.'),
       );
       break; // cannot know where the next header starts
     }
@@ -73,15 +79,15 @@ export function readTar(bytes: Uint8Array): TarResult {
       break;
     }
 
-    const typeflag = String.fromCharCode(header[156]!);
     const data = bytes.subarray(dataStart, dataEnd);
 
     if (typeflag === 'L') {
       // GNU longname: data block holds the next entry's name.
       pendingLongName = decodeString(data).replace(/\0+$/, '');
     } else if (typeflag === 'x') {
-      const path = parsePaxPath(data);
-      if (path !== null) pendingPaxPath = path;
+      const records = parsePaxRecords(data);
+      if (records.path !== undefined) pendingPaxPath = records.path;
+      if (records.size !== undefined) pendingPaxSize = records.size;
     } else if (typeflag === 'g') {
       countSkip(skippedTypes, 'pax-global');
     } else if (typeflag === '5') {
@@ -90,6 +96,7 @@ export function readTar(bytes: Uint8Array): TarResult {
       const name = pendingPaxPath ?? pendingLongName ?? headerName(header);
       pendingLongName = null;
       pendingPaxPath = null;
+      pendingPaxSize = null;
       if (entries.length >= MAX_ENTRIES) {
         diagnostics.push(
           diag('warning', 'ARCHIVE_LIMIT_EXCEEDED', `Archive exceeds ${MAX_ENTRIES} entries: remaining entries dropped.`),
@@ -102,6 +109,7 @@ export function readTar(bytes: Uint8Array): TarResult {
       countSkip(skippedTypes, `type-${typeflag}`);
       pendingLongName = null;
       pendingPaxPath = null;
+      pendingPaxSize = null;
     }
 
     offset = dataStart + Math.ceil(size / BLOCK) * BLOCK;
@@ -161,6 +169,7 @@ export async function readTarFrom(source: ByteSource, options?: TarStreamOptions
   let offset = 0;
   let pendingLongName: string | null = null;
   let pendingPaxPath: string | null = null;
+  let pendingPaxSize: number | null = null;
   let materializedTotal = 0;
   let unmaterialized = 0;
 
@@ -179,10 +188,15 @@ export async function readTarFrom(source: ByteSource, options?: TarStreamOptions
       break;
     }
 
-    const size = parseOctal(header.subarray(124, 136));
+    const headerSize = parseSize(header.subarray(124, 136));
+    const typeflag = String.fromCharCode(header[156]!);
+    // A PAX size record overrides the (possibly saturated) header field of
+    // the entry it precedes — but never of other meta headers.
+    const size =
+      (typeflag === '0' || typeflag === '\0') && pendingPaxSize !== null ? pendingPaxSize : headerSize;
     if (size === null) {
       diagnostics.push(
-        diag('warning', 'TAR_SIZE_UNSUPPORTED', 'Entry with non-octal (base-256) size skipped: files >8 GiB are unsupported.'),
+        diag('warning', 'TAR_SIZE_UNSUPPORTED', 'Entry size is not representable (> 2^53 bytes): remaining entries dropped.'),
       );
       break;
     }
@@ -191,8 +205,6 @@ export async function readTarFrom(source: ByteSource, options?: TarStreamOptions
       diagnostics.push(diag('warning', 'TAR_TRUNCATED', 'Archive ends mid-entry: remaining entries dropped.'));
       break;
     }
-
-    const typeflag = String.fromCharCode(header[156]!);
 
     if (typeflag === 'L') {
       if (size > META_HEADER_MAX) {
@@ -204,8 +216,9 @@ export async function readTarFrom(source: ByteSource, options?: TarStreamOptions
       if (size > META_HEADER_MAX) {
         countSkip(skippedTypes, 'oversized-pax');
       } else {
-        const path = parsePaxPath(await source.read(dataStart, size));
-        if (path !== null) pendingPaxPath = path;
+        const records = parsePaxRecords(await source.read(dataStart, size));
+        if (records.path !== undefined) pendingPaxPath = records.path;
+        if (records.size !== undefined) pendingPaxSize = records.size;
       }
     } else if (typeflag === 'g') {
       countSkip(skippedTypes, 'pax-global');
@@ -215,6 +228,7 @@ export async function readTarFrom(source: ByteSource, options?: TarStreamOptions
       const name = pendingPaxPath ?? pendingLongName ?? headerName(header);
       pendingLongName = null;
       pendingPaxPath = null;
+      pendingPaxSize = null;
       if (entries.length >= MAX_ENTRIES) {
         diagnostics.push(
           diag('warning', 'ARCHIVE_LIMIT_EXCEEDED', `Archive exceeds ${MAX_ENTRIES} entries: remaining entries dropped.`),
@@ -233,6 +247,7 @@ export async function readTarFrom(source: ByteSource, options?: TarStreamOptions
       countSkip(skippedTypes, `type-${typeflag}`);
       pendingLongName = null;
       pendingPaxPath = null;
+      pendingPaxSize = null;
     }
 
     offset = dataStart + Math.ceil(size / BLOCK) * BLOCK;
@@ -260,11 +275,30 @@ function headerName(header: Uint8Array): string {
 }
 
 function parseOctal(field: Uint8Array): number | null {
-  if ((field[0]! & 0x80) !== 0) return null; // GNU base-256
+  if ((field[0]! & 0x80) !== 0) return null; // GNU base-256 — see parseSize
   const text = decodeString(field).replace(/\0.*$/, '').trim();
   if (text === '') return 0;
   const value = Number.parseInt(text, 8);
   return Number.isFinite(value) ? value : null;
+}
+
+/**
+ * Entry size: octal (ustar, ≤8 GiB) or GNU base-256 (big-endian binary,
+ * high bit of the first byte is the flag — GNU tar writes it past 8 GiB).
+ * Go's archive/tar takes the third route, a PAX `size` record, handled by
+ * the callers via parsePaxRecords. Returns null only when the value cannot
+ * be represented exactly in a JS number (> 2^53 — petabyte territory).
+ */
+function parseSize(field: Uint8Array): number | null {
+  if ((field[0]! & 0x80) !== 0) {
+    let value = field[0]! & 0x7f;
+    for (let i = 1; i < field.length; i++) {
+      value = value * 256 + field[i]!;
+      if (!Number.isSafeInteger(value)) return null;
+    }
+    return value;
+  }
+  return parseOctal(field);
 }
 
 function verifyChecksum(header: Uint8Array): boolean {
@@ -282,9 +316,16 @@ function isZeroBlock(block: Uint8Array): boolean {
   return true;
 }
 
-/** PAX records: "<len> key=value\n" — we only care about `path`. */
-function parsePaxPath(data: Uint8Array): string | null {
+interface PaxRecords {
+  path?: string;
+  /** Overrides the next entry's header size field (Go writes this > 8 GiB). */
+  size?: number;
+}
+
+/** PAX records: "<len> key=value\n" — we care about `path` and `size`. */
+function parsePaxRecords(data: Uint8Array): PaxRecords {
   const text = decodeString(data);
+  const records: PaxRecords = {};
   let index = 0;
   while (index < text.length) {
     const space = text.indexOf(' ', index);
@@ -292,10 +333,14 @@ function parsePaxPath(data: Uint8Array): string | null {
     const length = Number.parseInt(text.slice(index, space), 10);
     if (!Number.isFinite(length) || length <= 0) break;
     const record = text.slice(space + 1, index + length - 1); // strip trailing \n
-    if (record.startsWith('path=')) return record.slice(5);
+    if (record.startsWith('path=')) records.path = record.slice(5);
+    if (record.startsWith('size=')) {
+      const size = Number.parseInt(record.slice(5), 10);
+      if (Number.isSafeInteger(size) && size >= 0) records.size = size;
+    }
     index += length;
   }
-  return null;
+  return records;
 }
 
 function decodeString(bytes: Uint8Array): string {

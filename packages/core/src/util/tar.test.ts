@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 // @ts-expect-error — plain-JS test/fixture helper without type declarations
 import { writeTar } from '../../scripts/tar-writer.mjs';
 import { GunzipLimitError, gunzip, sniffContainer } from './binary';
-import { readTar } from './tar';
+import { readTar, readTarFrom } from './tar';
+import { bufferSource } from './bytesource';
 
 const text = (s: string) => new TextEncoder().encode(s);
 
@@ -97,6 +98,79 @@ describe('readTar', () => {
     const { entries, diagnostics } = readTar(tar);
     expect(entries.map((e) => e.name)).toEqual(['kept.txt']);
     expect(diagnostics.some((d) => d.code === 'TAR_ENTRY_SKIPPED')).toBe(true);
+  });
+});
+
+describe('large entry sizes (>8 GiB spellings, exercised with small values)', () => {
+  function base256Field(value: number): Uint8Array {
+    const field = new Uint8Array(12);
+    field[0] = 0x80;
+    let v = value;
+    for (let i = 11; i >= 1; i--) {
+      field[i] = v % 256;
+      v = Math.floor(v / 256);
+    }
+    return field;
+  }
+
+  async function bothReaders(tar: Uint8Array) {
+    const sync = readTar(tar);
+    const streamed = await readTarFrom(bufferSource(tar));
+    return { sync, streamed };
+  }
+
+  it('reads a GNU base-256 size field (both readers)', async () => {
+    const base: Uint8Array = writeTar([{ name: 'big.bin', bytes: 'P'.repeat(2048) }]);
+    const header = base.slice(0, 512);
+    header.set(base256Field(2048), 124);
+    rechecksum(header);
+    const tar = concat(header, base.slice(512));
+    const { sync, streamed } = await bothReaders(tar);
+    for (const result of [sync, streamed]) {
+      expect(result.diagnostics).toHaveLength(0);
+      expect(result.entries[0]).toMatchObject({ name: 'big.bin', size: 2048 });
+    }
+  });
+
+  it('honors a PAX size record over a zeroed header field (Go archive/tar style)', async () => {
+    // Hand-build: pax 'x' header (size record) → entry header claiming size 0
+    // → 2048 bytes of data → a normal trailing entry proving the offset math.
+    const template: Uint8Array = writeTar([{ name: 'big.bin', bytes: 'Q'.repeat(2048) }]);
+    const paxHeader = template.slice(0, 512);
+    patch(paxHeader, 0, 'pax-meta\0');
+    patch(paxHeader, 124, (13).toString(8).padStart(11, '0') + '\0');
+    paxHeader[156] = 'x'.charCodeAt(0);
+    rechecksum(paxHeader);
+    const paxData = new Uint8Array(512);
+    paxData.set(text('13 size=2048\n'));
+
+    const fileHeader = template.slice(0, 512);
+    patch(fileHeader, 124, '00000000000\0'); // zeroed — PAX must override
+    rechecksum(fileHeader);
+
+    const after: Uint8Array = writeTar([{ name: 'after.txt', bytes: 'ok' }]);
+    const tar = concat(paxHeader, paxData, fileHeader, template.slice(512, 512 + 2048), after);
+    const { sync, streamed } = await bothReaders(tar);
+    for (const result of [sync, streamed]) {
+      expect(result.entries.map((e) => e.name)).toEqual(['big.bin', 'after.txt']);
+      expect(result.entries[0]!.size).toBe(2048);
+    }
+    expect(new TextDecoder().decode(sync.entries[0]!.bytes)).toBe('Q'.repeat(2048));
+  });
+
+  it('drops entries whose size exceeds what a JS number can address', async () => {
+    const base: Uint8Array = writeTar([{ name: 'huge.bin', bytes: 'x' }]);
+    const header = base.slice(0, 512);
+    const field = new Uint8Array(12).fill(0xff);
+    field[0] = 0x80 | 0x7f;
+    header.set(field, 124);
+    rechecksum(header);
+    const tar = concat(header, base.slice(512));
+    const { sync, streamed } = await bothReaders(tar);
+    for (const result of [sync, streamed]) {
+      expect(result.entries).toHaveLength(0);
+      expect(result.diagnostics.some((d) => d.code === 'TAR_SIZE_UNSUPPORTED')).toBe(true);
+    }
   });
 });
 

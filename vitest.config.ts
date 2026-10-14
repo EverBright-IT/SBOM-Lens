@@ -23,6 +23,15 @@ export default defineConfig({
       },
       {
         test: {
+          name: 'ocm-lens',
+          root: 'apps/ocm-lens',
+          environment: 'node',
+          include: ['src/**/*.test.ts'],
+          setupFiles: ['../../packages/core/src/test-setup.ts'],
+        },
+      },
+      {
+        test: {
           name: 'vscode-shell',
           root: 'packages/vscode-shell',
           environment: 'node',
