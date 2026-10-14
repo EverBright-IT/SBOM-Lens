@@ -3,6 +3,7 @@ import { registerYamlParser, sniffContainer } from '@sbomlens/core';
 import {
   blobSource,
   bundleFromDescriptor,
+  bundleFromDescriptors,
   digestDeliveryBlob,
   extractDeliveryBlob,
   readOcmBundle,
@@ -39,6 +40,34 @@ async function handle(job: WorkerRequest): Promise<void> {
         ]);
       } else {
         scope.postMessage({ kind: 'extract', id: job.id, bytes: null, reason: result.reason });
+      }
+      return;
+    }
+
+    if (job.kind === 'open-many') {
+      const archives: number[] = [];
+      for (const [i, file] of job.files.entries()) {
+        const kind = sniffContainer(new Uint8Array(await file.blob.slice(0, 512).arrayBuffer()));
+        if (kind === 'tar' || kind === 'gzip') archives.push(i);
+      }
+      if (archives.length > 0) {
+        const index = archives[0]!;
+        const first = job.files[index]!;
+        const result = await readOcmBundleFrom(first.fileName, blobSource(first.blob));
+        const others = job.files.length - 1;
+        if (others > 0) {
+          result.diagnostics.push({
+            severity: 'info',
+            code: 'HOST_PUSH_ONE_DELIVERY',
+            message: `${others} more file(s) not opened: OCM Lens shows one delivery at a time. Open them individually.`,
+          });
+        }
+        respondBundle(job.id, result, index);
+      } else {
+        const files = await Promise.all(
+          job.files.map(async (f) => ({ fileName: f.fileName, text: await f.blob.text() })),
+        );
+        respondBundle(job.id, await bundleFromDescriptors(`${files.length} component descriptors`, files));
       }
       return;
     }
@@ -109,6 +138,7 @@ function respondBundle(
     extracted: Extract<WorkerResponse, { kind: 'bundle' }>['extracted'];
     diagnostics: Extract<WorkerResponse, { kind: 'bundle' }>['diagnostics'];
   },
+  sourceIndex?: number,
 ): void {
-  scope.postMessage({ kind: 'bundle', id, ...result });
+  scope.postMessage({ kind: 'bundle', id, ...result, ...(sourceIndex !== undefined ? { sourceIndex } : {}) });
 }

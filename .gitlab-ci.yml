@@ -142,6 +142,8 @@ build-ocm2:
     - when: on_success
   script:
     - npm run build -w @sbomlens/ocm-lens
+    # The webview build the VS Code extension ships (stage H).
+    - npm run build:vscode -w @sbomlens/ocm-lens
     # No 1.x-style brand-ban here: 2.0 deliberately points at SBOM Lens for
     # deep SBOM analysis (the products are siblings, not strangers). The gate
     # that matters is structural: the bundle model's marker must be present,
@@ -184,19 +186,22 @@ vsix:
     paths: [sbomlens.vsix]
     expire_in: 4 weeks
   rules:
-    - if: $CI_COMMIT_TAG
+    - if: $CI_COMMIT_TAG =~ /^v\d/
 
 vsix-ocm:
   stage: deploy
   script:
-    - npm run build:vscode-ocm -w @sbomlens/web
+    - npm run build:vscode -w @sbomlens/ocm-lens
     - npm run compile -w ocmlens
-    - npm run package -w ocmlens
+    # Pre-release channel while 2.x is in beta: users opt in via VS Code's
+    # 'Switch to Pre-Release Version'; the release channel stays on 0.29.6.
+    # Switch to `npm run package` when 2.x goes stable.
+    - npm run package:pre -w ocmlens
   artifacts:
     paths: [ocmlens.vsix]
     expire_in: 4 weeks
   rules:
-    - if: $CI_COMMIT_TAG
+    - if: $CI_COMMIT_TAG =~ /^ocm-lens-v\d/
 
 # Open VSX publishing, one job per product.
 #
@@ -210,9 +215,9 @@ vsix-ocm:
 # Setup, once: OVSX_TOKEN as a masked, protected CI variable (Open VSX → user
 # settings → access tokens; the account must own the `everbright-it`
 # namespace), AND protect the release tags (Settings → Repository → Protected
-# tags → `v*`). A protected variable only reaches pipelines on protected refs;
-# on an unprotected tag the token arrives empty and the guard below stops the
-# job. ovsx picks it up as OVSX_PAT from the environment, so the token never
+# tags → `v*` and `ocm-lens-v*`). A protected variable only reaches pipelines
+# on protected refs; on an unprotected tag the token arrives empty and the
+# guard below stops the job. ovsx picks it up as OVSX_PAT from the environment, so the token never
 # appears in a command line, a process list, or the job log.
 #
 # The VS Code Marketplace jobs below extend the same shape with `vsce publish`.
@@ -239,6 +244,9 @@ publish-sbomlens:
     # extension under a version number nobody can correct afterwards.
     - node -e "const v=require('./apps/vscode/package.json').version; if ('v'+v !== process.env.CI_COMMIT_TAG) { console.error('vsix is '+v+', tag is '+process.env.CI_COMMIT_TAG); process.exit(1); }"
     - npx --yes ovsx@$OVSX_VERSION publish sbomlens.vsix
+  rules:
+    - if: $CI_COMMIT_TAG =~ /^v\d/
+      when: manual
 
 publish-ocmlens:
   extends: .ovsx-publish
@@ -246,8 +254,11 @@ publish-ocmlens:
   script:
     - test -n "$OVSX_TOKEN" || { echo "OVSX_TOKEN is not set. Add it as a masked CI variable."; exit 1; }
     - npx --yes ovsx@$OVSX_VERSION verify-pat everbright-it
-    - node -e "const v=require('./apps/vscode-ocm/package.json').version; if ('v'+v !== process.env.CI_COMMIT_TAG) { console.error('vsix is '+v+', tag is '+process.env.CI_COMMIT_TAG); process.exit(1); }"
-    - npx --yes ovsx@$OVSX_VERSION publish ocmlens.vsix
+    - node -e "const v=require('./apps/vscode-ocm/package.json').version; if ('ocm-lens-v'+v !== process.env.CI_COMMIT_TAG) { console.error('vsix is '+v+', tag is '+process.env.CI_COMMIT_TAG); process.exit(1); }"
+    - npx --yes ovsx@$OVSX_VERSION publish ocmlens.vsix --pre-release
+  rules:
+    - if: $CI_COMMIT_TAG =~ /^ocm-lens-v\d/
+      when: manual
 
 # VS Code Marketplace publishing, one job per product. Same shape, same manual
 # reasoning, and the same immutability as Open VSX above: the two registries
@@ -295,6 +306,9 @@ publish-vsce-sbomlens:
     # inside the extension. No --skip-duplicate: a republished version must
     # fail loudly rather than look like a success that did nothing.
     - npx --yes @vscode/vsce@$VSCE_VERSION publish --packagePath sbomlens.vsix
+  rules:
+    - if: $CI_COMMIT_TAG =~ /^v\d/
+      when: manual
 
 publish-vsce-ocmlens:
   extends: .vsce-publish
@@ -302,8 +316,11 @@ publish-vsce-ocmlens:
   script:
     - test -n "$VSCE_TOKEN" || { echo "VSCE_TOKEN is not set. Add it as a masked, protected CI variable, and protect the release tags."; exit 1; }
     - npx --yes @vscode/vsce@$VSCE_VERSION verify-pat everbright-it
-    - node -e "const v=require('./apps/vscode-ocm/package.json').version; if ('v'+v !== process.env.CI_COMMIT_TAG) { console.error('vsix is '+v+', tag is '+process.env.CI_COMMIT_TAG); process.exit(1); }"
-    - npx --yes @vscode/vsce@$VSCE_VERSION publish --packagePath ocmlens.vsix
+    - node -e "const v=require('./apps/vscode-ocm/package.json').version; if ('ocm-lens-v'+v !== process.env.CI_COMMIT_TAG) { console.error('vsix is '+v+', tag is '+process.env.CI_COMMIT_TAG); process.exit(1); }"
+    - npx --yes @vscode/vsce@$VSCE_VERSION publish --packagePath ocmlens.vsix --pre-release
+  rules:
+    - if: $CI_COMMIT_TAG =~ /^ocm-lens-v\d/
+      when: manual
 
 # GitLab releases for the tag, on BOTH instances. Releases are project
 # metadata, not git data: the push mirror forwards the tag but never the
@@ -318,7 +335,7 @@ publish-vsce-ocmlens:
 # project (it is by default).
 release-assets:
   stage: deploy
-  needs: [vsix, vsix-ocm, self-sbom]
+  needs: [vsix, self-sbom]
   image: alpine:3.22
   cache: []
   before_script: []
@@ -326,7 +343,6 @@ release-assets:
     - apk add --no-cache curl
     - PKG="$CI_API_V4_URL/projects/$CI_PROJECT_ID/packages/generic"
     - 'curl -fsS --header "JOB-TOKEN: $CI_JOB_TOKEN" --upload-file sbomlens.vsix "$PKG/sbomlens/$CI_COMMIT_TAG/sbomlens.vsix"'
-    - 'curl -fsS --header "JOB-TOKEN: $CI_JOB_TOKEN" --upload-file ocmlens.vsix "$PKG/ocmlens/$CI_COMMIT_TAG/ocmlens.vsix"'
     - 'curl -fsS --header "JOB-TOKEN: $CI_JOB_TOKEN" --upload-file "sbomlens-$CI_COMMIT_TAG.spdx.json" "$PKG/self-sbom/$CI_COMMIT_TAG/sbomlens-$CI_COMMIT_TAG.spdx.json"'
     # Release notes: this tag's CHANGELOG section. Entries carry their own
     # [SBOM Lens]/[OCM Lens] prefixes, so one release covers both products.
@@ -334,17 +350,17 @@ release-assets:
     - '[ -s changelog-section.md ] || echo "_No CHANGELOG section found for this tag._" > changelog-section.md'
     - |
       {
-        echo "One tag, two products: SBOM Lens and OCM Lens release in lockstep from this monorepo."
+        echo "SBOM Lens release from this monorepo. OCM Lens 2.x releases on its own ocm-lens-v* tags."
         echo
         cat changelog-section.md
         echo
-        echo "Install: [SBOM Lens on Open VSX](https://open-vsx.org/extension/everbright-it/sbomlens) | [OCM Lens on Open VSX](https://open-vsx.org/extension/everbright-it/ocmlens)"
+        echo "Install: [SBOM Lens on Open VSX](https://open-vsx.org/extension/everbright-it/sbomlens)"
       } > release-notes.md
   artifacts:
     paths: [release-notes.md]
     expire_in: 1 week
   rules:
-    - if: $CI_COMMIT_TAG
+    - if: $CI_COMMIT_TAG =~ /^v\d/
 
 # Waits for the image gate on purpose: a release object should only appear
 # for a build that passed every blocking check. NOT manual: the decision
@@ -366,9 +382,6 @@ release-gitlab:
         - name: sbomlens.vsix
           url: '$CI_API_V4_URL/projects/$CI_PROJECT_ID/packages/generic/sbomlens/$CI_COMMIT_TAG/sbomlens.vsix'
           link_type: package
-        - name: ocmlens.vsix
-          url: '$CI_API_V4_URL/projects/$CI_PROJECT_ID/packages/generic/ocmlens/$CI_COMMIT_TAG/ocmlens.vsix'
-          link_type: package
         - name: 'sbomlens-$CI_COMMIT_TAG.spdx.json (self-SBOM)'
           url: '$CI_API_V4_URL/projects/$CI_PROJECT_ID/packages/generic/self-sbom/$CI_COMMIT_TAG/sbomlens-$CI_COMMIT_TAG.spdx.json'
           link_type: other
@@ -376,7 +389,57 @@ release-gitlab:
       # Only where the release keyword works: the internal custom executor
       # cannot run release-cli (every tag pipeline since v0.28.0 failed here);
       # the gitlab.com mirror creates the release, GitHub gets its own.
-      - if: $CI_COMMIT_TAG && $CI_SERVER_HOST == "gitlab.com"
+      - if: $CI_COMMIT_TAG =~ /^v\d/ && $CI_SERVER_HOST == "gitlab.com"
+
+# OCM Lens 2.x releases on its own tags (ocm-lens-v<version>): the vsix goes to
+# the generic package registry and the release notes come from OCM Lens' own
+# changelog (apps/ocm-lens/CHANGELOG.md).
+release-assets-ocm:
+  stage: deploy
+  needs: [vsix-ocm]
+  image: alpine:3.22
+  cache: []
+  before_script: []
+  script:
+    - apk add --no-cache curl
+    - PKG="$CI_API_V4_URL/projects/$CI_PROJECT_ID/packages/generic"
+    - 'curl -fsS --header "JOB-TOKEN: $CI_JOB_TOKEN" --upload-file ocmlens.vsix "$PKG/ocmlens/$CI_COMMIT_TAG/ocmlens.vsix"'
+    - awk -v ver="${CI_COMMIT_TAG#ocm-lens-v}" 'index($0,"## ["ver"]")==1{f=1;next} /^## \[/{f=0} f' apps/ocm-lens/CHANGELOG.md > changelog-section.md
+    - '[ -s changelog-section.md ] || echo "_No CHANGELOG section found for this tag._" > changelog-section.md'
+    - |
+      {
+        echo "OCM Lens ${CI_COMMIT_TAG#ocm-lens-v} (pre-release channel: in VS Code, choose 'Switch to Pre-Release Version')."
+        echo
+        cat changelog-section.md
+        echo
+        echo "Install: [OCM Lens on Open VSX](https://open-vsx.org/extension/everbright-it/ocmlens)"
+      } > release-notes.md
+  artifacts:
+    paths: [release-notes.md]
+    expire_in: 1 week
+  rules:
+    - if: $CI_COMMIT_TAG =~ /^ocm-lens-v\d/
+
+release-gitlab-ocm:
+  stage: publish
+  needs: [release-assets-ocm]
+  image: registry.gitlab.com/gitlab-org/release-cli:latest
+  cache: []
+  before_script: []
+  script:
+    - echo "Creating release $CI_COMMIT_TAG on $CI_SERVER_HOST"
+  release:
+    tag_name: $CI_COMMIT_TAG
+    name: $CI_COMMIT_TAG
+    description: release-notes.md
+    assets:
+      links:
+        - name: ocmlens.vsix
+          url: '$CI_API_V4_URL/projects/$CI_PROJECT_ID/packages/generic/ocmlens/$CI_COMMIT_TAG/ocmlens.vsix'
+          link_type: package
+  rules:
+      # Same constraint as release-gitlab: only the gitlab.com mirror can run release-cli.
+      - if: $CI_COMMIT_TAG =~ /^ocm-lens-v\d/ && $CI_SERVER_HOST == "gitlab.com"
 
 # Self-hosting image, pushed to the project's container registry on tags.
 docker:
@@ -393,7 +456,7 @@ docker:
       --destination "$CI_REGISTRY_IMAGE:$CI_COMMIT_TAG"
       --destination "$CI_REGISTRY_IMAGE:latest"
   rules:
-    - if: $CI_COMMIT_TAG
+    - if: $CI_COMMIT_TAG =~ /^v\d/
 
 # Blocks a release whose image ships known HIGH/CRITICAL fixable CVEs.
 image-scan:
@@ -413,7 +476,7 @@ image-scan:
     # and would report their fictional packages as vulnerabilities.
     - trivy image --exit-code 1 --severity HIGH,CRITICAL --ignore-unfixed --skip-dirs /usr/share/nginx/html/examples "$CI_REGISTRY_IMAGE:$CI_COMMIT_TAG"
   rules:
-    - if: $CI_COMMIT_TAG
+    - if: $CI_COMMIT_TAG =~ /^v\d/
 
 # Dogfooding: every release ships its own SPDX SBOM, openable in SBOM Lens.
 # Pinned syft binary on alpine instead of the anchore/syft image: that image
@@ -437,4 +500,4 @@ self-sbom:
     paths: [sbomlens-*.spdx.json]
     expire_in: 1 year
   rules:
-    - if: $CI_COMMIT_TAG
+    - if: $CI_COMMIT_TAG =~ /^v\d/

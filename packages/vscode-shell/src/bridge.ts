@@ -18,6 +18,7 @@ export interface BridgeContext {
   secretDelete(key: string): Thenable<void>;
   persistPref(key: string, value: string): Thenable<void>;
   saveFile(fileName: string, text: string): Promise<void>;
+  saveBytes(fileName: string, bytes: Uint8Array): Promise<void>;
   openExternal(url: string): void;
   /** Called when the webview reports ready — time to push initial documents. */
   onReady(): void;
@@ -58,6 +59,9 @@ export function createBridgeHandler(
         break;
       case 'exportFile':
         await ctx.saveFile(message.fileName, message.text);
+        break;
+      case 'exportBytes':
+        await ctx.saveBytes(message.fileName, message.bytes);
         break;
       case 'openExternal':
         ctx.openExternal(message.url);

@@ -26,4 +26,14 @@ describe('OCM Lens version line', () => {
   it('matches the version the UI displays', () => {
     expect(APP_VERSION).toBe(pkg.version);
   });
+
+  it('is the version the VS Code extension ships (one product, one number)', () => {
+    const extension = JSON.parse(
+      readFileSync(new URL('../../vscode-ocm/package.json', import.meta.url), 'utf8'),
+    ) as { version: string };
+    expect(
+      extension.version,
+      'apps/vscode-ocm bundles OCM Lens 2.x - keep its version equal to apps/ocm-lens',
+    ).toBe(pkg.version);
+  });
 });

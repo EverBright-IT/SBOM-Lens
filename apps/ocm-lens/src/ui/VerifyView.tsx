@@ -84,7 +84,7 @@ export function VerifyView() {
       toolVersion: APP_VERSION,
       generatedAt: new Date().toISOString(),
     });
-    const base = bundle.fileName.replace(/\.(ctf|tar|tgz|gz|yaml|yml|json)+$/i, '');
+    const base = bundle.fileName.replace(/(\.(ctf|tar|tgz|gz|yaml|yml|json))+$/i, '');
     if (format === 'markdown') saveBytes(`${base}.acceptance.md`, 'text/markdown', report.markdown);
     else saveBytes(`${base}.acceptance.json`, 'application/json', JSON.stringify(report.json, null, 2));
   };

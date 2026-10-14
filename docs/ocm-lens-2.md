@@ -84,15 +84,48 @@ engine handles the new toolchain's output unchanged. Fixture facts are
 pinned by `bundle.demo.test.ts`; the generator guards the signed blobs'
 bytes by hash.
 
+## The VS Code extension (apps/vscode-ocm)
+
+Since 2.0.0 the extension `everbright-it.ocmlens` bundles this app: `npm
+run build:vscode -w @sbomlens/ocm-lens` builds the webview variant into
+`apps/ocm-lens/dist-vscode`, and the extension's `compile` copies it into
+`media/`. The shared shell (`packages/vscode-shell`) owns the custom
+editor, folder open, workspace scan, registry fetch, and deep link; the
+app talks to it through a small host layer (`apps/ocm-lens/src/host/`):
+
+- **Files in:** the shell pushes small files as bytes (`ingestFiles`) and
+  files over 32 MB as webview-resource URIs (`ingestUris`), which the app
+  fetches into disk-backed Blobs. One file opens as itself; several
+  descriptors become one bundle (`bundleFromDescriptors`); with archives
+  among them, the first archive opens and the rest is named.
+- **Worker:** the webview CSP allows `worker-src blob:` only, so the bundle
+  worker is a single file (`inlineDynamicImports`) instantiated from a Blob.
+- **Prefs:** the shell snapshots `ocmlens.*` keys from the extension's
+  storage into the page and persists writes, so pinned keys carry over
+  from the 1.x extension.
+- **Saves:** webviews cannot download; reports, SBOMs, and artifact blobs
+  go to the host as `exportBytes` and through VS Code's save dialog.
+
 ## Release procedure (2.x version line)
 
-OCM Lens 2.0 versions independently: `apps/ocm-lens/package.json` and
-`src/version.ts` carry 2.x while the monorepo stays on its 0.x lockstep.
-The lockstep command `npm version <v> --workspaces` bumps every
-workspace, this one included; `apps/ocm-lens/src/version.test.ts` fails
-the test suite when that happens and names the one-line fix. Bump
-`apps/ocm-lens` explicitly (package.json + `src/version.ts` + its
-CHANGELOG) when OCM Lens itself releases.
+OCM Lens 2.x versions independently: `apps/ocm-lens/package.json`,
+`src/version.ts`, and `apps/vscode-ocm/package.json` carry the same 2.x
+number (`apps/ocm-lens/src/version.test.ts` enforces both) while the
+monorepo stays on its 0.x lockstep. The lockstep command `npm version <v>
+--workspaces` bumps every workspace, these included; the same test fails
+the suite when that happens and names the one-line fix.
+
+To release: bump the three places plus `apps/ocm-lens/CHANGELOG.md`, then
+tag `ocm-lens-v<version>`. That tag namespace runs `vsix-ocm` (packaged
+with `--pre-release` while 2.x is in beta), the manual publish jobs for
+Open VSX and the Marketplace (both `--pre-release`; `vsce` refuses a
+package that was not packed as one), and the release jobs. The mirrored
+tag also runs `release-ocm` in the GitHub release workflow, which marks the
+GitHub release as a pre-release. The plain `v*` tags no longer build or
+publish OCM Lens. When 2.x goes stable, switch `vsix-ocm` and `release-ocm`
+to `npm run package`, drop `--pre-release` from the publish jobs, and
+replace `--prerelease` with `--latest=false` on GitHub; the stable version
+must be higher than the last pre-release.
 
 ## Size behavior (air-gap scale)
 

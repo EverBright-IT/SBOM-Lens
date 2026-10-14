@@ -42,7 +42,12 @@ export type WorkerRequest =
   /** Pull one blob back out of the delivery (download-on-demand). */
   | ({ kind: 'extract'; id: number; localReference: string } & JobSource)
   /** Check deferred digests on demand; progress per blob. */
-  | ({ kind: 'digests'; id: number; checks: DigestCheckRequest[] } & JobSource);
+  | ({ kind: 'digests'; id: number; checks: DigestCheckRequest[] } & JobSource)
+  /**
+   * Several host-pushed files at once (folder, workspace scan): descriptors
+   * merge into one bundle; with archives among them the first archive opens.
+   */
+  | { kind: 'open-many'; id: number; files: { fileName: string; blob: Blob }[] };
 
 export type WorkerResponse =
   | {
@@ -51,6 +56,8 @@ export type WorkerResponse =
       bundle: OcmBundle | null;
       extracted: { fileName: string; bytes: Uint8Array }[];
       diagnostics: Diagnostic[];
+      /** open-many: which pushed file is the opened archive (re-read source). */
+      sourceIndex?: number;
     }
   | { kind: 'extract'; id: number; bytes: Uint8Array | null; reason?: string }
   | { kind: 'digests-progress'; id: number; done: number; total: number }

@@ -1,3 +1,5 @@
+import type { HostPushFile } from '../host';
+import { host } from '../host';
 import type { BundleWalkOptions, DigestCheckRequest, WorkerRequest, WorkerResponse } from '../worker/protocol';
 import type { ArtifactRef, SourceRef } from './store';
 import { useAppStore } from './store';
@@ -14,7 +16,7 @@ const pending = new Map<number, Pending>();
 
 function getWorker(): Worker {
   if (worker) return worker;
-  worker = new Worker(new URL('../worker/bundle.worker.ts', import.meta.url), { type: 'module' });
+  worker = host.createWorker();
   worker.onmessage = (event: MessageEvent<WorkerResponse>) => {
     const entry = pending.get(event.data.id);
     if (!entry) return;
@@ -47,7 +49,7 @@ function run(
 async function jobSource(): Promise<{ blob?: Blob; buffer?: ArrayBuffer } | null> {
   const { sourceRef } = useAppStore.getState();
   if (!sourceRef) return null;
-  if (sourceRef.kind === 'file') return { blob: sourceRef.file };
+  if (sourceRef.kind === 'blob') return { blob: sourceRef.blob };
   const fetched = await fetch(sourceRef.url);
   if (!fetched.ok) return null;
   return { buffer: await fetched.arrayBuffer() };
@@ -66,16 +68,43 @@ async function commit(fileName: string, response: WorkerResponse, sourceRef: Sou
   }
 }
 
-/** Open one delivery file (CTF/component archive/.tgz or a bare descriptor). */
-export async function openFile(file: File, options?: BundleWalkOptions): Promise<void> {
+/** Open one delivery (CTF/component archive/.tgz or a bare descriptor). */
+export async function openBlob(fileName: string, blob: Blob, options?: BundleWalkOptions): Promise<void> {
   const { actions } = useAppStore.getState();
-  actions.loadStarted(file.name);
-  // A File is a Blob: the worker streams archives from disk via slice().
+  actions.loadStarted(fileName);
+  // The worker streams archives from the Blob via slice() (disk-backed for
+  // picked files and large pushed files alike).
   await commit(
-    file.name,
-    await run({ kind: 'bundle', fileName: file.name, blob: file, ...(options ? { options } : {}) }),
-    { kind: 'file', file },
+    fileName,
+    await run({ kind: 'bundle', fileName, blob, ...(options ? { options } : {}) }),
+    { kind: 'blob', blob },
   );
+}
+
+/** Open a file the user picked or dropped. */
+export async function openFile(file: File, options?: BundleWalkOptions): Promise<void> {
+  await openBlob(file.name, file, options);
+}
+
+/**
+ * Files pushed by the host (VS Code: custom editor, folder, workspace scan,
+ * registry, deep link). One file opens as itself; several descriptors become
+ * ONE bundle; with archives among them, the first archive opens - OCM Lens
+ * shows one delivery at a time, and the worker says so.
+ */
+export async function openHostPush(files: HostPushFile[]): Promise<void> {
+  if (files.length === 0) return;
+  if (files.length === 1) {
+    await openBlob(files[0]!.fileName, files[0]!.blob);
+    return;
+  }
+  const label = `${files.length} files`;
+  const { actions } = useAppStore.getState();
+  actions.loadStarted(label);
+  const response = await run({ kind: 'open-many', files });
+  const source =
+    response.kind === 'bundle' && response.sourceIndex !== undefined ? files[response.sourceIndex] : undefined;
+  await commit(label, response, source ? { kind: 'blob', blob: source.blob } : null);
 }
 
 /** Open a delivery served next to the app (demo, or the `?open=` dev hook). */

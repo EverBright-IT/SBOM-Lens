@@ -36,21 +36,29 @@ Then open the repo in VS Code and press **F5** ("Run SBOM Lens extension").
       (`retainContextWhenHidden`).
 - [ ] Remote/WSL window, if available: all of the above.
 
-OCM Lens on top ("Run OCM Lens extension" launch config):
+OCM Lens 2.x on top ("Run OCM Lens extension" launch config; its
+pre-launch task runs `npm run build:vscode -w @sbomlens/ocm-lens` and
+`npm run compile -w ocmlens`):
 
+- [ ] Open a `.ctf` (custom editor): the 2.0 dashboard shows the delivery;
+      Components, Resources, and Verify work.
+- [ ] Right-click a folder with several `component-descriptor.yaml` files
+      -> "Open folder with OCM Lens": ONE bundle, references resolved
+      across the files.
 - [ ] "OCM Lens: Open component version from registry..." against
       `ghcr.io/open-component-model/ocm` / `ocm.software/ocmcli`: tags list,
-      version opens as a delivery, SBOM linked underneath.
-- [ ] Load a descriptor with an unresolved `componentReferences` entry:
-      the placeholder detail offers *Fetch from registry* prefilled from
-      the repository context; fetching resolves and reveals the reference.
-- [ ] "OCM Lens: Set registry credential..." stores/clears a `user:token`
-      (verify a private registry, or at least that the flow round-trips).
+      the version opens in the 2.0 views.
+- [ ] "OCM Lens: Set registry credential..." stores/clears a `user:token`.
 - [ ] Deep link: `open 'vscode://everbright-it.ocmlens/open?path=...'`
       with an absolute `.ctf` path opens the delivery after the consent
       prompt.
-- [ ] Drop a large (hundreds of MB) `.ctf` into the panel: loads without
-      freezing the extension host.
+- [ ] A `.ctf` over 32 MB opens without freezing the extension host
+      (pushed as a resource URI, streamed from disk).
+- [ ] A key pinned in the 1.x extension verifies the ECME demo signature
+      without pasting it again.
+- [ ] Export the acceptance report and download an artifact blob: both
+      open VS Code's save dialog and write the file.
+- [ ] Light and dark theme both render correctly.
 
 ## Packaging
 
@@ -75,11 +83,13 @@ Published: the listing lives at
 <https://open-vsx.org/extension/everbright-it/sbomlens>. OCM Lens publishes
 to the same namespace as `everbright-it.ocmlens`.
 
-**CI does this.** Every tag pipeline builds both vsix and offers a manual
-`publish-sbomlens` / `publish-ocmlens` job in the `publish` stage. They are
-manual on purpose: an Open VSX version is immutable, so nobody can take back
-an accidental publish. Each job verifies the token, then refuses to run if
-the tag and the manifest version disagree.
+**CI does this.** A `v*` tag builds SBOM Lens and offers the manual
+`publish-sbomlens` job; an `ocm-lens-v*` tag builds OCM Lens 2.x (packaged
+for the **pre-release** channel while 2.x is in beta) and offers the manual
+`publish-ocmlens` job. They are manual on purpose: an Open VSX version is
+immutable, so nobody can take back an accidental publish. Each job verifies
+the token, then refuses to run if the tag and the manifest version
+disagree.
 
 One-time setup:
 
@@ -93,7 +103,8 @@ One-time setup:
    `ovsx` reads it from the environment as `OVSX_PAT`, so it never reaches a
    command line or a job log.
 4. **Protect the release tags** so the protected variable actually reaches the
-   publish job: *Settings → Repository → Protected tags* → protect `v*`. A
+   publish job: *Settings → Repository → Protected tags* → protect `v*` AND
+   `ocm-lens-v*` (OCM Lens 2.x has its own tag namespace). A
    protected variable is passed *only* to pipelines on protected branches or
    protected tags; without this the job sees an empty token and stops with
    "OVSX_TOKEN is not set". If a tag pipeline was created before you protected
@@ -103,18 +114,26 @@ Publishing by hand still works, e.g. before the variable exists:
 
 ```sh
 npx ovsx publish sbomlens.vsix -p <TOKEN>
-npx ovsx publish ocmlens.vsix -p <TOKEN>
+npx ovsx publish ocmlens.vsix --pre-release -p <TOKEN>
 ```
 
-### VS Code Marketplace (status: publisher setup pending)
+OCM Lens 2.x stays on the pre-release channel until it goes stable; the
+packaged vsix carries the pre-release flag itself, so the Marketplace web
+upload below needs no extra step. Open VSX resolves `latest` to the highest
+version even when it is a pre-release: its listing and version badge show
+2.x as soon as it is published, and clients that ignore the flag install it.
+
+### VS Code Marketplace
 
 1. Sign in at <https://marketplace.visualstudio.com/manage> with a Microsoft
    account and **create the publisher `everbright-it`** (display name free).
+   (Done.)
 2. Publish. Two ways, and the second is not a consolation prize: for a fresh
    Microsoft account it is often the only one that works at all.
 
    - **Web upload**: *New extension → Visual Studio Code* in the manage
-     portal, hand it `sbomlens.vsix` / `ocmlens.vsix`. No token anywhere.
+     portal, hand it `sbomlens.vsix` / `ocmlens.vsix`; for an extension that
+     is already listed, use its *... → Update* instead. No token anywhere.
    - **CI**: the manual `publish-vsce-sbomlens` / `publish-vsce-ocmlens` jobs
      on a tag. They need `VSCE_TOKEN` as a masked, protected variable: an
      Azure DevOps **Personal Access Token** from <https://dev.azure.com> →
@@ -126,7 +145,7 @@ npx ovsx publish ocmlens.vsix -p <TOKEN>
    than a mistake to debug: a PAT needs an Azure DevOps organization, and
    creating a *new* organization now requires an active Azure subscription.
    Without an organization <https://dev.azure.com/_usersSettings/tokens> is a
-   plain 404 — there is no token page to find. The Azure *portal*
+   plain 404: there is no token page to find. The Azure *portal*
    (portal.azure.com) is a different product and never has one. So the web
    upload is the way in until someone decides an Azure subscription is worth
    it; the CI jobs exist and sit unused until then.

@@ -33,6 +33,12 @@ jobs:
       - run: npm run build:ocm
       - run: '! grep -riq "SBOM Lens" apps/web/dist-ocm/index.html apps/web/dist-ocm/assets'
       - run: 'grep -raq "artifact-index.json" apps/web/dist-ocm/assets'
+      # OCM Lens 2.x (apps/ocm-lens): the web app and the webview build the
+      # extension ships, with the gates of the GitLab build-ocm2 job.
+      - run: npm run build -w @sbomlens/ocm-lens
+      - run: npm run build:vscode -w @sbomlens/ocm-lens
+      - run: 'grep -raq "artifact-index.json" apps/ocm-lens/dist/assets'
+      - run: 'cmp apps/ocm-lens/public/examples/ecme-delivery.ctf.tar packages/core/fixtures/ocm/ecme-delivery.ctf.tar'
 
   # Same known-vulnerability gate as the GitLab pipeline (osv-scan job).
   osv-scan:

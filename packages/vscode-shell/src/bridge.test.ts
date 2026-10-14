@@ -18,6 +18,7 @@ function makeContext(overrides: Partial<BridgeContext> = {}): {
     secretDelete: async (key) => void calls.push(`delete:${key}`),
     persistPref: async (key, value) => void calls.push(`pref:${key}=${value}`),
     saveFile: async (fileName) => void calls.push(`save:${fileName}`),
+    saveBytes: async (fileName, bytes) => void calls.push(`bytes:${fileName}:${bytes.byteLength}`),
     openExternal: (url) => void calls.push(`open:${url}`),
     onReady: () => void calls.push('ready'),
     ...overrides,
@@ -63,6 +64,13 @@ describe('bridge handlers', () => {
       'open:https://spdx.dev',
       'ready',
     ]);
+  });
+
+  it('routes binary exports to the byte sink, untouched', async () => {
+    const { ctx, calls } = makeContext();
+    const handle = createBridgeHandler(() => {}, ctx);
+    await handle({ type: 'exportBytes', fileName: 'chart.tar', bytes: new Uint8Array([0, 255, 7]) });
+    expect(calls).toEqual(['bytes:chart.tar:3']);
   });
 });
 

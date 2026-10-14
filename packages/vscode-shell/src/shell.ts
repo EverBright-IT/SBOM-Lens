@@ -21,8 +21,11 @@ export interface LensShellConfig {
   filesNoun: string;
   /** Pref/secret namespace — must match the bundled webview flavor. */
   prefPrefix: string;
-  /** Workspace directory holding a compliance profile.json, e.g. ".sbomlens". */
-  profileDir: string;
+  /**
+   * Workspace directory holding a compliance profile.json, e.g. ".sbomlens".
+   * Omit for a product without profiles (OCM Lens 2.0): nothing is pushed.
+   */
+  profileDir?: string;
   /** Fallback file name for uris without a basename. */
   defaultFileName: string;
   /**
@@ -257,6 +260,15 @@ async function setupWebview(
       });
       if (target) await vscode.workspace.fs.writeFile(target, new TextEncoder().encode(text));
     },
+    saveBytes: async (fileName, bytes) => {
+      const target = await vscode.window.showSaveDialog({
+        defaultUri: vscode.Uri.joinPath(
+          vscode.workspace.workspaceFolders?.[0]?.uri ?? vscode.Uri.file(process.cwd()),
+          fileName,
+        ),
+      });
+      if (target) await vscode.workspace.fs.writeFile(target, bytes);
+    },
     openExternal: (url) => void vscode.env.openExternal(vscode.Uri.parse(url)),
     onReady: () => {
       void (async () => {
@@ -271,7 +283,7 @@ async function setupWebview(
           }
         }
         files.push(...(source.files ?? []));
-        files.push(...(await workspaceProfiles(config.profileDir)));
+        if (config.profileDir) files.push(...(await workspaceProfiles(config.profileDir)));
         if (files.length > 0)
           post({ type: 'ingestFiles', files, ...(source.compare ? { compare: true } : {}) });
         if (handles.length > 0) post({ type: 'ingestUris', files: handles });

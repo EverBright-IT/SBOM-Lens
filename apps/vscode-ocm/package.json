@@ -2,8 +2,8 @@
   "name": "ocmlens",
   "displayName": "OCM Lens",
   "icon": "icon.png",
-  "description": "View Open Component Model component versions and deliveries right in your editor: CTF and component archives, with embedded SBOMs.",
-  "version": "0.29.6",
+  "description": "Understand an OCM delivery right in your editor: component versions, artifacts, completeness, digests and signatures, with embedded SBOMs. CTF and component archives.",
+  "version": "2.0.0",
   "publisher": "everbright-it",
   "license": "Apache-2.0",
   "private": true,
@@ -92,11 +92,6 @@
         "category": "OCM Lens"
       },
       {
-        "command": "ocmlens.compareFromRegistry",
-        "title": "Compare two component versions from registry...",
-        "category": "OCM Lens"
-      },
-      {
         "command": "ocmlens.setRegistryCredential",
         "title": "Set registry credential...",
         "category": "OCM Lens"
@@ -142,8 +137,9 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "compile": "node esbuild.mjs && rm -rf media && cp -R ../web/dist-vscode-ocm media && rm -f media/sbomlens.catalog.json && cp ../../LICENSE . && cp ../../CHANGELOG.md .",
-    "package": "vsce package --no-dependencies -o ../../ocmlens.vsix"
+    "compile": "node esbuild.mjs && rm -rf media && cp -R ../ocm-lens/dist-vscode media && cp ../../LICENSE . && cp ../ocm-lens/CHANGELOG.md .",
+    "package": "vsce package --no-dependencies -o ../../ocmlens.vsix",
+    "package:pre": "vsce package --no-dependencies --pre-release -o ../../ocmlens.vsix"
   },
   "devDependencies": {
     "@types/vscode": "^1.90.0",

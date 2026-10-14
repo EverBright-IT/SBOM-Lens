@@ -15,7 +15,7 @@ export interface LoadedDelivery {
 }
 
 /** Where the delivery's bytes can be re-read for on-demand blob extraction. */
-export type SourceRef = { kind: 'file'; file: File } | { kind: 'url'; url: string };
+export type SourceRef = { kind: 'blob'; blob: Blob } | { kind: 'url'; url: string };
 
 export type MainView = 'dashboard' | 'components' | 'resources' | 'verify';
 

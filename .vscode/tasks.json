@@ -10,7 +10,7 @@
     {
       "label": "ocmlens: compile extension",
       "type": "shell",
-      "command": "npm run build:vscode-ocm -w @sbomlens/web && npm run compile -w ocmlens",
+      "command": "npm run build:vscode -w @sbomlens/ocm-lens && npm run compile -w ocmlens",
       "problemMatcher": []
     }
   ]

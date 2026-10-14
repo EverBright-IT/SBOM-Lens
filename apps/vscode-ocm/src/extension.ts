@@ -25,14 +25,12 @@ export function activate(context: vscode.ExtensionContext): void {
       '{**/component-descriptor.yaml,**/component-descriptor.yml,**/component-descriptor.json,**/*.ctf}',
     filesNoun: 'OCM component descriptors',
     prefPrefix: 'ocmlens.',
-    profileDir: '.ocmlens',
     defaultFileName: 'component-descriptor.yaml',
     extraBridge: (post) => createOcmBridgeHandler(client, post),
   });
 
   context.subscriptions.push(
     vscode.commands.registerCommand('ocmlens.openFromRegistry', () => void openFromRegistry()),
-    vscode.commands.registerCommand('ocmlens.compareFromRegistry', () => void compareFromRegistry()),
     vscode.commands.registerCommand('ocmlens.setRegistryCredential', () => void setRegistryCredential()),
   );
 
@@ -176,50 +174,6 @@ export function activate(context: vscode.ExtensionContext): void {
     await lens.openFiles(
       [{ fileName: resolved.fileName, bytes: resolved.ctf }],
       `OCM Lens: ${target.component}@${version}`,
-    );
-  }
-
-  /**
-   * Same flow, but two versions land in one panel and the webview opens its
-   * Diff view over them (older side = base). "What changed between 1.0.0
-   * and 1.1.0 of the delivered component?" without leaving the editor.
-   */
-  async function compareFromRegistry(): Promise<void> {
-    const target = await pickRegistryAndComponent();
-    if (!target) return;
-    const versions = await listVersionsReported(target.registry, target.component);
-    if (!versions) return;
-    if (versions.length < 2) {
-      void vscode.window.showInformationMessage(
-        `OCM Lens: ${target.component} has only one version; nothing to compare.`,
-      );
-      return;
-    }
-    const picked = await vscode.window.showQuickPick([...versions].reverse(), {
-      title: `${target.component}: pick two versions to compare`,
-      canPickMany: true,
-    });
-    if (!picked) return;
-    if (picked.length !== 2) {
-      void vscode.window.showErrorMessage(
-        `OCM Lens: pick exactly two versions (got ${picked.length}).`,
-      );
-      return;
-    }
-    // Registry tag order is ascending; diff from the older to the newer.
-    const [base, candidate] = [...picked].sort((a, b) => versions.indexOf(a) - versions.indexOf(b));
-    const resolvedBase = await fetchVersionReported(target.registry, target.component, base!);
-    if (!resolvedBase) return;
-    const resolvedCandidate = await fetchVersionReported(target.registry, target.component, candidate!);
-    if (!resolvedCandidate) return;
-    warnSkippedLayers(resolvedBase.skippedLayers + resolvedCandidate.skippedLayers);
-    await lens.openFiles(
-      [
-        { fileName: resolvedBase.fileName, bytes: resolvedBase.ctf },
-        { fileName: resolvedCandidate.fileName, bytes: resolvedCandidate.ctf },
-      ],
-      `OCM Lens: ${target.component} ${base} vs ${candidate}`,
-      { compare: true },
     );
   }
 }

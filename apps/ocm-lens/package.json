@@ -1,6 +1,6 @@
 {
   "name": "@sbomlens/ocm-lens",
-  "version": "2.0.0-beta.1",
+  "version": "2.0.0",
   "description": "OCM Lens 2.0 - understand an OCM delivery: component versions, artifacts, completeness, signatures.",
   "license": "Apache-2.0",
   "private": true,
@@ -8,6 +8,7 @@
   "scripts": {
     "dev": "vite --port 5177",
     "build": "vite build",
+    "build:vscode": "vite build --mode vscode",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit"
   },
@@ -21,6 +22,7 @@
     "zustand": "^5.0.14"
   },
   "devDependencies": {
+    "@sbomlens/web": "*",
     "@tailwindcss/vite": "^4.3.2",
     "@types/node": "^26.1.1",
     "@types/react": "^19.2.17",

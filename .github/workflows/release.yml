@@ -1,23 +1,27 @@
 # GitHub counterpart of the GitLab release jobs (.gitlab-ci.yml:
-# release-assets + release-gitlab). Releases are per-platform metadata, so
-# the mirrored tag has to produce its own release here too. GitHub releases
-# carry their assets directly, so there is no package-registry detour; the
-# automatic GITHUB_TOKEN is enough.
+# release-assets + release-gitlab, release-assets-ocm + release-gitlab-ocm).
+# Releases are per-platform metadata, so the mirrored tag has to produce its
+# own release here too. GitHub releases carry their assets directly, so there
+# is no package-registry detour; the automatic GITHUB_TOKEN is enough.
+#
+# Two tag namespaces, as on GitLab: v* releases SBOM Lens (the 0.x
+# lockstep), ocm-lens-v* releases OCM Lens 2.x.
 #
 # Verification first: the GitLab release only appears behind the blocking
-# gates, so this one runs lint, typecheck, tests, and the osv scan before
-# packaging anything.
+# gates, so each job runs lint, typecheck, and tests before packaging
+# anything.
 name: Release
 
 on:
   push:
-    tags: ['v*.*.*']
+    tags: ['v*.*.*', 'ocm-lens-v*.*.*']
 
 permissions:
   contents: write
 
 jobs:
   release:
+    if: startsWith(github.ref_name, 'v')
     runs-on: ubuntu-latest
     env:
       SYFT_VERSION: '1.46.0'
@@ -33,17 +37,12 @@ jobs:
       - run: npm run typecheck
       - run: npm test
 
-      # Both vsix packages, same recipe as the GitLab vsix / vsix-ocm jobs.
+      # Same recipe as the GitLab vsix job.
       - name: Package sbomlens.vsix
         run: |
           npm run build:vscode -w @sbomlens/web
           npm run compile -w sbomlens
           npm run package -w sbomlens
-      - name: Package ocmlens.vsix
-        run: |
-          npm run build:vscode-ocm -w @sbomlens/web
-          npm run compile -w ocmlens
-          npm run package -w ocmlens
 
       # Dogfooding: the release ships its own SPDX SBOM (pinned syft, same
       # version and checksum as the GitLab self-sbom job).
@@ -54,19 +53,18 @@ jobs:
           tar -xzf /tmp/syft.tgz -C /usr/local/bin syft
           syft dir:. --source-name sbomlens --source-version "$GITHUB_REF_NAME" -o "spdx-json=sbomlens-$GITHUB_REF_NAME.spdx.json"
 
-      # Release notes: this tag's CHANGELOG section (entries carry their own
-      # [SBOM Lens]/[OCM Lens] prefixes), same extraction as GitLab.
+      # Release notes: this tag's CHANGELOG section, same extraction as GitLab.
       - name: Assemble release notes
         run: |
           ver="${GITHUB_REF_NAME#v}"
           awk -v ver="$ver" 'index($0,"## ["ver"]")==1{f=1;next} /^## \[/{f=0} f' CHANGELOG.md > changelog-section.md
           [ -s changelog-section.md ] || echo "_No CHANGELOG section found for this tag._" > changelog-section.md
           {
-            echo "One tag, two products: SBOM Lens and OCM Lens release in lockstep from this monorepo."
+            echo "SBOM Lens release from this monorepo. OCM Lens 2.x releases on its own ocm-lens-v* tags."
             echo
             cat changelog-section.md
             echo
-            echo "Install: [SBOM Lens on Open VSX](https://open-vsx.org/extension/everbright-it/sbomlens) | [OCM Lens on Open VSX](https://open-vsx.org/extension/everbright-it/ocmlens)"
+            echo "Install: [SBOM Lens on Open VSX](https://open-vsx.org/extension/everbright-it/sbomlens)"
           } > release-notes.md
 
       - name: Create GitHub release
@@ -77,4 +75,57 @@ jobs:
             --verify-tag \
             --title "$GITHUB_REF_NAME" \
             --notes-file release-notes.md \
-            sbomlens.vsix ocmlens.vsix "sbomlens-$GITHUB_REF_NAME.spdx.json"
+            sbomlens.vsix "sbomlens-$GITHUB_REF_NAME.spdx.json"
+
+  release-ocm:
+    if: startsWith(github.ref_name, 'ocm-lens-v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+
+      - name: Check the tag against the extension version
+        run: |
+          v=$(node -p "require('./apps/vscode-ocm/package.json').version")
+          [ "$GITHUB_REF_NAME" = "ocm-lens-v$v" ] || { echo "Tag $GITHUB_REF_NAME does not match apps/vscode-ocm version $v"; exit 1; }
+
+      # Same recipe as the GitLab vsix-ocm job: packed for the pre-release
+      # channel while 2.x is in beta (`npm run package` once it is stable).
+      - name: Package ocmlens.vsix
+        run: |
+          npm run build:vscode -w @sbomlens/ocm-lens
+          npm run compile -w ocmlens
+          npm run package:pre -w ocmlens
+
+      - name: Assemble release notes
+        run: |
+          ver="${GITHUB_REF_NAME#ocm-lens-v}"
+          awk -v ver="$ver" 'index($0,"## ["ver"]")==1{f=1;next} /^## \[/{f=0} f' apps/ocm-lens/CHANGELOG.md > changelog-section.md
+          [ -s changelog-section.md ] || echo "_No CHANGELOG section found for this tag._" > changelog-section.md
+          {
+            echo "OCM Lens $ver (pre-release channel: in VS Code, choose 'Switch to Pre-Release Version')."
+            echo
+            cat changelog-section.md
+            echo
+            echo "Install: [OCM Lens on Open VSX](https://open-vsx.org/extension/everbright-it/ocmlens)"
+          } > release-notes.md
+
+      # --prerelease also keeps the SBOM Lens release marked "Latest" on this
+      # repository. When 2.x goes stable, replace it with --latest=false.
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --verify-tag \
+            --prerelease \
+            --title "$GITHUB_REF_NAME" \
+            --notes-file release-notes.md \
+            ocmlens.vsix

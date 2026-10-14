@@ -18,6 +18,8 @@ export type WebviewToHostMessage =
   | { type: 'secretSet'; key: string; value: string | null }
   | { type: 'persistPref'; key: string; value: string }
   | { type: 'exportFile'; fileName: string; mime: string; text: string }
+  /** Binary-safe save (OCM Lens 2.0: artifact blobs, reports). Webviews cannot download. */
+  | { type: 'exportBytes'; fileName: string; bytes: Uint8Array }
   | { type: 'openExternal'; url: string }
   // OCM registry browsing — handled only by the OCM Lens extension's extra
   // bridge handler; the SBOM flavor never sends them (its UI is compiled

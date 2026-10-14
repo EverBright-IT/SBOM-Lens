@@ -140,6 +140,47 @@ export async function bundleFromDescriptor(fileName: string, text: string): Prom
   };
 }
 
+/**
+ * Several bare component descriptors as ONE bundle - what opening a folder
+ * or scanning a workspace yields. References between them resolve into one
+ * graph; files that are not descriptors are skipped with a warning.
+ */
+export async function bundleFromDescriptors(
+  name: string,
+  files: { fileName: string; text: string }[],
+): Promise<OcmBundleResult> {
+  const cds: CollectedCd[] = [];
+  const diagnostics: Diagnostic[] = [];
+  for (const file of files) {
+    const detection = detect(file.text);
+    if (detection.format !== 'ocm-cd') {
+      diagnostics.push(
+        diag('warning', 'OCM_NOT_A_DESCRIPTOR', `${file.fileName}: not an OCM component descriptor, skipped.`),
+      );
+      continue;
+    }
+    const bytes = new TextEncoder().encode(file.text);
+    cds.push({
+      raw: detection.parsed,
+      serialization: detection.serialization,
+      text: file.text,
+      sha1: await sha1Hex(bytes.buffer as ArrayBuffer),
+      byteSize: bytes.byteLength,
+      fileName: file.fileName,
+      blobInfos: new Map(),
+      blobPresent: new Set(),
+      sbomByRef: new Map(),
+      layers: [],
+    });
+  }
+  if (cds.length === 0) {
+    diagnostics.push(diag('error', 'OCM_NOT_A_DESCRIPTOR', 'None of the files is an OCM component descriptor.'));
+    return { bundle: null, extracted: [], diagnostics };
+  }
+  const size = cds.reduce((sum, cd) => sum + cd.byteSize, 0);
+  return { bundle: assembleBundle(name, 'descriptor', false, size, cds), extracted: [], diagnostics };
+}
+
 function assembleBundle(
   fileName: string,
   layout: OcmBundle['layout'],
@@ -322,7 +363,7 @@ function buildCv(
     sha1: cd.sha1,
     byteSize: cd.byteSize,
     fileName:
-      layout === 'descriptor' ? archiveName : `${archiveName}!${normalized.name}/component-descriptor.yaml`,
+      layout === 'descriptor' ? cd.fileName : `${archiveName}!${normalized.name}/component-descriptor.yaml`,
     diagnostics,
   };
 }

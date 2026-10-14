@@ -1,120 +1,108 @@
 # OCM Lens for VS Code
 
 [![Open VSX Version](https://img.shields.io/open-vsx/v/everbright-it/ocmlens?label=Open%20VSX)](https://open-vsx.org/extension/everbright-it/ocmlens)
-[![VS Marketplace](https://img.shields.io/visual-studio-marketplace/v/everbright-it.ocmlens?label=VS%20Marketplace)](https://marketplace.visualstudio.com/items?itemName=everbright-it.ocmlens)
 
-View [Open Component Model](https://ocm.software/) component versions and
-deliveries right in your editor: component descriptors (YAML/JSON), CTF and
-component archives. The component hierarchy renders as one navigable tree,
-and SBOMs stored in a delivery are extracted and linked automatically.
+> **OCM Lens 2.0 is on the pre-release channel.** In the Extensions view,
+> open OCM Lens and choose **Switch to Pre-Release Version**. Editors that
+> support pre-releases keep the release channel on OCM Lens 1.x until 2.x
+> goes stable.
 
-![The Explore view: a delivery as one tree with the component, its artifacts, and the SBOM stored inside it; detail pane with OCM identity and access spec](https://ocm-lens.everbright-it.de/assets/hero-explore.png)
+Understand an [Open Component Model](https://ocm.software/) delivery right
+in your editor. Open a CTF, a component archive, or a component descriptor
+and see what the delivery is: which component versions it aggregates, what
+actually ships, whether it can be deployed without network access, and
+whether digests and signatures hold.
+
+![OCM Lens 2.0: the delivery dashboard with component versions, transport status, reference closure, signatures, and embedded SBOMs](https://gitlab.com/everbrightit-group/sbom-lens/-/raw/main/docs/ocm-lens-2-hero.png)
 
 ## Opening deliveries
 
-- **Open with OCM Lens**: right-click a `component-descriptor.yaml`/`.json`
-  or a `.ctf` / `.tar` / `.tgz` archive in the explorer. Multi-select several
-  files and they open together in one panel, with component references
-  resolved between them.
-- **Open folder with OCM Lens**: right-click a folder, and every component
-  descriptor and CTF under it loads into one panel.
-- **OCM Lens: Scan workspace for component descriptors**: the
-  command-palette way to load the whole workspace.
+- **Open with OCM Lens**: open a `component-descriptor.yaml`/`.json` or a
+  `.ctf` archive (it opens in OCM Lens by default), or right-click a
+  `.tar` / `.tgz` delivery in the explorer.
+- **Open folder with OCM Lens** and **OCM Lens: Scan workspace for component
+  descriptors**: several descriptors become one delivery, with references
+  resolved across the files.
 - **OCM Lens: Open component version from registry...**: pull a component
-  version straight from an OCI registry (e.g.
-  `ghcr.io/open-component-model/ocm`) and browse it like a local delivery,
-  SBOMs, digest verdicts and signatures included. Unresolved component
-  references offer a *Fetch from registry* button prefilled from the
-  descriptor's repository contexts. Private registries: store a `user:token`
-  per host via *OCM Lens: Set registry credential*.
+  version straight from an OCI registry (for example
+  `ghcr.io/open-component-model/ocm`) into the same views. Private
+  registries: store a `user:token` per host via *OCM Lens: Set registry
+  credential*.
+- **Deep link** for other tools:
+  `vscode://everbright-it.ocmlens/open?path=/absolute/path/delivery.ctf`.
 
 ## What you get
 
-- **Component hierarchies as one tree.** `componentReferences` resolve across
-  everything you load; resources and sources appear with types, digests, and
-  `pkg:oci` package URLs. Embedded SPDX and CycloneDX SBOMs connect underneath their
-  resource automatically.
-- **See what the delivery physically ships, and whether it is intact.**
-  Every artifact stored in a CTF or component archive shows its actual
-  content: helm charts with their file list and Chart.yaml/values.yaml,
-  OCI artifact sets with their layer table, configs and texts with an
-  exportable preview. Declared blob digests are recomputed from the real
-  bytes: a tampered or corrupted artifact shows a red *digest mismatch*
-  right on the resource.
-- **Verify signatures, in the browser.** Paste a public key or certificate
-  and OCM Lens recomputes the descriptor's normalised digest and checks the
-  RSA signature client-side: no server, no upload. Verified against the real
-  `ocm` CLI, and honest by design: it reports *valid*, *invalid*, or
-  *unverifiable* with a reason, never a guessed verdict.
-- **Analysis views.** A sortable resource/package inventory (CSV/JSON
-  export), version conflicts, version-to-version diffs, and quality reports.
-  Component versions are checked against "OCM component essentials" by
-  default.
-- **Your own rules.** Drop an `.ocmlens/profile.json` into the workspace and
-  every panel picks it up as a quality profile: field presence, patterns,
-  coverage thresholds. Reports export as Markdown.
-- **Spec findings.** Descriptors are checked against the OCM specification:
-  component names and versions off their pattern, an access node without a
-  type, an incomplete digest triple, duplicate artifact identities. They stay
-  warnings and sit next to the descriptor, told apart from parser notes so you
-  always know which you are looking at.
+- **Dashboard.** The delivery at a glance: component versions and roots,
+  archive size, transported vs external vs broken resources, reference
+  closure, signatures, embedded SBOMs, and an honest verdict: either
+  *self-contained*, or *needs network to deploy* with the reasons.
+- **Components.** The reference graph as navigation: roots first, any
+  depth, components referenced twice marked as shared, cycles shown but
+  never followed. Each component version in the spec's own vocabulary,
+  with its verbatim descriptor.
+- **Resources.** Every artifact of the delivery in one filterable table:
+  access type, transport status, digest verdict, and content previews
+  (Helm charts, OCI artifact sets, text). Download any transported blob or
+  embedded SBOM through VS Code's save dialog.
+- **Verify.** Declared blob digests are recomputed from the delivered
+  bytes; signatures (RSASSA-PSS and PKCS1-v1_5 over
+  `jsonNormalisation/v4alpha1`, v3, v2) verify against a pinned or pasted
+  public key, byte-exact with the real `ocm` CLI. Export a **delivery
+  acceptance report** as Markdown or JSON.
+- **Built for transfer-medium sizes.** Large deliveries stream from disk;
+  entries over 8 GiB parse; digest checks beyond 256 MB run on demand
+  instead of blocking the open.
 - **Private by design.** Everything is parsed locally inside the editor.
   Nothing is uploaded anywhere.
-- Field info tooltips carry the OCM specification's own vocabulary and link
-  into the exact chapter; the theme follows your editor.
 
 > Working with **SPDX** documents? That is
 > [SBOM Lens](https://open-vsx.org/extension/everbright-it/sbomlens), the
-> sibling extension built from the same codebase: same views, SPDX-first.
+> sibling extension: cascades, licenses, VEX, compliance profiles.
+
+## Coming from 1.x
+
+2.0 is a rebuild around the OCM model, and V1 deliberately leaves some 1.x
+features out: the Inventory, Conflicts, Licenses, Map, and Diff views,
+comparing two registry versions, the VEX/CSAF overlay, compliance profiles
+(`.ocmlens/profile.json`), and spec info tooltips. The delivery diff is
+next on the 2.x roadmap. One delivery is open at a time. Keys you pinned
+in 1.x carry over. The full list is in the
+[changelog](https://gitlab.com/everbrightit-group/sbom-lens/-/blob/main/apps/ocm-lens/CHANGELOG.md).
 
 ## Limits
 
 - **Read-only.** No signing, no registry writes; registry access is
-  pull-only. Documents are parsed locally in the editor; nothing is
-  uploaded. Registry fetches skip layers over **50 MB** (256 MB total per
-  component version) and say so; the descriptor always arrives.
-- **Delivery archives** are capped at **10,000 entries**; blobs over
-  **64 MB** are indexed without loading their content (the digest verdict
-  still runs). Compressed `.tgz` deliveries are capped at **2 GiB**
-  decompressed: repack larger ones as plain `.tar`. ZIP is rejected with a
-  repack hint, and links inside tars are never followed. The workspace scan
-  skips files over 50 MB.
-- **Artifact previews are capped**: 64 KB of text, 500 files listed, a 256-byte
-  hex head for binaries. The raw bytes stay in the parse worker.
-- **Digest checks** cover `genericBlobDigest/v1` and `ociArtifactDigest/v1`;
-  any other normalisation is shown as *unchecked*, never guessed.
-- **Signature verification** handles RSASSA-PSS and RSASSA-PKCS1-v1_5 over
-  SHA-256/512. Out of scope: signing, certificate-chain and trust-policy
-  validation, timestamping, and the deprecated `jsonNormalisation/v1`
-  (reported *unverifiable*).
-- **Descriptors**: schema v2 fully, v3alpha1 best-effort. Unknown access
-  types are listed without a download location. Verification needs HTTPS or
-  localhost (`crypto.subtle` runs only in secure contexts).
+  pull-only and skips layers over 50 MB (256 MB per component version).
+- **Signatures:** certificate chains, trust policies, timestamping, and the
+  deprecated `jsonNormalisation/v1` are out of scope and reported as
+  unverifiable rather than guessed. A certificate is used only for its key.
+- **Archives:** up to 10,000 entries; compressed `.tgz` up to 2 GiB
+  decompressed (repack larger ones as plain `.tar`); links inside tars are
+  never followed. Content previews are capped (64 KB of text, 500 files).
 
 ## Install
 
 - **Open VSX** (VSCodium, Cursor, Gitpod, Theia):
-  [`everbright-it.ocmlens`](https://open-vsx.org/extension/everbright-it/ocmlens),
-  or search "OCM Lens".
+  [`everbright-it.ocmlens`](https://open-vsx.org/extension/everbright-it/ocmlens).
 - **VS Code Marketplace**:
-  [`everbright-it.ocmlens`](https://marketplace.visualstudio.com/items?itemName=everbright-it.ocmlens),
-  or search "OCM Lens" in the Extensions view.
+  [`everbright-it.ocmlens`](https://marketplace.visualstudio.com/items?itemName=everbright-it.ocmlens).
+
+Then switch to the pre-release version to get 2.0.
 
 ## Links
 
-- [OCM Lens home](https://gitlab.com/everbrightit-group/ocm-lens) — what the
-  product is, where to get it ([GitHub](https://github.com/EverBright-IT/OCM-Lens))
-- [Source](https://gitlab.com/everbrightit-group/sbom-lens) (GitLab,
-  canonical: one monorepo for both products), or the
+- [OCM Lens home](https://gitlab.com/everbrightit-group/ocm-lens):
+  what the product is, where to get it
+- [Source](https://gitlab.com/everbrightit-group/sbom-lens) (one monorepo
+  for both Lens products), or the
   [GitHub mirror](https://github.com/EverBright-IT/SBOM-Lens)
-- [Report a bug](https://github.com/EverBright-IT/OCM-Lens/issues) — GitHub is
-  where the public tracker lives
-- [Changelog](https://gitlab.com/everbrightit-group/sbom-lens/-/blob/main/CHANGELOG.md)
-- [How OCM maps onto the viewer](https://gitlab.com/everbrightit-group/sbom-lens/-/blob/main/docs/ocm.md):
-  the mapping table, supported archive layouts, and the limits
-- Use it without VS Code: <https://ocm-lens.everbright-it.de/app/>
+- [Report a bug](https://github.com/EverBright-IT/OCM-Lens/issues)
+- [Changelog (2.x)](https://gitlab.com/everbrightit-group/sbom-lens/-/blob/main/apps/ocm-lens/CHANGELOG.md)
+- [Design notes](https://gitlab.com/everbrightit-group/sbom-lens/-/blob/main/docs/ocm-lens-2.md):
+  the model, the views, size behavior, limits
 - Building, testing, publishing this extension:
   [DEVELOPMENT.md](https://gitlab.com/everbrightit-group/sbom-lens/-/blob/main/apps/vscode/DEVELOPMENT.md)
 
-Apache-2.0 © [EverBright IT GmbH](https://everbright-it.de) — we help teams
+Apache-2.0 © [EverBright IT GmbH](https://everbright-it.de). We help teams
 with CRA/SBOM readiness and secure AI adoption.

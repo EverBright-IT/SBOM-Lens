@@ -2,9 +2,10 @@
 
 > Draft for the v2.0.0 announcement. Sources: this file + CHANGELOG.md.
 > Audiences and where each block goes: GitLab/GitHub release description
-> (all of it), Open VSX / Marketplace CHANGES tab (from the CHANGELOG once
-> the extension moves), landing page news blurb (the first two sections).
-> Status: 2.0.0-beta.1, unreleased.
+> (all of it), Open VSX / Marketplace CHANGES tab (from the CHANGELOG),
+> landing page news blurb (the first two sections).
+> Status: 2.0.0 on the VS Code pre-release channel; the hosted web app is
+> still 1.x.
 
 ## What this is
 
@@ -28,8 +29,15 @@ picture:
   **delivery acceptance report** (Markdown + JSON,
   `ocm-lens-acceptance-report/v1`).
 
-Everything runs client-side in your browser. Files never leave your
-machine.
+Everything runs client-side, in your browser or in VS Code. Files never
+leave your machine.
+
+**In VS Code**, 2.0.0 is on the pre-release channel of
+`everbright-it.ocmlens`: open the extension page and choose *Switch to
+Pre-Release Version*. Descriptors and `.ctf` archives open in the custom
+editor, folders and workspace scans merge their descriptors into one
+bundle, and *Open component version from registry* pulls a component
+straight from an OCI registry.
 
 ## Highlights
 
@@ -51,7 +59,7 @@ machine.
 
 ## Breaking changes
 
-2.0 replaces the 1.x OCM Lens UI entirely. If you used the 1.x web app:
+2.0 replaces the 1.x OCM Lens UI entirely. If you used 1.x:
 
 - The SPDX-shaped views are gone: **Inventory, Conflicts, Licenses, Map,
   and Diff** do not exist in 2.0 V1. Their OCM-native successors are on
@@ -61,13 +69,18 @@ machine.
 - **One delivery at a time** replaces the multi-document workspace.
 - **Embedded SBOMs are listed and extractable, not deep-analyzed** - open
   the downloaded SBOM in SBOM Lens for cascades, licenses, VEX.
+- **VS Code: comparing two registry versions** is gone until the 2.x
+  delivery diff; **workspace compliance profiles** (`.ocmlens/profile.json`)
+  are no longer read.
 
 What does NOT break:
 
 - **Pinned signature keys carry over automatically** (same pref key).
-- **The published VS Code extension stays 1.x** - including registry
-  browsing and version compare - until the extension moves to 2.0 in a
-  later release. This web release changes nothing for extension users.
+- **VS Code users are not moved to 2.0 without asking.** On the VS Code
+  Marketplace the release channel stays on 1.x (0.29.6) until 2.x goes
+  stable; only users who switch to the pre-release get 2.0. Open VSX lists
+  2.0.0 as its newest version, and not every client honors the pre-release
+  flag there, so some Open VSX editors may install 2.0 directly.
 - The 1.x flavor remains buildable from the monorepo until the switch is
   complete.
 
@@ -75,5 +88,8 @@ What does NOT break:
 
 OCM Lens now versions independently as 2.x (this changelog lives in
 `apps/ocm-lens/`). The 0.x history remains in the monorepo CHANGELOG.
-Store versions only need to increase, so extensions update normally when
-the move happens (2.0.0 > 0.29.x).
+The VS Code Marketplace accepts only plain `major.minor.patch` versions,
+so the beta lives in the pre-release channel rather than in the version
+string: 2.0.0 is a pre-release, and the first stable 2.x will carry the
+next number. 2.x releases are tagged `ocm-lens-v<version>` in the
+monorepo.

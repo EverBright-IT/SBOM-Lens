@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react';
 import clsx from 'clsx';
 import { openFile, openFromUrl } from '../app/ingest';
+import { IS_VSCODE } from '../host';
 import type { MainView } from '../app/store';
 import { useAppStore } from '../app/store';
 import { APP_VERSION } from '../version';
@@ -74,6 +75,7 @@ export function App() {
   // Dev/deep-link hook: ?open=<same-origin path> loads a delivery on start;
   // ?budget= / ?mat= override the walk knobs (QA for the lazy-digest path).
   useEffect(() => {
+    if (IS_VSCODE) return; // the extension pushes files instead
     const params = new URLSearchParams(window.location.search);
     const open = params.get('open');
     if (!open || open.includes('//') || open.startsWith('/')) return;

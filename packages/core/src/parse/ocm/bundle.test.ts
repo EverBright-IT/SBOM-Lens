@@ -179,6 +179,38 @@ describe('bundleFromDescriptor — bare descriptor files', () => {
   });
 });
 
+describe('bundleFromDescriptors — a folder of descriptors', () => {
+  it('builds one bundle across files, resolving references and keeping each file name', async () => {
+    const { bundleFromDescriptors } = await import('./bundle');
+    const result = await bundleFromDescriptors('3 component descriptors', [
+      { fileName: 'app/component-descriptor.yaml', text: cd('ecme.org/app', '1.0.0', [['ecme.org/lib', '2.0.0']]) },
+      { fileName: 'lib/component-descriptor.yaml', text: cd('ecme.org/lib', '2.0.0', []) },
+      { fileName: 'notes.yaml', text: 'just: notes\n' },
+    ]);
+    const bundle = result.bundle!;
+    expect(bundle.layout).toBe('descriptor');
+    expect(bundle.fileName).toBe('3 component descriptors');
+    expect(bundle.roots).toEqual(['ecme.org/app@1.0.0']);
+    expect(bundle.componentVersions.find((c) => c.name === 'ecme.org/app')!.references[0]!.target).toBe(
+      'ecme.org/lib@2.0.0',
+    );
+    expect(bundle.componentVersions.map((c) => c.fileName).sort()).toEqual([
+      'app/component-descriptor.yaml',
+      'lib/component-descriptor.yaml',
+    ]);
+    expect(result.diagnostics.map((d) => d.message)).toEqual([
+      'notes.yaml: not an OCM component descriptor, skipped.',
+    ]);
+  });
+
+  it('returns no bundle when no file is a descriptor', async () => {
+    const { bundleFromDescriptors } = await import('./bundle');
+    const result = await bundleFromDescriptors('x', [{ fileName: 'a.txt', text: 'hello' }]);
+    expect(result.bundle).toBeNull();
+    expect(result.diagnostics.at(-1)!.severity).toBe('error');
+  });
+});
+
 describe('readOcmBundle — non-bundle inputs', () => {
   it('returns bundle null for a plain SPDX tar (file sweep territory)', async () => {
     const spdx = JSON.stringify({

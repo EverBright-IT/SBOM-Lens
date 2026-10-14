@@ -31,7 +31,13 @@ export type {
   OcmTransport,
 } from './model/ocm-bundle';
 export { ocmCvId } from './model/ocm-bundle';
-export { bundleFromDescriptor, EAGER_HASH_BUDGET_DEFAULT, readOcmBundle, readOcmBundleFrom } from './parse/ocm/bundle';
+export {
+  bundleFromDescriptor,
+  bundleFromDescriptors,
+  EAGER_HASH_BUDGET_DEFAULT,
+  readOcmBundle,
+  readOcmBundleFrom,
+} from './parse/ocm/bundle';
 export type { BlobExtraction } from './parse/ocm/extract';
 export { digestDeliveryBlob, extractDeliveryBlob } from './parse/ocm/extract';
 export type {

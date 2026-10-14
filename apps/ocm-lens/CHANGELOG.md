@@ -3,7 +3,7 @@
 OCM Lens 2.0 versions independently of the monorepo's 0.x line. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [2.0.0-beta.1] - unreleased
+## [2.0.0] - pre-release
 
 ### Added
 - **The OCM-native rebuild.** OCM Lens no longer maps deliveries onto an
@@ -36,6 +36,16 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **Entries over 8 GiB parse.** The tar reader understands GNU base-256
   sizes AND Go-style PAX size records (what the ocm CLI writes); such
   resources previously appeared 'broken'.
+- **The VS Code extension runs 2.0** (`everbright-it.ocmlens` 2.0.0, published
+  on the **pre-release channel**: in VS Code, choose *Switch to Pre-Release
+  Version*). Component descriptors and `.ctf` archives open in the custom
+  editor; *Open folder* and the workspace scan merge several descriptors
+  into one bundle with one reference graph; *Open component version from
+  registry* pulls a component straight from an OCI registry into the 2.0
+  views; the deep link `vscode://everbright-it.ocmlens/open?path=...` still
+  works. Large files stream from disk instead of passing through memory,
+  and saves (reports, artifact blobs, SBOMs) go through VS Code's save
+  dialog.
 
 ### Changed
 - **The whole mental model.** 1.x presented a delivery as SPDX documents
@@ -60,18 +70,24 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **VEX/CSAF overlay** on deliveries.
 - **Compliance profiles and the quality report** (including the "OCM
   component essentials" builtin and `.ocmlens/profile.json`).
-- **Open from URL with access tokens** (web). File open, drag&drop, and
-  bare descriptors are supported; registry/URL access returns with the
-  VS Code extension move.
+- **Open from URL with access tokens.** File open, drag&drop, bare
+  descriptors, and (in VS Code) registry access are supported.
 - **Spec info tooltips** (the field-level links into the OCM spec).
+- **VS Code: comparing two registry versions.** The command returns with
+  the 2.x delivery diff; opening a single version from the registry stays.
+- **VS Code: workspace compliance profiles** (`.ocmlens/profile.json` is no
+  longer read; 2.0 has no profiles yet).
 
 ### Migration notes
 - **Pinned signature keys carry over automatically** (same origin, same
   pref key `ocmlens.trustedKeys`).
-- **The published VS Code extension stays 1.x for now** - with ALL 1.x
-  features including registry browsing and version compare - until the
-  extension moves to 2.0 in a later release. Nothing breaks for extension
-  users with this web release.
+- **VS Code users choose the channel.** 2.0.0 ships as a pre-release: users
+  on the release channel stay on 1.x (0.29.6, frozen) until 2.x goes
+  stable; *Switch to Pre-Release Version* in the extension page installs
+  2.0. Open VSX lists 2.0.0 as its newest version, and not every client
+  honors the pre-release flag there, so some Open VSX editors may install
+  2.0 directly. Pinned keys from the 1.x extension carry over (same pref
+  key in the extension's storage).
 - Browser prefs from 1.x other than pinned keys (sidebar width, theme) do
   not apply to the new UI and are simply unused.
 - The acceptance report (`ocm-lens-acceptance-report/v1`) is new; the 1.x
