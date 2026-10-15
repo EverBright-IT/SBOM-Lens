@@ -4,6 +4,22 @@ All notable changes to SBOM Lens. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [SemVer](https://semver.org) (0.x: the API surface is the app itself).
 
+## [Unreleased]
+
+### Changed
+- **OCM Lens 1.x flavor: embedded SBOMs are extracted more carefully.** The
+  delivery walker is shared with OCM Lens 2.x, which reworked it for SBOM
+  evidence (2.1.0, see `apps/ocm-lens/CHANGELOG.md`). The 1.x flavor gets
+  the same changes with its next build: an SBOM's format, file extension
+  and media type come from its content, not from the declared media type
+  (extracted files are named `*.spdx.json`, `*.cdx.json`, `*.cdx.xml`
+  instead of `*.spdx`); an SBOM shipped under several component versions is
+  extracted once; equal resource names no longer collide; an SBOM resource
+  that holds a component descriptor is reported as unsupported instead of
+  being loaded; an SBOM that cannot be unpacked or decoded is reported
+  (`OCM_SBOM_UNREADABLE`) instead of dropped or costing its component
+  version. SBOM Lens itself is unaffected (the walker is not in its bundle).
+
 ## [0.29.8] - 2026-10-15
 
 ### Fixed

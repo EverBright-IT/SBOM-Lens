@@ -1,6 +1,13 @@
 import { create } from 'zustand';
 import type { Diagnostic } from '@sbomlens/core';
-import type { AcceptanceSignatureEntry, OcmArtifact, OcmBundle, OcmCv, OcmCvId } from '@sbomlens/core/ocm';
+import type {
+  AcceptanceSignatureEntry,
+  OcmArtifact,
+  OcmBundle,
+  OcmCv,
+  OcmCvId,
+  SbomAnalysis,
+} from '@sbomlens/core/ocm';
 import type { DigestCheckResult } from '../worker/protocol';
 
 /**
@@ -11,13 +18,15 @@ import type { DigestCheckResult } from '../worker/protocol';
 export interface LoadedDelivery {
   bundle: OcmBundle;
   extracted: { fileName: string; bytes: Uint8Array }[];
+  /** What the worker learned about each extracted SBOM, by its SHA-1. */
+  sbomAnalyses: Record<string, SbomAnalysis>;
   diagnostics: Diagnostic[];
 }
 
 /** Where the delivery's bytes can be re-read for on-demand blob extraction. */
 export type SourceRef = { kind: 'blob'; blob: Blob } | { kind: 'url'; url: string };
 
-export type MainView = 'dashboard' | 'components' | 'resources' | 'verify';
+export type MainView = 'dashboard' | 'components' | 'resources' | 'sboms' | 'verify';
 
 export interface ArtifactRef {
   cvId: OcmCvId;
@@ -40,6 +49,12 @@ interface AppState {
   view: MainView;
   selectedCv: OcmCvId | null;
   selectedArtifact: ArtifactRef | null;
+  /** The SBOM resource the SBOMs view details. */
+  selectedSbom: ArtifactRef | null;
+  /** A running SBOM analysis (after opening, or "Analyse now"). */
+  sbomRun: { done: number; total: number } | null;
+  /** Why the last SBOM analysis stopped, if it did. */
+  sbomError: string | null;
   /** Results of the last signature verification run for this delivery. */
   verification: VerificationRun | null;
   actions: {
@@ -49,9 +64,19 @@ interface AppState {
     setView(view: MainView): void;
     selectCv(id: OcmCvId | null): void;
     selectArtifact(ref: ArtifactRef | null): void;
+    /** Detail one SBOM resource in the SBOMs view. */
+    selectSbom(ref: ArtifactRef | null): void;
     setVerification(run: VerificationRun | null): void;
     /** Fold on-demand digest verdicts back into the loaded bundle. */
     applyDigestResults(results: DigestCheckResult[]): void;
+    /**
+     * Fold SBOM analyses into the loaded delivery. `forExtracted` names the
+     * delivery they were started for (its extracted list, replaced on every
+     * open): results that arrive after another delivery opened are dropped.
+     */
+    applySbomAnalyses(analyses: Record<string, SbomAnalysis>, forExtracted?: LoadedDelivery['extracted']): void;
+    setSbomRun(run: { done: number; total: number } | null): void;
+    setSbomError(message: string | null): void;
     reset(): void;
   };
 }
@@ -64,6 +89,9 @@ export const useAppStore = create<AppState>((set) => ({
   view: 'dashboard',
   selectedCv: null,
   selectedArtifact: null,
+  selectedSbom: null,
+  sbomRun: null,
+  sbomError: null,
   verification: null,
   actions: {
     loadStarted(fileName) {
@@ -78,6 +106,9 @@ export const useAppStore = create<AppState>((set) => ({
         view: 'dashboard',
         selectedCv: delivery.bundle.roots[0] ?? delivery.bundle.componentVersions[0]?.id ?? null,
         selectedArtifact: null,
+        selectedSbom: null,
+        sbomRun: null,
+        sbomError: null,
         verification: null,
       });
     },
@@ -92,6 +123,9 @@ export const useAppStore = create<AppState>((set) => ({
     },
     selectArtifact(ref) {
       set((s) => ({ selectedArtifact: ref, view: ref ? 'resources' : s.view }));
+    },
+    selectSbom(ref) {
+      set((s) => ({ selectedSbom: ref, view: ref ? 'sboms' : s.view }));
     },
     setVerification(run) {
       set({ verification: run });
@@ -131,6 +165,19 @@ export const useAppStore = create<AppState>((set) => ({
         return { delivery: { ...s.delivery, bundle } };
       });
     },
+    applySbomAnalyses(analyses, forExtracted) {
+      set((s) =>
+        s.delivery && (!forExtracted || s.delivery.extracted === forExtracted)
+          ? { delivery: { ...s.delivery, sbomAnalyses: { ...s.delivery.sbomAnalyses, ...analyses } } }
+          : {},
+      );
+    },
+    setSbomRun(run) {
+      set({ sbomRun: run });
+    },
+    setSbomError(message) {
+      set({ sbomError: message });
+    },
     reset() {
       set({
         delivery: null,
@@ -140,6 +187,9 @@ export const useAppStore = create<AppState>((set) => ({
         view: 'dashboard',
         selectedCv: null,
         selectedArtifact: null,
+        selectedSbom: null,
+        sbomRun: null,
+        sbomError: null,
         verification: null,
       });
     },

@@ -1,4 +1,4 @@
-import { openDemo } from '../app/ingest';
+import { openDemo, openSbomDemo } from '../app/ingest';
 import { useAppStore } from '../app/store';
 import { BrandMark } from './App';
 
@@ -33,6 +33,15 @@ export function EmptyState({ onPickFile }: { onPickFile: () => void }) {
             className="rounded bg-accent-600 px-3 py-1.5 text-sm text-white hover:bg-accent-700 disabled:opacity-50"
           >
             {loading ? 'Loading...' : 'Load demo delivery'}
+          </button>
+          <button
+            type="button"
+            onClick={() => void openSbomDemo()}
+            disabled={loading !== null}
+            title="A delivery whose SBOMs show every binding level: by digest, by reference, by component, external, missing"
+            className="rounded border border-slate-200 px-3 py-1.5 text-sm text-slate-700 hover:border-accent-300 hover:text-accent-700 disabled:opacity-50 dark:border-slate-700 dark:text-slate-200 dark:hover:border-accent-700 dark:hover:text-accent-400"
+          >
+            SBOM demo
           </button>
         </div>
         {loadError && (

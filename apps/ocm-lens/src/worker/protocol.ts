@@ -1,11 +1,12 @@
 import type { Diagnostic } from '@sbomlens/core';
-import type { OcmBundle } from '@sbomlens/core/ocm';
+import type { OcmBundle, SbomAnalysis } from '@sbomlens/core/ocm';
 
 /**
  * Main thread ↔ bundle worker. Archives stream through a ByteSource, so a
  * multi-GB CTF never exists as one buffer and its bytes never reach the UI
- * thread; only the structured model, the (small, capped) extracted SBOMs,
- * and explicitly requested blobs cross back.
+ * thread; only the structured model, the (small, capped) extracted SBOMs
+ * with their analysis summaries, and explicitly requested blobs cross back.
+ * Parsed SBOM documents never leave the worker.
  */
 
 interface JobSource {
@@ -19,6 +20,18 @@ interface JobSource {
 export interface BundleWalkOptions {
   eagerHashBudget?: number;
   materializeEntryMax?: number;
+  /**
+   * Bytes of SBOM text the app analyses right after opening; the rest waits
+   * for "Analyse now". Read by the app, never sent to the walk.
+   */
+  sbomBudget?: number;
+}
+
+/** One extracted SBOM to analyse on demand. */
+export interface SbomAnalysisItem {
+  sha1: string;
+  fileName: string;
+  bytes: Uint8Array;
 }
 
 export interface DigestCheckRequest {
@@ -47,7 +60,9 @@ export type WorkerRequest =
    * Several host-pushed files at once (folder, workspace scan): descriptors
    * merge into one bundle; with archives among them the first archive opens.
    */
-  | { kind: 'open-many'; id: number; files: { fileName: string; blob: Blob }[] };
+  | { kind: 'open-many'; id: number; files: { fileName: string; blob: Blob }[] }
+  /** Analyse extracted SBOMs (after opening, and on demand); progress per SBOM. */
+  | { kind: 'sbom-analyze'; id: number; items: SbomAnalysisItem[] };
 
 export type WorkerResponse =
   | {
@@ -61,4 +76,8 @@ export type WorkerResponse =
     }
   | { kind: 'extract'; id: number; bytes: Uint8Array | null; reason?: string }
   | { kind: 'digests-progress'; id: number; done: number; total: number }
-  | { kind: 'digests'; id: number; results: DigestCheckResult[] };
+  | { kind: 'digests'; id: number; results: DigestCheckResult[] }
+  | { kind: 'sbom-progress'; id: number; done: number; total: number }
+  | { kind: 'sbom-analyze'; id: number; analyses: Record<string, SbomAnalysis> }
+  /** The worker died (crash, out of memory); every pending job gets this. */
+  | { kind: 'error'; id: number; message: string };

@@ -46,6 +46,8 @@ export interface OcmArtifactSbom {
   fileName: string;
   size: number;
   sha1: string;
+  /** Media type for saving the file, from content detection. */
+  contentType: string;
   /** Index into OcmBundleResult.extracted for download/handoff. */
   extractedIndex: number;
 }
@@ -63,6 +65,12 @@ export interface OcmArtifact {
   labels?: OcmLabel[];
   /** Inspection summary when the bytes are in the bundle (worker-side). */
   blob?: OcmBlobInfo;
+  /**
+   * The resource declares itself an SBOM (type sbom/spdx/cyclonedx/cdx or
+   * an SBOM media type), whether or not its bytes could be extracted: an
+   * external or unreadable SBOM still counts as declared.
+   */
+  isSbom?: boolean;
   /** Present when this artifact carries an embedded SBOM that was extracted. */
   sbom?: OcmArtifactSbom;
   /** Human-usable location derived from the access spec (image ref, URL, ...). */

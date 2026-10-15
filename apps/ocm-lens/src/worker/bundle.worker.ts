@@ -1,6 +1,8 @@
 import { parse as parseYaml } from 'yaml';
 import { registerYamlParser, sniffContainer } from '@sbomlens/core';
+import type { OcmBundle, SbomAnalysis } from '@sbomlens/core/ocm';
 import {
+  analyzeSbom,
   blobSource,
   bundleFromDescriptor,
   bundleFromDescriptors,
@@ -31,6 +33,18 @@ scope.onmessage = (event: MessageEvent) => {
 
 async function handle(job: WorkerRequest): Promise<void> {
   try {
+    if (job.kind === 'sbom-analyze') {
+      const analyses: Record<string, SbomAnalysis> = {};
+      let done = 0;
+      for (const item of job.items) {
+        analyses[item.sha1] = await analyzeSbom(item);
+        done++;
+        scope.postMessage({ kind: 'sbom-progress', id: job.id, done, total: job.items.length });
+      }
+      scope.postMessage({ kind: 'sbom-analyze', id: job.id, analyses });
+      return;
+    }
+
     if (job.kind === 'extract') {
       const source = job.blob ? blobSource(job.blob) : bufferAsSource(job.buffer);
       const result = await extractDeliveryBlob(source, job.localReference);
@@ -114,6 +128,8 @@ async function handle(job: WorkerRequest): Promise<void> {
   } catch (error) {
     if (job.kind === 'extract') {
       scope.postMessage({ kind: 'extract', id: job.id, bytes: null, reason: String(error) });
+    } else if (job.kind === 'sbom-analyze' || job.kind === 'digests') {
+      scope.postMessage({ kind: 'error', id: job.id, message: String(error) });
     } else {
       respondBundle(job.id, {
         bundle: null,
@@ -131,14 +147,20 @@ function bufferAsSource(buffer: ArrayBuffer | undefined) {
   return blobSource(new Blob([bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer]));
 }
 
+/**
+ * Post the bundle at once: the dashboard must not wait for SBOM parsing,
+ * which the app requests as its own job right after. The extracted bytes
+ * are transferred, not copied.
+ */
 function respondBundle(
   id: number,
   result: {
-    bundle: Extract<WorkerResponse, { kind: 'bundle' }>['bundle'];
+    bundle: OcmBundle | null;
     extracted: Extract<WorkerResponse, { kind: 'bundle' }>['extracted'];
     diagnostics: Extract<WorkerResponse, { kind: 'bundle' }>['diagnostics'];
   },
   sourceIndex?: number,
 ): void {
-  scope.postMessage({ kind: 'bundle', id, ...result, ...(sourceIndex !== undefined ? { sourceIndex } : {}) });
+  const transfer = [...new Set(result.extracted.map((e) => e.bytes.buffer as ArrayBuffer))];
+  scope.postMessage({ kind: 'bundle', id, ...result, ...(sourceIndex !== undefined ? { sourceIndex } : {}) }, transfer);
 }

@@ -10,6 +10,7 @@ import { sha256SourceHex } from '../../util/sha256';
 import type { TarStreamEntry, TarStreamOptions } from '../../util/tar';
 import { readTar, readTarFrom } from '../../util/tar';
 import type { OcmBlobInfo } from '../../model/ocm';
+import type { Detection } from '../detect';
 import { detect } from '../detect';
 import type { SourceInput } from '../parser';
 import type { BlobInspection } from './blob';
@@ -59,6 +60,8 @@ export interface CollectedSbom {
   fileName: string;
   size: number;
   format: 'spdx' | 'cyclonedx';
+  /** Media type for saving the extracted file, from content detection. */
+  contentType: string;
   /** Index into the walk's `extracted` list. */
   extractedIndex: number;
 }
@@ -121,6 +124,8 @@ export interface DeliveryWalk {
   archiveSize: number;
   /** Internal: remaining eager-hash budget, spent as collectCd hashes. */
   hashBudgetRemaining: number;
+  /** Internal: extracted SBOMs by SHA-1, so a shared SBOM is extracted once. */
+  extractedBySha1: Map<string, CollectedSbom>;
 }
 
 const CD_MEDIA_PREFIX = 'application/vnd.ocm.software.component-descriptor';
@@ -211,6 +216,7 @@ export async function walkOcmDelivery(
     compressed: false,
     archiveSize: source.size,
     hashBudgetRemaining: options?.eagerHashBudget ?? Infinity,
+    extractedBySha1: new Map(),
   };
 
   const head = await source.read(0, 512);
@@ -600,6 +606,9 @@ async function collectCd(
                   layers: stored
                     .filter((part) => part.role === 'layer')
                     .map(({ digest, size, mediaType }) => ({ digest, size, mediaType })),
+                  config: stored
+                    .filter((part) => part.role === 'config')
+                    .map(({ digest, size, mediaType }) => ({ digest, size, mediaType }))[0],
                 },
               }
             : {}),
@@ -649,11 +658,14 @@ async function collectCd(
     }
   }
 
-  // Pass 2: extract SPDX blobs of SBOM resources (checksums first — the
-  // mapper needs them while building the refs). An SBOM past the
-  // materialization cap is worth a targeted full fetch: it is the reason
-  // this product exists. Reuses pass 1's gunzip where available.
+  // Pass 2: extract SBOM resources (checksums first: the 1.x mapper needs
+  // them while building the refs). An SBOM past the materialization cap is
+  // worth a targeted full fetch: it is the reason this product exists.
+  // Reuses pass 1's gunzip where available. Format and file type come from
+  // the content, never from the declared media type, and an SBOM shipped
+  // under several component versions is extracted once.
   const sbomByRef = new Map<string, CollectedSbom>();
+  const cvLabel = `${(asString(named.name) ?? 'component').split('/').pop()}-${asString(named.version) ?? ''}`;
   for (const resource of resources) {
     const access = isRecord(resource.access) ? resource.access : {};
     if (!isSbomResource(resource, access)) continue;
@@ -661,6 +673,11 @@ async function collectCd(
     if (!localReference) continue;
     const stored = blobs.byName.get(localReference);
     if (!stored) continue;
+    const resourceName = asString(resource.name) ?? localReference;
+    const unreadable = (reason: string) =>
+      walk.diagnostics.push(
+        diag('warning', 'OCM_SBOM_UNREADABLE', `SBOM resource "${resourceName}" ${reason}: skipped.`),
+      );
     let blob = inspections.get(localReference)?.subjects.uncompressed ?? stored.bytes ?? undefined;
     if (!blob) {
       if (stored.size > SBOM_FETCH_MAX) {
@@ -668,7 +685,7 @@ async function collectCd(
           diag(
             'warning',
             'OCM_SBOM_TOO_LARGE',
-            `SBOM resource "${asString(resource.name) ?? localReference}" exceeds ${SBOM_FETCH_MAX / (1024 * 1024)} MB and was not extracted.`,
+            `SBOM resource "${resourceName}" exceeds ${SBOM_FETCH_MAX / (1024 * 1024)} MB and was not extracted.`,
           ),
         );
         continue;
@@ -679,36 +696,56 @@ async function collectCd(
       if (sniffContainer(blob) === 'gzip') blob = await gunzip(blob);
       if (sniffContainer(blob) === 'tar') {
         const first = readTar(blob).entries[0];
-        if (!first) continue;
+        if (!first?.bytes) {
+          unreadable('is an empty archive');
+          continue;
+        }
         blob = first.bytes;
       }
     } catch {
+      unreadable('could not be unpacked');
       continue;
     }
-    if (detect(decode(blob)).format === 'unsupported') {
+    let kind: SbomFileKind | undefined;
+    try {
+      kind = sbomFileKind(detect(decode(blob)));
+    } catch {
+      // A text past the engine's string limit, or a parser crash, must not
+      // cost the component version its other resources.
+      unreadable('could not be decoded');
+      continue;
+    }
+    if (!kind) {
       walk.diagnostics.push(
         diag(
           'warning',
           'OCM_SBOM_FORMAT_UNSUPPORTED',
-          `SBOM resource "${asString(resource.name) ?? '?'}" is neither SPDX nor CycloneDX (${asString(access.mediaType) ?? 'unknown media type'}): skipped.`,
+          `SBOM resource "${resourceName}" is neither SPDX nor CycloneDX (${asString(access.mediaType) ?? 'unknown media type'}): skipped.`,
         ),
       );
       continue;
     }
     const copy = new Uint8Array(blob); // detach from the archive buffer
     const sha1 = await sha1Hex(copy.buffer as ArrayBuffer);
-    // Detection is by content; the suffix only keeps the tree honest about
-    // what the resource is.
-    const mediaType = asString(access.mediaType)?.toLowerCase() ?? '';
-    const suffix = mediaType.includes('cyclonedx') ? (mediaType.includes('xml') ? '.cdx.xml' : '.cdx.json') : '.spdx';
-    const fileName = `${walk.archiveName}!${asString(resource.name) ?? localReference}${suffix}`;
-    sbomByRef.set(localReference, {
+    const known = walk.extractedBySha1.get(sha1);
+    if (known) {
+      sbomByRef.set(localReference, known);
+      continue;
+    }
+    const fileName = uniqueExtractedName(walk, [
+      `${walk.archiveName}!${resourceName}${kind.extension}`,
+      `${walk.archiveName}!${cvLabel}-${resourceName}${kind.extension}`,
+    ]);
+    const collected: CollectedSbom = {
       sha1,
       fileName,
       size: copy.byteLength,
-      format: suffix === '.spdx' ? 'spdx' : 'cyclonedx',
+      format: kind.format,
+      contentType: kind.contentType,
       extractedIndex: walk.extracted.length,
-    });
+    };
+    sbomByRef.set(localReference, collected);
+    walk.extractedBySha1.set(sha1, collected);
     walk.extracted.push({ fileName, bytes: copy });
   }
 
@@ -776,6 +813,50 @@ function storedArtifactGap(stored: StoredPart[], blobs: TarIndex): string | unde
     resized > 0 ? `${resized} of ${stored.length} blob(s) not at the declared size` : '',
   ].filter(Boolean);
   return gaps.length > 0 ? gaps.join(', ') : undefined;
+}
+
+interface SbomFileKind {
+  format: 'spdx' | 'cyclonedx';
+  extension: string;
+  contentType: string;
+}
+
+/** What an SBOM resource's content is, or undefined when it is no SBOM. */
+function sbomFileKind(detection: Detection): SbomFileKind | undefined {
+  switch (detection.format) {
+    case 'spdx2-json':
+      return detection.serialization === 'yaml'
+        ? { format: 'spdx', extension: '.spdx.yaml', contentType: 'application/yaml' }
+        : { format: 'spdx', extension: '.spdx.json', contentType: 'application/spdx+json' };
+    case 'spdx2-tag-value':
+      return { format: 'spdx', extension: '.spdx', contentType: 'text/spdx' };
+    case 'spdx3-json':
+      return detection.serialization === 'yaml'
+        ? { format: 'spdx', extension: '.spdx3.yaml', contentType: 'application/yaml' }
+        : { format: 'spdx', extension: '.spdx3.json', contentType: 'application/spdx+json' };
+    case 'cdx-json':
+      if (detection.serialization === 'xml') {
+        return { format: 'cyclonedx', extension: '.cdx.xml', contentType: 'application/vnd.cyclonedx+xml' };
+      }
+      return detection.serialization === 'yaml'
+        ? { format: 'cyclonedx', extension: '.cdx.yaml', contentType: 'application/yaml' }
+        : { format: 'cyclonedx', extension: '.cdx.json', contentType: 'application/vnd.cyclonedx+json' };
+    default:
+      // Unsupported formats, and a component descriptor is no SBOM either.
+      return undefined;
+  }
+}
+
+/** The first candidate no other extracted file uses, numbered as a last resort. */
+function uniqueExtractedName(walk: DeliveryWalk, candidates: string[]): string {
+  const taken = new Set(walk.extracted.map((e) => e.fileName));
+  const free = candidates.find((c) => !taken.has(c));
+  if (free) return free;
+  const last = candidates[candidates.length - 1]!;
+  for (let n = 2; ; n++) {
+    const numbered = last.replace(/(\.[a-z0-9]+)+$/i, (ext) => `-${n}${ext}`);
+    if (!taken.has(numbered)) return numbered;
+  }
 }
 
 /** Fallback: treat the tar as a plain bundle of SPDX/OCM files. */

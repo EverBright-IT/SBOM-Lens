@@ -48,6 +48,40 @@ export type {
 export { acceptanceReport, digestSummary } from './ocm/report';
 export type { DigestSummary } from './ocm/report';
 export { verifyRawSignatures } from './ocm/verify';
+export type {
+  ArtifactIdentity,
+  NtiaSummary,
+  ResourceRef,
+  SbomAnalysis,
+  SbomBinding,
+  SbomBindingNote,
+  SbomBindingStrength,
+  SbomCoverageRow,
+  SbomCoverageStatus,
+  SbomDeclaredReason,
+  SbomEvidence,
+  SbomEvidenceCounts,
+  SbomOccurrence,
+  SbomSubject,
+  SbomSummary,
+} from './ocm/sbom-evidence';
+export {
+  artifactIdentity,
+  ntiaLabel,
+  ntiaSummary,
+  parseImageReference,
+  SBOM_EXPECTED_TYPES,
+  sbomEvidence,
+  sbomExpected,
+} from './ocm/sbom-evidence';
+export type { SbomAnalysisInput } from './ocm/sbom-analyze';
+export {
+  analyzeDeliverySboms,
+  analyzeSbom,
+  SBOM_ANALYSIS_BUDGET_DEFAULT,
+  sbomSubject,
+  sbomSummary,
+} from './ocm/sbom-analyze';
 export type { ByteSource } from './util/bytesource';
 export { blobSource } from './util/bytesource';
 

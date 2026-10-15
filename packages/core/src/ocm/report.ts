@@ -1,4 +1,6 @@
 import type { OcmArtifact, OcmBundle, OcmCv } from '../model/ocm-bundle';
+import type { ResourceRef, SbomAnalysis, SbomBinding, SbomCoverageRow, SbomEvidence } from './sbom-evidence';
+import { ntiaLabel, ntiaSummary, sbomEvidence } from './sbom-evidence';
 import type { SignatureVerdict } from './verify';
 
 /**
@@ -24,6 +26,12 @@ export interface AcceptanceReportInput {
   toolVersion: string;
   /** ISO timestamp, injected for determinism. */
   generatedAt: string;
+  /**
+   * What the worker learned about the extracted SBOMs (by SHA-1). With it
+   * the report grades SBOM evidence; without it, it lists the embedded
+   * SBOMs as before.
+   */
+  sbomAnalyses?: Readonly<Record<string, SbomAnalysis>>;
 }
 
 export interface AcceptanceReport {
@@ -114,6 +122,7 @@ export function acceptanceReport(input: AcceptanceReportInput): AcceptanceReport
   const sbomCarriers = bundle.componentVersions
     .map((cv) => ({ cv, sboms: cv.resources.filter((r) => r.sbom) }))
     .filter((e) => e.sboms.length > 0);
+  const evidence = input.sbomAnalyses ? sbomEvidence(bundle, input.sbomAnalyses) : undefined;
 
   const reasons: string[] = [];
   if (c.broken > 0) reasons.push(`${c.broken} localBlob resource(s) are missing from the archive or incomplete`);
@@ -126,6 +135,7 @@ export function acceptanceReport(input: AcceptanceReportInput): AcceptanceReport
     ...bundle.componentVersions.flatMap((cv) =>
       cv.diagnostics.map((d) => ({ ...d, message: `${cv.id}: ${d.message}` })),
     ),
+    ...(evidence?.findings ?? []),
   ];
 
   const lines: string[] = [];
@@ -163,7 +173,11 @@ export function acceptanceReport(input: AcceptanceReportInput): AcceptanceReport
         ? `- Signatures: ${validCvs.size} of ${signedCvs.length} signed component version(s) verified valid`
         : `- Signatures: ${signedCvs.length} component version(s) carry signatures (not verified in this run)`,
   );
-  push(`- SBOMs: ${sbomCarriers.length} of ${bundle.componentVersions.length} component version(s) carry embedded SBOMs`);
+  push(
+    evidence
+      ? `- ${evidenceLine(evidence)}`
+      : `- SBOMs: ${sbomCarriers.length} of ${bundle.componentVersions.length} component version(s) carry embedded SBOMs`,
+  );
   push();
   push('## Component versions');
   push();
@@ -225,14 +239,18 @@ export function acceptanceReport(input: AcceptanceReportInput): AcceptanceReport
   }
 
   push();
-  push('## Embedded SBOMs');
-  push();
-  if (sbomCarriers.length === 0) {
-    push('No embedded SBOMs.');
+  if (evidence) {
+    for (const line of evidenceSection(bundle, evidence, input.sbomAnalyses!)) push(line);
   } else {
-    for (const { cv, sboms } of sbomCarriers) {
-      for (const r of sboms) {
-        push(`- ${cv.id}: \`${r.name}\` (${r.sbom!.format}, ${formatBytes(r.sbom!.size)})`);
+    push('## Embedded SBOMs');
+    push();
+    if (sbomCarriers.length === 0) {
+      push('No embedded SBOMs.');
+    } else {
+      for (const { cv, sboms } of sbomCarriers) {
+        for (const r of sboms) {
+          push(`- ${cv.id}: \`${r.name}\` (${r.sbom!.format}, ${formatBytes(r.sbom!.size)})`);
+        }
       }
     }
   }
@@ -278,8 +296,173 @@ export function acceptanceReport(input: AcceptanceReportInput): AcceptanceReport
       pending: digests.pending,
     },
     signatures: signatures ?? null,
+    ...(evidence ? { sbomEvidence: evidenceJson(bundle, evidence, input.sbomAnalyses!) } : {}),
     findings: findings.map((d) => ({ severity: d.severity, code: d.code, message: d.message })),
   };
 
   return { markdown: lines.join('\n'), json };
+}
+
+function evidenceLine(evidence: SbomEvidence): string {
+  const c = evidence.counts;
+  if (c.expected === 0) return `SBOM evidence: no artifact in this delivery calls for an SBOM (${c.sboms} SBOM(s) embedded)`;
+  const how = [
+    c.byDigest > 0 ? `${c.byDigest} by digest` : '',
+    c.byReference > 0 ? `${c.byReference} by reference` : '',
+    c.byComponent > 0 ? `${c.byComponent} by component` : '',
+  ].filter(Boolean);
+  const rest = [
+    c.unverified > 0 ? `${c.unverified} unverified` : '',
+    c.declared > 0 ? `${c.declared} with an SBOM declared but not analysed` : '',
+    c.missing > 0 ? `${c.missing} without an SBOM` : '',
+  ].filter(Boolean);
+  return `SBOM evidence: ${c.covered} of ${c.expected} artifact(s) that ship software have a bound SBOM${how.length > 0 ? ` (${how.join(', ')})` : ''}${rest.length > 0 ? `; ${rest.join(', ')}` : ''}`;
+}
+
+const NOTE_LABEL: Record<SbomBinding['notes'][number], string> = {
+  'digest-differs': 'digest differs',
+  'other-component': 'in another component version',
+  ambiguous: 'ambiguous',
+  'inferred-subject': 'subject inferred',
+};
+
+function bindingLabel(binding: SbomBinding | undefined): string {
+  if (!binding) return '-';
+  const notes = binding.notes.map((n) => NOTE_LABEL[n]);
+  return notes.length > 0 ? `${binding.strength} (${notes.join(', ')})` : binding.strength;
+}
+
+function coverageLabel(row: SbomCoverageRow): string {
+  if (row.status === 'bound') return row.strength!;
+  if (row.status === 'declared') return `declared, ${row.reason}`;
+  return row.status === 'missing' ? 'none' : row.status;
+}
+
+function resourceAt(bundle: OcmBundle, ref: ResourceRef): OcmArtifact | undefined {
+  return bundle.componentVersions.find((cv) => cv.id === ref.cvId)?.resources[ref.index];
+}
+
+/** "4 of 4" over the profile's gated checks. */
+function gated(report: { gatedPassed: number; gatedFailed: number }): string {
+  return `${report.gatedPassed} of ${report.gatedPassed + report.gatedFailed}`;
+}
+
+function formatGateFailed(results: { id: string; pass: boolean }[]): boolean {
+  return results.some((r) => r.id === 'format-baseline' && !r.pass);
+}
+
+/** A digest-shaped version, shortened for a table cell. */
+function shortDigest(version: string): string {
+  const match = /^(sha256:)?([0-9a-f]{64})$/i.exec(version);
+  return match ? `sha256:${match[2]!.slice(0, 12)}` : version;
+}
+
+function generators(creators: string[]): string {
+  const tools = creators.filter((c) => /^tool:/i.test(c)).map((c) => c.replace(/^tool:\s*/i, ''));
+  return (tools.length > 0 ? tools : creators).join(', ') || '-';
+}
+
+function evidenceSection(
+  bundle: OcmBundle,
+  evidence: SbomEvidence,
+  analyses: Readonly<Record<string, SbomAnalysis>>,
+): string[] {
+  const out: string[] = ['## SBOM evidence', ''];
+  out.push(
+    'How an SBOM is tied to an artifact: **digest** (the SBOM names a digest of the delivered artifact), **reference** (same repository and tag, no shared digest), **component** (the SBOM names the component version). SBOM evidence does not change the transport verdict.',
+  );
+  const rows = evidence.coverage.filter((r) => r.expected || r.status === 'bound');
+  if (rows.length > 0) {
+    out.push('', '| Component version | Artifact | Type | SBOM | Binding |', '| --- | --- | --- | --- | --- |');
+    for (const row of rows) {
+      const artifact = resourceAt(bundle, row.artifact);
+      const sboms = row.sboms.map((ref) => resourceAt(bundle, ref)?.name ?? '?').join(', ') || '-';
+      out.push(
+        `| ${row.artifact.cvId} | ${artifact?.name ?? '?'} | ${artifact?.type ?? '-'}${row.expected ? '' : ' (optional)'} | ${sboms} | ${coverageLabel(row)} |`,
+      );
+    }
+  }
+  if (evidence.sboms.length === 0) {
+    out.push('', 'No SBOMs in this delivery.');
+    return out;
+  }
+  out.push(
+    '',
+    '| Component version | SBOM | Format | Generator | Packages | Describes | Binding | NTIA | BSI TR-03183 |',
+    '| --- | --- | --- | --- | --- | --- | --- | --- | --- |',
+  );
+  for (const occurrence of evidence.sboms) {
+    const analysis = occurrence.sha1 ? analyses[occurrence.sha1] : undefined;
+    if (analysis?.state !== 'analyzed') {
+      const why = occurrence.presence === 'external' ? 'external, not analysed' : occurrence.presence === 'deferred' ? 'deferred (size budget)' : 'unreadable';
+      out.push(`| ${occurrence.at.cvId} | ${occurrence.name} | ${why} | - | - | - | - | - | - |`);
+      continue;
+    }
+    const s = analysis.summary;
+    const subject = [s.subject.name, s.subject.version && shortDigest(s.subject.version)].filter(Boolean).join(' ') || '-';
+    const bsi = formatGateFailed(s.profiles.bsi.results) ? 'format not accepted' : gated(s.profiles.bsi);
+    out.push(
+      `| ${occurrence.at.cvId} | ${occurrence.name} | ${s.spec} | ${generators(s.creators)} | ${s.packages} | ${subject} | ${bindingLabel(occurrence.binding)} | ${ntiaLabel(ntiaSummary(s.profiles.ntia))} | ${bsi} |`,
+    );
+  }
+  out.push(
+    '',
+    'NTIA: the document-level minimum elements, then the package-level element (version, supplier, unique ID) with the lowest coverage. Profiles are approximations of the published requirements; the BSI TR-03183-2 accepts only SPDX 3.0.1+ or CycloneDX 1.6+.',
+  );
+  return out;
+}
+
+function evidenceJson(
+  bundle: OcmBundle,
+  evidence: SbomEvidence,
+  analyses: Readonly<Record<string, SbomAnalysis>>,
+): Record<string, unknown> {
+  const named = (ref: ResourceRef) => ({ cvId: ref.cvId, artifact: resourceAt(bundle, ref)?.name ?? null });
+  return {
+    counts: evidence.counts,
+    artifacts: evidence.coverage.map((row) => ({
+      ...named(row.artifact),
+      type: resourceAt(bundle, row.artifact)?.type ?? null,
+      expected: row.expected,
+      status: row.status,
+      ...(row.strength ? { strength: row.strength } : {}),
+      ...(row.reason ? { reason: row.reason } : {}),
+      sboms: row.sboms.map((ref) => resourceAt(bundle, ref)?.name ?? null),
+    })),
+    sboms: evidence.sboms.map((occurrence) => {
+      const analysis = occurrence.sha1 ? analyses[occurrence.sha1] : undefined;
+      const summary = analysis?.state === 'analyzed' ? analysis.summary : undefined;
+      return {
+        ...named(occurrence.at),
+        presence: occurrence.presence,
+        sha1: occurrence.sha1 ?? null,
+        ...(summary
+          ? {
+              spec: summary.spec,
+              creators: summary.creators,
+              packages: summary.packages,
+              subject: { source: summary.subject.source, name: summary.subject.name ?? null, version: summary.subject.version ?? null },
+              profiles: {
+                ntia: ntiaSummary(summary.profiles.ntia),
+                bsiTr03183: {
+                  passed: summary.profiles.bsi.gatedPassed,
+                  failed: summary.profiles.bsi.gatedFailed,
+                  formatAccepted: !formatGateFailed(summary.profiles.bsi.results),
+                },
+              },
+            }
+          : {}),
+        ...(occurrence.binding
+          ? {
+              binding: {
+                strength: occurrence.binding.strength,
+                ...(occurrence.binding.target ? { target: named(occurrence.binding.target) } : {}),
+                ...(occurrence.binding.targetCv ? { targetCv: occurrence.binding.targetCv } : {}),
+                notes: occurrence.binding.notes,
+              },
+            }
+          : {}),
+      };
+    }),
+  };
 }

@@ -21,6 +21,10 @@ describe('bundled demo assets', () => {
     expect(app('ecme-delivery.ctf.tar')).toEqual(core('ecme-delivery.ctf.tar'));
   });
 
+  it('SBOM evidence demo equals the committed core fixture byte-for-byte', () => {
+    expect(app('ecme-sbom-delivery.ctf.tar')).toEqual(core('ecme-sbom-delivery.ctf.tar'));
+  });
+
   it('demo public key equals the committed test key', () => {
     expect(app('ecme-public-key.pem')).toEqual(core('keys/test-rsa.pub.pem'));
   });

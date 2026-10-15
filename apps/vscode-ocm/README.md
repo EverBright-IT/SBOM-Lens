@@ -46,6 +46,10 @@ whether digests and signatures hold.
   access type, transport status, digest verdict, and content previews
   (Helm charts, OCI artifact sets, text). Download any transported blob or
   embedded SBOM through VS Code's save dialog.
+- **SBOMs.** Every embedded SBOM tied to the artifact it describes (by
+  digest, by reference, by component), every image or binary without one
+  named, and a fact sheet per SBOM: format, generator, packages, field
+  coverage, NTIA minimum elements and BSI TR-03183 checks.
 - **Verify.** Declared blob digests are recomputed from the delivered
   bytes; signatures (RSASSA-PSS and PKCS1-v1_5 over
   `jsonNormalisation/v4alpha1`, v3, v2) verify against a pinned or pasted
@@ -66,8 +70,9 @@ whether digests and signatures hold.
 2.0 is a rebuild around the OCM model, and V1 deliberately leaves some 1.x
 features out: the Inventory, Conflicts, Licenses, Map, and Diff views,
 comparing two registry versions, the VEX/CSAF overlay, compliance profiles
-(`.ocmlens/profile.json`), and spec info tooltips. The delivery diff is
-next on the 2.x roadmap. One delivery is open at a time. Keys you pinned
+(`.ocmlens/profile.json`), and spec info tooltips. 2.1 brought SBOM
+evidence; the packages of a delivery (inventory, search, licenses) come
+next, then the delivery diff. One delivery is open at a time. Keys you pinned
 in 1.x carry over. The full list is in the
 [changelog](https://gitlab.com/everbrightit-group/sbom-lens/-/blob/main/apps/ocm-lens/CHANGELOG.md).
 

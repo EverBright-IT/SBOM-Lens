@@ -98,7 +98,12 @@ export interface OcmBlobInfo {
   previews?: OcmBlobPreview[];
   files?: { name: string; size: number }[];
   filesTruncated?: boolean;
-  oci?: { layers: OcmOciLayerInfo[] };
+  /**
+   * OCI artifacts: the layers, and for an image or chart stored by value
+   * the config blob its manifest names (an image's config digest is its
+   * image ID, one of the identities an SBOM may state for its subject).
+   */
+  oci?: { layers: OcmOciLayerInfo[]; config?: OcmOciLayerInfo };
 }
 
 /** Extra data on a component/resource/source element. */

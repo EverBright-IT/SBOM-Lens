@@ -83,6 +83,7 @@ export function VerifyView() {
       signatures: verification?.entries,
       toolVersion: APP_VERSION,
       generatedAt: new Date().toISOString(),
+      sbomAnalyses: delivery.sbomAnalyses,
     });
     const base = bundle.fileName.replace(/(\.(ctf|tar|tgz|gz|yaml|yml|json))+$/i, '');
     if (format === 'markdown') saveBytes(`${base}.acceptance.md`, 'text/markdown', report.markdown);

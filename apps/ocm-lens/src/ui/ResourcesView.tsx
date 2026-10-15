@@ -1,11 +1,13 @@
 import { useMemo, useState } from 'react';
 import clsx from 'clsx';
 import type { OcmArtifact, OcmCv, OcmTransport } from '@sbomlens/core/ocm';
+import { useSbomEvidence } from '../app/evidence';
 import { extractBlob, runDigestChecks } from '../app/ingest';
 import { saveBytes } from '../app/download';
 import { useAppStore } from '../app/store';
 import { BUTTON_SECONDARY, Chip, KV, Section, formatBytes } from './bits';
 import { TransportChip } from './ComponentsView';
+import { BindingChip, CoverageChip, artifactAt, bindingExplanation, downloadSbom as saveSbom } from './sbomBits';
 
 /**
  * Every artifact of the delivery in one filterable table — "what actually
@@ -29,6 +31,12 @@ export function ResourcesView() {
   const [q, setQ] = useState('');
   const [transportFilter, setTransportFilter] = useState<Set<OcmTransport>>(new Set());
   const [includeSources, setIncludeSources] = useState(false);
+  const [sbomGapsOnly, setSbomGapsOnly] = useState(false);
+  const evidence = useSbomEvidence();
+  const coverage = useMemo(
+    () => new Map((evidence?.coverage ?? []).map((row) => [`${row.artifact.cvId}\u0000${row.artifact.index}`, row])),
+    [evidence],
+  );
 
   const rows = useMemo(() => {
     if (!delivery) return [];
@@ -42,6 +50,10 @@ export function ResourcesView() {
     const needle = q.trim().toLowerCase();
     return all.filter((row) => {
       if (transportFilter.size > 0 && !transportFilter.has(row.artifact.transport)) return false;
+      if (sbomGapsOnly) {
+        const gap = coverage.get(`${row.cv.id}\u0000${row.index}`);
+        if (row.role !== 'resource' || !gap?.expected || gap.status === 'bound') return false;
+      }
       if (!needle) return true;
       return (
         row.artifact.name.toLowerCase().includes(needle) ||
@@ -49,7 +61,7 @@ export function ResourcesView() {
         row.cv.id.toLowerCase().includes(needle)
       );
     });
-  }, [delivery, q, transportFilter, includeSources]);
+  }, [delivery, q, transportFilter, includeSources, sbomGapsOnly, coverage]);
 
   if (!delivery) return null;
 
@@ -108,6 +120,19 @@ export function ResourcesView() {
               {t}
             </button>
           ))}
+          <button
+            type="button"
+            onClick={() => setSbomGapsOnly((v) => !v)}
+            title="Artifacts that ship software without a bound SBOM"
+            className={clsx(
+              'rounded border px-1.5 py-0.5 text-[11px]',
+              sbomGapsOnly
+                ? 'border-accent-400 bg-accent-50 text-accent-700 dark:bg-accent-950 dark:text-accent-300'
+                : 'border-slate-200 text-slate-500 dark:border-slate-700 dark:text-slate-400',
+            )}
+          >
+            SBOM gaps
+          </button>
           <label className="ml-2 flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400">
             <input
               type="checkbox"
@@ -167,7 +192,12 @@ export function ResourcesView() {
                       {row.artifact.blob?.digestCheck === 'mismatch' && <Chip tone="danger">mismatch</Chip>}
                       {row.artifact.blob?.digestCheck === 'unchecked' && <Chip>not checkable</Chip>}
                       {row.artifact.blob?.digestCheck === 'pending' && <Chip tone="warn">not checked yet</Chip>}
-                      {row.artifact.sbom && <Chip tone="accent">SBOM</Chip>}
+                      {(row.artifact.isSbom || row.artifact.sbom) && <Chip tone="accent">SBOM</Chip>}
+                      {row.role === 'resource' &&
+                        (() => {
+                          const cell = coverage.get(`${row.cv.id}\u0000${row.index}`);
+                          return cell && (cell.expected || cell.status === 'bound') ? <CoverageChip row={cell} /> : null;
+                        })()}
                     </td>
                   </tr>
                 );
@@ -231,12 +261,7 @@ function ArtifactDetail({ row }: { row: Row }) {
   };
 
   const downloadSbom = () => {
-    if (!artifact.sbom || !delivery) return;
-    const entry = delivery.extracted[artifact.sbom.extractedIndex];
-    if (entry) {
-      const base = entry.fileName.split('!').pop() ?? entry.fileName;
-      saveBytes(base, 'application/json', entry.bytes);
-    }
+    if (delivery) saveSbom(delivery, artifact);
   };
 
   return (
@@ -384,6 +409,8 @@ function ArtifactDetail({ row }: { row: Row }) {
         </Section>
       )}
 
+      {row.role === 'resource' && <SbomSection cvId={cv.id} index={row.index} />}
+
       <div className="flex flex-wrap gap-2">
         {artifact.transport === 'transported' && localReference && (
           <button
@@ -409,5 +436,74 @@ function ArtifactDetail({ row }: { row: Row }) {
         </p>
       )}
     </div>
+  );
+}
+
+/** What the SBOM evidence says about one resource: its own binding, or its coverage. */
+function SbomSection({ cvId, index }: { cvId: string; index: number }) {
+  const evidence = useSbomEvidence();
+  const delivery = useAppStore((s) => s.delivery);
+  const selectSbom = useAppStore((s) => s.actions.selectSbom);
+  if (!evidence || !delivery) return null;
+  const open = (ref: { cvId: string; index: number }) => selectSbom({ cvId: ref.cvId, role: 'resource', index: ref.index });
+
+  const occurrence = evidence.sboms.find((s) => s.at.cvId === cvId && s.at.index === index);
+  if (occurrence) {
+    return (
+      <Section
+        title="SBOM evidence"
+        action={
+          <button type="button" onClick={() => open(occurrence.at)} className="text-xs text-accent-700 hover:underline dark:text-accent-400">
+            Details
+          </button>
+        }
+      >
+        {occurrence.binding ? (
+          <>
+            <div className="mb-1.5">
+              <BindingChip binding={occurrence.binding} />
+            </div>
+            {bindingExplanation(occurrence.binding, delivery.bundle).map((line) => (
+              <p key={line} className="mb-1 text-sm text-slate-600 dark:text-slate-300">
+                {line}
+              </p>
+            ))}
+          </>
+        ) : (
+          <p className="text-sm text-slate-600 dark:text-slate-300">
+            {occurrence.presence === 'external'
+              ? 'Declared with an external access: not part of this delivery, so not analysed.'
+              : occurrence.presence === 'deferred'
+                ? 'Not analysed at load time (size budget); analyse it in the SBOMs view.'
+                : 'Could not be read as an SBOM.'}
+          </p>
+        )}
+      </Section>
+    );
+  }
+
+  const row = evidence.coverage.find((r) => r.artifact.cvId === cvId && r.artifact.index === index);
+  if (!row || (!row.expected && row.status === 'missing')) return null;
+  return (
+    <Section title="SBOM evidence">
+      <div className="mb-1.5">
+        <CoverageChip row={row} />
+      </div>
+      {row.sboms.map((ref) => (
+        <button
+          key={`${ref.cvId}:${ref.index}`}
+          type="button"
+          onClick={() => open(ref)}
+          className="mr-2 text-sm text-accent-700 hover:underline dark:text-accent-400"
+        >
+          {artifactAt(delivery.bundle, ref)?.name}
+        </button>
+      ))}
+      {row.status === 'missing' && (
+        <p className="text-sm text-slate-600 dark:text-slate-300">
+          This artifact ships software, but the delivery carries no SBOM for it.
+        </p>
+      )}
+    </Section>
   );
 }

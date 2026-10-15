@@ -21,6 +21,7 @@ import { detect } from '../detect';
 import { sha1Hex } from '../../util/sha1';
 import {
   artifactLocation,
+  isSbomResource,
   mapRepositoryContexts,
   mapSignatures,
   normalizeCd,
@@ -306,6 +307,7 @@ function buildCv(
       digest: ocmDigest(raw.digest),
       labels: ocmLabels(raw.labels),
       blob,
+      ...(role === 'resource' && isSbomResource(raw, access) ? { isSbom: true } : {}),
       sbom,
       location: artifactLocation(access),
       transport: classifyTransport(access, localReference, cd.blobPresent),

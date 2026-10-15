@@ -1,5 +1,6 @@
 import type { OcmBundle } from '@sbomlens/core/ocm';
 import type { MainView } from '../app/store';
+import { useSbomEvidence } from '../app/evidence';
 import { useAppStore } from '../app/store';
 import { formatBytes } from './bits';
 
@@ -32,13 +33,15 @@ function Kpi({ label, value, hint, goto }: { label: string; value: string; hint?
 
 export function Dashboard() {
   const delivery = useAppStore((s) => s.delivery);
+  const evidence = useSbomEvidence();
+  const sbomRun = useAppStore((s) => s.sbomRun);
   if (!delivery) return null;
   const { bundle, diagnostics } = delivery;
   const c = bundle.completeness;
 
-  const sboms = bundle.componentVersions.flatMap((cv) => cv.resources).filter((r) => r.sbom).length;
   const signedCvs = bundle.componentVersions.filter((cv) => (cv.signatures?.length ?? 0) > 0).length;
-  const issues = [...bundle.issues, ...diagnostics];
+  const issues = [...bundle.issues, ...diagnostics, ...(evidence?.findings ?? [])];
+  const e = evidence?.counts;
 
   return (
     <div className="mx-auto max-w-5xl space-y-5 p-4">
@@ -74,7 +77,7 @@ export function Dashboard() {
         )}
       </div>
 
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
         <Kpi
           label="Component versions"
           value={String(bundle.componentVersions.length)}
@@ -100,10 +103,30 @@ export function Dashboard() {
           goto="components"
         />
         <Kpi
-          label="Evidence"
-          value={`${signedCvs} signed`}
-          hint={`${sboms} SBOM${sboms === 1 ? '' : 's'} embedded`}
+          label="Signatures"
+          value={signedCvs === 0 ? 'none' : `${signedCvs} signed`}
+          hint={signedCvs === 0 ? 'no component version signed' : 'verify in the Verify view'}
           goto="verify"
+        />
+        <Kpi
+          label="SBOMs"
+          value={
+            sbomRun
+              ? 'analysing'
+              : e && e.expected > 0
+                ? `${e.covered} of ${e.expected}`
+                : String(e?.sboms ?? 0)
+          }
+          hint={
+            sbomRun
+              ? `${sbomRun.done} of ${sbomRun.total} SBOMs read`
+              : !e
+                ? 'not analysed'
+                : e.expected > 0
+                  ? `artifacts covered${e.missing > 0 ? ` · ${e.missing} missing` : ''}${e.deferred > 0 ? ` · ${e.deferred} deferred` : ''}`
+                  : `embedded · none expected`
+          }
+          goto="sboms"
         />
       </div>
 

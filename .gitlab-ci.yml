@@ -151,6 +151,7 @@ build-ocm2:
     - 'grep -raq "artifact-index.json" apps/ocm-lens/dist/assets'
     # The demo delivery ships with the app and must match the core fixture.
     - 'cmp apps/ocm-lens/public/examples/ecme-delivery.ctf.tar packages/core/fixtures/ocm/ecme-delivery.ctf.tar'
+    - 'cmp apps/ocm-lens/public/examples/ecme-sbom-delivery.ctf.tar packages/core/fixtures/ocm/ecme-sbom-delivery.ctf.tar'
   artifacts:
     paths: [apps/ocm-lens/dist]
     expire_in: 1 week

@@ -530,6 +530,261 @@ export function buildDemoDeliveryCtf() {
   ]);
 }
 
+// --- SBOM evidence demo (OCM Lens 2.1) -------------------------------------
+// One delivery, every SBOM binding level the product grades: by digest (the
+// stored manifest, and an image config digest), by reference (scanned on
+// another registry before the push), by component (a release SBOM), an SBOM
+// that lives outside the delivery, and an image without any. Real SHA-256
+// digests throughout; the packages (one shared, one in two versions) are
+// there for the package views to come.
+
+const SBOM_DEMO_CREATED = '2026-10-01T00:00:00Z';
+const OCI_MANIFEST = 'application/vnd.oci.image.manifest.v1+json';
+
+const blobOf = (bytes) => ({ bytes, hex: sha256(bytes), size: Buffer.byteLength(bytes) });
+
+function storedDemoImage(name, cmd) {
+  const layer = blobOf(`ecme ${name} image layer`);
+  const config = blobOf(
+    JSON.stringify({
+      architecture: 'amd64',
+      os: 'linux',
+      config: { Cmd: cmd },
+      rootfs: { type: 'layers', diff_ids: [`sha256:${layer.hex}`] },
+    }),
+  );
+  const manifest = blobOf(
+    JSON.stringify({
+      schemaVersion: 2,
+      mediaType: OCI_MANIFEST,
+      config: { mediaType: 'application/vnd.oci.image.config.v1+json', digest: `sha256:${config.hex}`, size: config.size },
+      layers: [{ mediaType: 'application/vnd.oci.image.layer.v1.tar+gzip', digest: `sha256:${layer.hex}`, size: layer.size }],
+    }),
+  );
+  return { layer, config, manifest };
+}
+
+function demoPackage(index, [name, version, purl, license, cpe]) {
+  return {
+    SPDXID: `SPDXRef-Package-${index}`,
+    name,
+    versionInfo: version,
+    supplier: 'Organization: ECME Corp',
+    downloadLocation: 'NOASSERTION',
+    licenseConcluded: license,
+    externalRefs: [
+      { referenceCategory: 'PACKAGE-MANAGER', referenceType: 'purl', referenceLocator: purl },
+      ...(cpe ? [{ referenceCategory: 'SECURITY', referenceType: 'cpe23Type', referenceLocator: cpe }] : []),
+    ],
+  };
+}
+
+function demoSpdx(name, namespace, root, packages) {
+  const pkgs = packages.map((p, i) => demoPackage(i, p));
+  return JSON.stringify({
+    spdxVersion: 'SPDX-2.3',
+    dataLicense: 'CC0-1.0',
+    SPDXID: 'SPDXRef-DOCUMENT',
+    name,
+    documentNamespace: `https://sbom.ecme.example/${namespace}`,
+    creationInfo: { created: SBOM_DEMO_CREATED, creators: ['Organization: ECME Corp (security@ecme.example)', 'Tool: ecme-sbom-gen-2.0'] },
+    documentDescribes: [root.SPDXID],
+    packages: [{ downloadLocation: 'NOASSERTION', supplier: 'Organization: ECME Corp', ...root }, ...pkgs],
+    relationships: pkgs.map((p) => ({ spdxElementId: root.SPDXID, relationshipType: 'CONTAINS', relatedSpdxElement: p.SPDXID })),
+  });
+}
+
+const OPENSSL = (version) => [
+  'openssl',
+  version,
+  `pkg:deb/debian/openssl@${version}`,
+  'Apache-2.0',
+  `cpe:2.3:a:openssl:openssl:${version}:*:*:*:*:*:*:*`,
+];
+
+function demoCd(name, resources, references = []) {
+  return JSON.stringify({
+    meta: { schemaVersion: 'v2' },
+    component: {
+      name,
+      version: '3.2.0',
+      provider: { name: 'ECME Corp' },
+      repositoryContexts: [],
+      sources: [],
+      componentReferences: references.map((ref) => ({ name: ref.split('/').pop(), componentName: ref, version: '3.2.0' })),
+      resources,
+    },
+  });
+}
+
+const localResource = (name, type, blob, mediaType, extra = {}) => ({
+  name,
+  version: '3.2.0',
+  type,
+  relation: 'local',
+  access: { type: 'LocalBlob/v1', localReference: `sha256:${blob.hex}`, mediaType, ...extra },
+  digest: { hashAlgorithm: 'SHA-256', normalisationAlgorithm: 'genericBlobDigest/v1', value: blob.hex },
+});
+
+const externalImage = (name, imageReference) => ({
+  name,
+  version: '3.2.0',
+  type: 'ociImage',
+  relation: 'external',
+  access: { type: 'ociArtifact', imageReference },
+});
+
+export function buildSbomDemoCtf() {
+  const jsonCd = 'application/vnd.ocm.software.component-descriptor.v2+json';
+  const api = storedDemoImage('api', ['uvicorn', 'app:main']);
+  const worker = storedDemoImage('worker', ['celery', 'worker']);
+  const webPushed = sha256('ecme web image, as pushed');
+  const webLocal = sha256('ecme web image, as built locally');
+
+  const apiSbom = blobOf(
+    demoSpdx(
+      'registry.ecme.example/shop/api',
+      'shop/api/3.2.0',
+      {
+        SPDXID: 'SPDXRef-DocumentRoot-Image',
+        name: 'registry.ecme.example/shop/api',
+        versionInfo: `sha256:${api.manifest.hex}`,
+        checksums: [{ algorithm: 'SHA256', checksumValue: api.manifest.hex }],
+        externalRefs: [
+          {
+            referenceCategory: 'PACKAGE-MANAGER',
+            referenceType: 'purl',
+            referenceLocator: `pkg:oci/api@sha256%3A${api.manifest.hex}?repository_url=registry.ecme.example%2Fshop%2Fapi&tag=3.2.0`,
+          },
+        ],
+      },
+      [
+        ['fastapi', '0.115.0', 'pkg:pypi/fastapi@0.115.0', 'MIT'],
+        ['uvicorn', '0.30.6', 'pkg:pypi/uvicorn@0.30.6', 'BSD-3-Clause'],
+        OPENSSL('3.0.13'),
+        ['zlib', '1.3.1', 'pkg:deb/debian/zlib@1.3.1', 'Zlib'],
+      ],
+    ),
+  );
+  const webSbom = blobOf(
+    demoSpdx(
+      'localhost:5000/shop/web',
+      'shop/web/3.2.0',
+      {
+        SPDXID: 'SPDXRef-DocumentRoot-Image',
+        name: 'localhost:5000/shop/web',
+        versionInfo: '3.2.0',
+        checksums: [{ algorithm: 'SHA256', checksumValue: webLocal }],
+        externalRefs: [
+          {
+            referenceCategory: 'PACKAGE-MANAGER',
+            referenceType: 'purl',
+            referenceLocator: `pkg:oci/localhost%3A5000%2Fshop%2Fweb@sha256%3A${webLocal}?arch=amd64&tag=3.2.0`,
+          },
+        ],
+      },
+      [
+        ['nginx', '1.27.1', 'pkg:deb/debian/nginx@1.27.1', 'BSD-2-Clause', 'cpe:2.3:a:f5:nginx:1.27.1:*:*:*:*:*:*:*'],
+        ['react', '18.3.1', 'pkg:npm/react@18.3.1', 'MIT'],
+        ['lodash', '4.17.21', 'pkg:npm/lodash@4.17.21', 'MIT'],
+      ],
+    ),
+  );
+  const workerSbom = blobOf(
+    JSON.stringify({
+      bomFormat: 'CycloneDX',
+      specVersion: '1.6',
+      serialNumber: 'urn:uuid:7d4c3a1e-5b8f-4c2a-9e61-2f0d8b3c4a51',
+      version: 1,
+      metadata: {
+        timestamp: SBOM_DEMO_CREATED,
+        authors: [{ name: 'ECME Corp', email: 'security@ecme.example' }],
+        tools: { components: [{ type: 'application', name: 'ecme-sbom-gen', version: '2.0' }] },
+        component: { 'bom-ref': 'image', type: 'container', name: 'shop/worker', version: `sha256:${worker.config.hex}` },
+      },
+      components: [
+        ['celery', '5.4.0', 'pkg:pypi/celery@5.4.0', 'BSD-3-Clause'],
+        ['redis', '5.0.8', 'pkg:pypi/redis@5.0.8', 'MIT'],
+        OPENSSL('3.0.11'),
+      ].map(([name, version, purl, license, cpe], i) => ({
+        'bom-ref': `pkg-${i}`,
+        type: 'library',
+        supplier: { name: 'ECME Corp' },
+        name,
+        version,
+        purl,
+        ...(cpe ? { cpe } : {}),
+        licenses: [{ license: { id: license } }],
+      })),
+      dependencies: [{ ref: 'image', dependsOn: ['pkg-0', 'pkg-1', 'pkg-2'] }],
+    }),
+  );
+  const cli = blobOf('ecme shop-cli 3.2.0 linux-amd64 (demo bytes)');
+  const cliSbom = blobOf(
+    demoSpdx(
+      'shop-cli',
+      'shop/shop-cli/3.2.0',
+      { SPDXID: 'SPDXRef-DocumentRoot-Directory', name: 'shop-cli', versionInfo: 'v3.2.0' },
+      [
+        ['cobra', 'v1.8.1', 'pkg:golang/github.com/spf13/cobra@v1.8.1', 'Apache-2.0'],
+        ['yaml', 'v3.0.1', 'pkg:golang/gopkg.in/yaml.v3@v3.0.1', 'MIT'],
+      ],
+    ),
+  );
+  const chart = blobOf('ecme gateway helm chart 3.2.0 (demo bytes)');
+
+  const components = [
+    ['ecme.org/shop/api', [
+      localResource('image', 'ociImage', api.manifest, OCI_MANIFEST, { referenceName: 'shop/api:3.2.0' }),
+      localResource('sbom', 'sbom', apiSbom, 'application/spdx+json'),
+    ], [apiSbom]],
+    ['ecme.org/shop/web', [
+      externalImage('image', `registry.ecme.example/shop/web:3.2.0@sha256:${webPushed}`),
+      localResource('sbom', 'sbom', webSbom, 'application/spdx+json'),
+    ], [webSbom]],
+    ['ecme.org/shop/worker', [
+      localResource('image', 'ociImage', worker.manifest, OCI_MANIFEST, { referenceName: 'shop/worker:3.2.0' }),
+      // Declared as plain JSON: OCM Lens reads the content, which is CycloneDX.
+      localResource('sbom', 'sbom', workerSbom, 'application/json'),
+    ], [workerSbom]],
+    ['ecme.org/shop/shop-cli', [
+      localResource('binary', 'executable', cli, 'application/octet-stream'),
+      localResource('release-sbom', 'sbom', cliSbom, 'application/spdx+json'),
+    ], [cli, cliSbom]],
+    ['ecme.org/shop/payments', [
+      externalImage('image', 'registry.ecme.example/shop/payments:3.2.0'),
+      {
+        name: 'sbom',
+        version: '3.2.0',
+        type: 'sbom',
+        relation: 'external',
+        access: { type: 'wget', url: 'https://downloads.ecme.example/shop/3.2.0/payments.spdx.json', mediaType: 'application/spdx+json' },
+      },
+    ], []],
+    ['ecme.org/shop/gateway', [
+      externalImage('image', 'registry.ecme.example/shop/gateway:3.2.0'),
+      localResource('chart', 'helmChart', chart, 'application/vnd.cncf.helm.chart.content.v1.tar+gzip'),
+    ], [chart]],
+  ];
+  const root = ['ecme.org/shop', [], [], components.map(([name]) => name)];
+
+  const entries = [];
+  const artifacts = [];
+  for (const [name, resources, layers, references = []] of [...components, root]) {
+    const cd = blobOf(demoCd(name, resources, references));
+    const manifest = blobOf(
+      flatManifest(cd.hex, jsonCd, layers.map((b) => ({ mediaType: 'application/octet-stream', digest: `sha256:${b.hex}`, size: b.size }))),
+    );
+    entries.push({ name: `blobs/sha256.${cd.hex}`, bytes: cd.bytes }, { name: `blobs/sha256.${manifest.hex}`, bytes: manifest.bytes });
+    for (const b of layers) entries.push({ name: `blobs/sha256.${b.hex}`, bytes: b.bytes });
+    artifacts.push({ repository: `component-descriptors/${name}`, tag: '3.2.0', digest: `sha256:${manifest.hex}` });
+  }
+  for (const image of [api, worker]) {
+    for (const b of [image.manifest, image.config, image.layer]) entries.push({ name: `blobs/sha256.${b.hex}`, bytes: b.bytes });
+  }
+  return writeTar([{ name: 'artifact-index.json', bytes: JSON.stringify({ schemaVersion: 1, artifacts }) }, ...entries]);
+}
+
 const isMain = import.meta.url === new URL(`file://${process.argv[1]}`).href;
 if (isMain) {
   mkdirSync(outDir, { recursive: true });
@@ -537,6 +792,7 @@ if (isMain) {
     ['delivery.ctf.tar', buildDeliveryCtf()],
     ['component-archive.tar', buildComponentArchive()],
     ['ecme-delivery.ctf.tar', buildDemoDeliveryCtf()],
+    ['ecme-sbom-delivery.ctf.tar', buildSbomDemoCtf()],
   ];
   for (const [name, bytes] of files) {
     writeFileSync(new URL(name, outDir), bytes);

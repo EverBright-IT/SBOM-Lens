@@ -3,6 +3,66 @@
 OCM Lens 2.0 versions independently of the monorepo's 0.x line. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.1.0] - pre-release
+
+### Added
+- **SBOM evidence: is the right SBOM with every artifact?** A new SBOMs
+  view ties each embedded SBOM to the artifact it describes and grades the
+  claim by what matched: by digest (the SBOM names a digest of the
+  delivered artifact: manifest, declared or image config digest), by
+  reference (same repository and tag but no shared digest, typical for an
+  image scanned from a local build before the push), by component (the
+  SBOM names the component version, as release and source SBOMs do), or
+  not at all. Every artifact that ships software (images, executables,
+  packages, extensions) shows whether it is covered, unverified, has an
+  SBOM declared but not usable (external, unreadable, deferred), or has
+  none.
+- **SBOM fact sheets.** Format and spec version, generator, timestamp,
+  package count, field coverage (version, supplier, purl or other ID,
+  checksum, license), the NTIA minimum elements, and the BSI TR-03183-2
+  approximation with its format gate (the TR accepts SPDX 3.0.1+ or
+  CycloneDX 1.6+ only). The NTIA reading names both levels: the document
+  elements and the package element with the lowest coverage ("document 4
+  of 4, supplier 64 %"), so a clean document header no longer reads as a
+  complete SBOM.
+- **Everywhere it matters.** The dashboard's Evidence card splits into
+  Signatures and SBOMs ("3 of 3 artifacts covered"); the Resources table
+  shows SBOM evidence per artifact, with an "SBOM gaps" filter and an SBOM
+  evidence section in the artifact detail.
+- **Acceptance report.** An SBOM evidence line in the verdict summary and
+  an "SBOM evidence" section (artifacts, SBOMs, binding, format,
+  generator, packages, NTIA, BSI). The JSON report gains an additive
+  `sbomEvidence` object; the schema stays `ocm-lens-acceptance-report/v1`.
+  The transport verdict is not affected by any of it.
+- **SBOM demo.** A second demo delivery next to the ECME platform: one
+  shop whose SBOMs show every binding level, an external SBOM and an image
+  without any ("SBOM demo" on the start screen).
+- Findings `OCM_SBOM_MISSING` (a warning when the delivery carries SBOMs
+  but leaves software out, a note when it carries none), `OCM_SBOM_UNBOUND`,
+  `OCM_SBOM_AMBIGUOUS`, `OCM_SBOM_EXTERNAL` and
+  `OCM_SBOM_ANALYSIS_DEFERRED` (info), one aggregated entry each.
+
+### Changed
+- **Embedded SBOMs are read now, not just listed.** 2.0 called them
+  "evidence, not documents" and left their contents to SBOM Lens. 2.1
+  parses every embedded SBOM in the background worker and keeps a summary;
+  the documents never reach the UI. The delivery opens first; up to 64 MB
+  of SBOM text is analysed right after, with progress, the rest on "Analyse
+  now", like deferred digest checks.
+- **Extracted SBOMs keep their real file type.** The format comes from the
+  content (a CycloneDX file declared as `application/json` is CycloneDX),
+  downloads use the matching media type and extension, an SBOM shipped
+  under several component versions is extracted once, and equal resource
+  names no longer collide.
+
+### Fixed
+- An SBOM that cannot be decoded no longer costs its component version:
+  it is reported (`OCM_SBOM_UNREADABLE`) and the rest opens. Unpacking
+  failures are reported the same way instead of dropped silently.
+- A background worker that dies (for example out of memory on a huge
+  SBOM) no longer leaves the app waiting: the open fails with a message,
+  and the next action starts a fresh worker.
+
 ## [2.0.2] - pre-release
 
 ### Fixed

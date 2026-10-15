@@ -9,12 +9,14 @@ import { ComponentsView } from './ComponentsView';
 import { Dashboard } from './Dashboard';
 import { EmptyState } from './EmptyState';
 import { ResourcesView } from './ResourcesView';
+import { SbomsView } from './SbomsView';
 import { VerifyView } from './VerifyView';
 
 const VIEWS: { id: MainView; label: string }[] = [
   { id: 'dashboard', label: 'Dashboard' },
   { id: 'components', label: 'Components' },
   { id: 'resources', label: 'Resources' },
+  { id: 'sboms', label: 'SBOMs' },
   { id: 'verify', label: 'Verify' },
 ];
 
@@ -73,7 +75,8 @@ export function App() {
   const fileInput = useRef<HTMLInputElement>(null);
 
   // Dev/deep-link hook: ?open=<same-origin path> loads a delivery on start;
-  // ?budget= / ?mat= override the walk knobs (QA for the lazy-digest path).
+  // ?budget= / ?mat= / ?sbombudget= override the walk knobs (QA for the
+  // lazy-digest and deferred-SBOM paths).
   useEffect(() => {
     if (IS_VSCODE) return; // the extension pushes files instead
     const params = new URLSearchParams(window.location.search);
@@ -81,9 +84,11 @@ export function App() {
     if (!open || open.includes('//') || open.startsWith('/')) return;
     const budget = params.get('budget');
     const mat = params.get('mat');
+    const sbomBudget = params.get('sbombudget');
     void openFromUrl(open, {
       ...(budget !== null ? { eagerHashBudget: Number(budget) } : {}),
       ...(mat !== null ? { materializeEntryMax: Number(mat) } : {}),
+      ...(sbomBudget !== null ? { sbomBudget: Number(sbomBudget) } : {}),
     });
   }, []);
 
@@ -148,6 +153,7 @@ export function App() {
         {delivery && view === 'dashboard' && <Dashboard />}
         {delivery && view === 'components' && <ComponentsView />}
         {delivery && view === 'resources' && <ResourcesView />}
+        {delivery && view === 'sboms' && <SbomsView />}
         {delivery && view === 'verify' && <VerifyView />}
       </main>
 

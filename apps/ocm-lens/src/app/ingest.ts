@@ -1,8 +1,16 @@
 import type { Diagnostic } from '@sbomlens/core';
+import type { SbomAnalysis } from '@sbomlens/core/ocm';
+import { SBOM_ANALYSIS_BUDGET_DEFAULT } from '@sbomlens/core/ocm';
 import type { HostPushFile } from '../host';
 import { host } from '../host';
-import type { BundleWalkOptions, DigestCheckRequest, WorkerRequest, WorkerResponse } from '../worker/protocol';
-import type { ArtifactRef, SourceRef } from './store';
+import type {
+  BundleWalkOptions,
+  DigestCheckRequest,
+  SbomAnalysisItem,
+  WorkerRequest,
+  WorkerResponse,
+} from '../worker/protocol';
+import type { ArtifactRef, LoadedDelivery, SourceRef } from './store';
 import { useAppStore } from './store';
 
 /** File → worker → store. One worker, jobs correlated by id. */
@@ -21,14 +29,28 @@ function getWorker(): Worker {
   worker.onmessage = (event: MessageEvent<WorkerResponse>) => {
     const entry = pending.get(event.data.id);
     if (!entry) return;
-    if (event.data.kind === 'digests-progress') {
+    if (event.data.kind === 'digests-progress' || event.data.kind === 'sbom-progress') {
       entry.onProgress?.(event.data.done, event.data.total);
       return; // not final — keep the correlation alive
     }
     pending.delete(event.data.id);
     entry.resolve(event.data);
   };
+  // A worker that dies (an SBOM too big for memory, a crash) must not leave
+  // the UI waiting: every pending job resolves with an error, and the next
+  // job starts a fresh worker.
+  worker.onerror = (event: ErrorEvent) => {
+    event.preventDefault();
+    failPending(event.message || 'the background worker stopped');
+  };
   return worker;
+}
+
+function failPending(message: string): void {
+  for (const [id, entry] of pending) entry.resolve({ kind: 'error', id, message });
+  pending.clear();
+  worker?.terminate();
+  worker = null;
 }
 
 /** Omit that distributes over the request union (plain Omit collapses it). */
@@ -56,18 +78,34 @@ async function jobSource(): Promise<{ blob?: Blob; buffer?: ArrayBuffer } | null
   return { buffer: await fetched.arrayBuffer() };
 }
 
-/** `extra` carries findings from before the worker (files the host could not read). */
+/**
+ * `extra` carries findings from before the worker (files the host could not
+ * read). The delivery shows at once; its SBOMs are analysed right after, as
+ * their own job, so the dashboard never waits for SBOM parsing.
+ */
 async function commit(
   fileName: string,
   response: WorkerResponse,
   sourceRef: SourceRef | null,
   extra: Diagnostic[] = [],
+  sbomBudget = SBOM_ANALYSIS_BUDGET_DEFAULT,
 ): Promise<void> {
-  if (response.kind !== 'bundle') return;
   const { actions } = useAppStore.getState();
+  if (response.kind === 'error') {
+    actions.loadFailed(fileName, [
+      ...extra,
+      { severity: 'error', code: 'WORKER_FAILED', message: `Reading this delivery stopped: ${response.message}` },
+    ]);
+    return;
+  }
+  if (response.kind !== 'bundle') return;
   const diagnostics = [...extra, ...response.diagnostics];
   if (response.bundle) {
-    actions.loadSucceeded({ bundle: response.bundle, extracted: response.extracted, diagnostics }, sourceRef);
+    actions.loadSucceeded(
+      { bundle: response.bundle, extracted: response.extracted, sbomAnalyses: {}, diagnostics },
+      sourceRef,
+    );
+    void analyseOnLoad(sbomBudget);
   } else {
     actions.loadFailed(fileName, diagnostics);
   }
@@ -83,11 +121,13 @@ async function openBlobWith(
   actions.loadStarted(fileName);
   // The worker streams archives from the Blob via slice() (disk-backed for
   // picked files and large pushed files alike).
+  const { sbomBudget, ...walk } = options ?? {};
   await commit(
     fileName,
-    await run({ kind: 'bundle', fileName, blob, ...(options ? { options } : {}) }),
+    await run({ kind: 'bundle', fileName, blob, ...(options ? { options: walk } : {}) }),
     { kind: 'blob', blob },
     extra,
+    sbomBudget,
   );
 }
 
@@ -147,10 +187,13 @@ export async function openFromUrl(url: string, options?: BundleWalkOptions): Pro
     const response = await fetch(url);
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const buffer = await response.arrayBuffer();
+    const { sbomBudget, ...walk } = options ?? {};
     await commit(
       fileName,
-      await run({ kind: 'bundle', fileName, buffer, ...(options ? { options } : {}) }, [buffer]),
+      await run({ kind: 'bundle', fileName, buffer, ...(options ? { options: walk } : {}) }, [buffer]),
       { kind: 'url', url },
+      [],
+      sbomBudget,
     );
   } catch (error) {
     actions.loadFailed(fileName, [
@@ -164,6 +207,14 @@ export const DEMO_FILE = 'ecme-delivery.ctf.tar';
 /** The bundled demo delivery — one click to a populated dashboard. */
 export async function openDemo(): Promise<void> {
   await openFromUrl(`examples/${DEMO_FILE}`);
+}
+
+export const SBOM_DEMO_FILE = 'ecme-sbom-delivery.ctf.tar';
+
+/** The SBOM evidence demo: every binding level, an external SBOM and a gap. */
+export async function openSbomDemo(): Promise<void> {
+  await openFromUrl(`examples/${SBOM_DEMO_FILE}`);
+  if (useAppStore.getState().delivery) useAppStore.getState().actions.setView('sboms');
 }
 
 /**
@@ -233,4 +284,89 @@ export async function runDigestChecks(
   if (response.kind !== 'digests') return false;
   actions.applyDigestResults(response.results);
   return true;
+}
+
+/** Each extracted SBOM once, in bundle order. */
+function sbomItems(delivery: LoadedDelivery): SbomAnalysisItem[] {
+  const items: SbomAnalysisItem[] = [];
+  const seen = new Set<string>();
+  for (const cv of delivery.bundle.componentVersions) {
+    for (const artifact of cv.resources) {
+      const sbom = artifact.sbom;
+      const entry = sbom ? delivery.extracted[sbom.extractedIndex] : undefined;
+      if (!sbom || !entry || seen.has(sbom.sha1)) continue;
+      seen.add(sbom.sha1);
+      items.push({ sha1: sbom.sha1, fileName: sbom.fileName, bytes: entry.bytes });
+    }
+  }
+  return items;
+}
+
+/** The latest analysis run; an older run's progress never overwrites it. */
+let sbomRunId = 0;
+
+/**
+ * Analyse SBOMs in the worker. The store keeps the bytes for downloads, so
+ * copies go over; summaries come back and land only in the delivery they
+ * were started for.
+ */
+async function analyse(items: SbomAnalysisItem[], delivery: LoadedDelivery): Promise<boolean> {
+  const { actions } = useAppStore.getState();
+  const id = ++sbomRunId;
+  actions.setSbomError(null);
+  actions.setSbomRun({ done: 0, total: items.length });
+  try {
+    const copies = items.map((item) => ({ ...item, bytes: item.bytes.slice() }));
+    const response = await run(
+      { kind: 'sbom-analyze', items: copies },
+      copies.map((item) => item.bytes.buffer as ArrayBuffer),
+      (done, total) => {
+        if (id === sbomRunId) actions.setSbomRun({ done, total });
+      },
+    );
+    if (response.kind !== 'sbom-analyze') {
+      if (id === sbomRunId) {
+        actions.setSbomError(response.kind === 'error' ? response.message : 'the analysis did not finish');
+      }
+      return false;
+    }
+    actions.applySbomAnalyses(response.analyses, delivery.extracted);
+    return true;
+  } finally {
+    if (id === sbomRunId) actions.setSbomRun(null);
+  }
+}
+
+/**
+ * Right after opening: analyse SBOMs in bundle order until the budget is
+ * spent; the rest is marked deferred and waits for "Analyse now".
+ */
+async function analyseOnLoad(budget: number): Promise<void> {
+  const { delivery, actions } = useAppStore.getState();
+  if (!delivery) return;
+  const now: SbomAnalysisItem[] = [];
+  const later: Record<string, SbomAnalysis> = {};
+  let remaining = budget;
+  for (const item of sbomItems(delivery)) {
+    if (item.bytes.byteLength <= remaining) {
+      remaining -= item.bytes.byteLength;
+      now.push(item);
+    } else {
+      later[item.sha1] = { state: 'deferred', size: item.bytes.byteLength };
+    }
+  }
+  if (Object.keys(later).length > 0) actions.applySbomAnalyses(later, delivery.extracted);
+  if (now.length > 0) await analyse(now, delivery);
+}
+
+/** "Analyse now": every SBOM not analysed yet (past the budget, or after a failed run). */
+export async function runSbomAnalysis(): Promise<boolean> {
+  const { delivery } = useAppStore.getState();
+  if (!delivery) return false;
+  const pending = sbomItems(delivery).filter((item) => {
+    const state = delivery.sbomAnalyses[item.sha1]?.state;
+    return state === undefined || state === 'deferred';
+  });
+  if (pending.length === 0) return true;
+  return analyse(pending, delivery);
 }

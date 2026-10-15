@@ -168,8 +168,8 @@ timestamping; and `jsonNormalisation/v1` (deprecated), which stays
 - Component descriptors: schema v2 fully, v3alpha1 best-effort. Unknown access
   types (`s3`, `npm`, ...) are listed without download location and reported
   as diagnostics.
-- CycloneDX SBOMs inside a delivery are reported, not loaded (same conversion
-  hint as standalone files).
+- CycloneDX SBOMs (JSON and XML) inside a delivery are extracted and loaded
+  like SPDX ones.
 
 Fixtures for all of this are generated deterministically
 (`npm run generate:ocm-fixtures -w @sbomlens/core`) and pinned byte-for-byte
