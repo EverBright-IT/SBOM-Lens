@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { HostToWebviewMessage } from '@sbomlens/web/vscode-protocol';
+import type { HostToWebviewMessage } from './protocol';
 import type { BridgeContext } from './bridge';
 import { buildWebviewHtml, createBridgeHandler, prefsSnapshot } from './bridge';
 

@@ -3,6 +3,24 @@
 OCM Lens 2.0 versions independently of the monorepo's 0.x line. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.0.1] - pre-release
+
+### Fixed
+- **VS Code: a delivery the editor cannot hand over now says so.** Files
+  over 32 MB reach the viewer as webview resources; when that read failed,
+  2.0.0 treated the file as empty and reported a misleading parse error.
+  Now the file is named with the reason (`HOST_FILE_UNREADABLE`); in a
+  multi-file push the readable files still open and the unreadable ones
+  are listed as findings.
+
+### Changed
+- **Internal: one webview protocol, owned by the extension shell.** The
+  messages between VS Code and the viewer moved from the SBOM Lens app into
+  the shared shell (`@sbomlens/vscode-shell/protocol`); OCM Lens no longer
+  depends on the SBOM Lens app package. No behavior change.
+- **Internal: the version lives in package.json only.** The UI reads it
+  from there; a release bumps two files instead of three.
+
 ## [2.0.0] - pre-release
 
 ### Added

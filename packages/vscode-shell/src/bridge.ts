@@ -1,7 +1,8 @@
 import type {
   HostToWebviewMessage,
   WebviewToHostMessage,
-} from '@sbomlens/web/vscode-protocol';
+} from './protocol';
+import { PREFS_GLOBAL } from './protocol';
 
 /**
  * The extension-host side of the webview bridge, dependency-injected so the
@@ -89,9 +90,9 @@ export async function nodeFetchBytes(
 /**
  * Injects <base href>, the CSP, a nonce on every script, and the pref
  * snapshot into the built index.html. The nonce pass runs first so the
- * injected snippet keeps its single nonce. The __SBOMLENS_PREFS__ global is
- * a webview-internal name shared by both flavors' bundles — webviews are
- * isolated JS contexts, so the products can never collide on it.
+ * injected snippet keeps its single nonce. The pref global (PREFS_GLOBAL in
+ * protocol.ts) is a webview-internal name every Lens webview reads; webviews
+ * are isolated JS contexts, so the products can never collide on it.
  */
 export function buildWebviewHtml(
   raw: string,
@@ -110,7 +111,7 @@ export function buildWebviewHtml(
   const inject =
     `<base href="${opts.baseHref}">` +
     `<meta http-equiv="Content-Security-Policy" content="${csp}">` +
-    `<script nonce="${opts.nonce}">window.__SBOMLENS_PREFS__=${prefsJson}</script>`;
+    `<script nonce="${opts.nonce}">window.${PREFS_GLOBAL}=${prefsJson}</script>`;
   return raw
     .replace(/<script /g, `<script nonce="${opts.nonce}" `)
     .replace('<head>', `<head>${inject}`);

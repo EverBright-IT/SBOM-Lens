@@ -4,11 +4,14 @@
  * stays host-agnostic.
  */
 
-export interface HostPushFile {
-  fileName: string;
-  /** Pushed bytes and fetched resource URIs both arrive as Blobs. */
-  blob: Blob;
-}
+/**
+ * A file the host pushed in. Pushed bytes and fetched resource URIs both
+ * arrive as Blobs; a file the host could not hand over carries the reason
+ * instead, so the app reports it rather than parsing an empty file.
+ */
+export type HostPushFile =
+  | { fileName: string; blob: Blob; error?: undefined }
+  | { fileName: string; blob?: undefined; error: string };
 
 export interface Host {
   kind: 'web' | 'vscode';

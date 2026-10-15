@@ -1,5 +1,6 @@
 import workerUrl from '../worker/bundle.worker.ts?worker&url';
-import type { HostToWebviewMessage, WebviewToHostMessage } from '@sbomlens/web/vscode-protocol';
+import type { HostToWebviewMessage, WebviewToHostMessage } from '@sbomlens/vscode-shell/protocol';
+import { PREFS_GLOBAL } from '@sbomlens/vscode-shell/protocol';
 import type { Host, HostPushFile } from './types';
 
 interface VsCodeApi {
@@ -7,12 +8,6 @@ interface VsCodeApi {
 }
 
 declare function acquireVsCodeApi(): VsCodeApi;
-
-/**
- * Injected by the shared extension shell (packages/vscode-shell, see
- * buildWebviewHtml) so synchronous pref reads work before any message.
- */
-const PREFS_GLOBAL = '__SBOMLENS_PREFS__';
 
 /**
  * The VS Code webview host. Prefs persist in the extension's globalState
@@ -44,11 +39,10 @@ export function createVscodeHost(api: VsCodeApi = acquireVsCodeApi()): Host {
           message.files.map(async (f): Promise<HostPushFile> => {
             try {
               const response = await fetch(f.uri);
-              if (!response.ok) throw new Error(`${response.status}`);
+              if (!response.ok) throw new Error(`HTTP ${response.status}`);
               return { fileName: f.fileName, blob: await response.blob() };
-            } catch {
-              // An empty file surfaces as a visible "could not be opened".
-              return { fileName: f.fileName, blob: new Blob([]) };
+            } catch (error) {
+              return { fileName: f.fileName, error: error instanceof Error ? error.message : String(error) };
             }
           }),
         );

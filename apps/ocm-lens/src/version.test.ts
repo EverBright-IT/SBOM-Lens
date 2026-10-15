@@ -7,9 +7,10 @@ import { APP_VERSION } from './version';
  * The lockstep release command (`npm version <v> --workspaces`) bumps EVERY
  * workspace, this one included; this test is what stops that from shipping.
  *
- * Fix after a lockstep bump: `git checkout -- apps/ocm-lens/package.json`,
- * then `npm install --package-lock-only`. Bump OCM Lens explicitly when it
- * releases itself (package.json + src/version.ts + its CHANGELOG).
+ * Fix after a lockstep bump: `git checkout -- apps/ocm-lens/package.json
+ * apps/vscode-ocm/package.json`, then `npm install --package-lock-only`. Bump
+ * OCM Lens explicitly when it releases itself: both package.json files and
+ * its CHANGELOG (the UI reads the version from package.json).
  */
 describe('OCM Lens version line', () => {
   const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as {

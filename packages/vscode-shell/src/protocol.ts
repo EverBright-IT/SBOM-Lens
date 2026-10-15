@@ -1,7 +1,9 @@
 /**
- * Message protocol between the SBOM Lens webview and the VS Code extension
- * host. The extension imports these types only (type-only import via the
- * package's subpath export) — no runtime coupling in either direction.
+ * Message protocol between the extension shell and the Lens webviews (SBOM
+ * Lens in apps/web, OCM Lens 2.x in apps/ocm-lens). The shell owns the
+ * contract; webviews import it through the `./protocol` subpath export. This
+ * module has no imports and touches no VS Code API, so webview bundles can
+ * depend on it.
  */
 
 export interface PushedFile {

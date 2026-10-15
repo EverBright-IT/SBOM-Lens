@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import type { HostToWebviewMessage, WebviewToHostMessage } from '@sbomlens/web/vscode-protocol';
+import type { HostToWebviewMessage, WebviewToHostMessage } from './protocol';
 import { writeTar } from './tar';
 
 /**

@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import * as vscode from 'vscode';
-import type { HostToWebviewMessage, WebviewToHostMessage } from '@sbomlens/web/vscode-protocol';
+import type { HostToWebviewMessage, WebviewToHostMessage } from './protocol';
 import type { BridgeContext } from './bridge';
 import { buildWebviewHtml, createBridgeHandler, nodeFetchBytes, prefsSnapshot } from './bridge';
 

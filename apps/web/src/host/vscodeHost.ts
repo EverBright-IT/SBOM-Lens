@@ -1,8 +1,8 @@
 import workerUrl from '../worker/parse.worker.ts?worker&url';
 import { HAS_DELIVERIES } from '../app/brand';
 import type { HostAdapter, IngestPush, IngestPushOptions, OcmRegistryPort } from './adapter';
-import type { HostToWebviewMessage, WebviewToHostMessage } from './vscode-protocol';
-import { PREFS_GLOBAL } from './vscode-protocol';
+import type { HostToWebviewMessage, WebviewToHostMessage } from '@sbomlens/vscode-shell/protocol';
+import { PREFS_GLOBAL } from '@sbomlens/vscode-shell/protocol';
 
 interface VsCodeApi {
   postMessage(message: WebviewToHostMessage): void;

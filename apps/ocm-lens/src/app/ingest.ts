@@ -1,3 +1,4 @@
+import type { Diagnostic } from '@sbomlens/core';
 import type { HostPushFile } from '../host';
 import { host } from '../host';
 import type { BundleWalkOptions, DigestCheckRequest, WorkerRequest, WorkerResponse } from '../worker/protocol';
@@ -55,21 +56,29 @@ async function jobSource(): Promise<{ blob?: Blob; buffer?: ArrayBuffer } | null
   return { buffer: await fetched.arrayBuffer() };
 }
 
-async function commit(fileName: string, response: WorkerResponse, sourceRef: SourceRef | null): Promise<void> {
+/** `extra` carries findings from before the worker (files the host could not read). */
+async function commit(
+  fileName: string,
+  response: WorkerResponse,
+  sourceRef: SourceRef | null,
+  extra: Diagnostic[] = [],
+): Promise<void> {
   if (response.kind !== 'bundle') return;
   const { actions } = useAppStore.getState();
+  const diagnostics = [...extra, ...response.diagnostics];
   if (response.bundle) {
-    actions.loadSucceeded(
-      { bundle: response.bundle, extracted: response.extracted, diagnostics: response.diagnostics },
-      sourceRef,
-    );
+    actions.loadSucceeded({ bundle: response.bundle, extracted: response.extracted, diagnostics }, sourceRef);
   } else {
-    actions.loadFailed(fileName, response.diagnostics);
+    actions.loadFailed(fileName, diagnostics);
   }
 }
 
-/** Open one delivery (CTF/component archive/.tgz or a bare descriptor). */
-export async function openBlob(fileName: string, blob: Blob, options?: BundleWalkOptions): Promise<void> {
+async function openBlobWith(
+  fileName: string,
+  blob: Blob,
+  options: BundleWalkOptions | undefined,
+  extra: Diagnostic[],
+): Promise<void> {
   const { actions } = useAppStore.getState();
   actions.loadStarted(fileName);
   // The worker streams archives from the Blob via slice() (disk-backed for
@@ -78,7 +87,13 @@ export async function openBlob(fileName: string, blob: Blob, options?: BundleWal
     fileName,
     await run({ kind: 'bundle', fileName, blob, ...(options ? { options } : {}) }),
     { kind: 'blob', blob },
+    extra,
   );
+}
+
+/** Open one delivery (CTF/component archive/.tgz or a bare descriptor). */
+export async function openBlob(fileName: string, blob: Blob, options?: BundleWalkOptions): Promise<void> {
+  await openBlobWith(fileName, blob, options, []);
 }
 
 /** Open a file the user picked or dropped. */
@@ -94,17 +109,33 @@ export async function openFile(file: File, options?: BundleWalkOptions): Promise
  */
 export async function openHostPush(files: HostPushFile[]): Promise<void> {
   if (files.length === 0) return;
-  if (files.length === 1) {
-    await openBlob(files[0]!.fileName, files[0]!.blob);
+  const readable = files.filter((f): f is Extract<HostPushFile, { blob: Blob }> => f.blob !== undefined);
+  const unreadable: Diagnostic[] = files.flatMap((f) =>
+    f.error === undefined
+      ? []
+      : [
+          {
+            severity: 'error' as const,
+            code: 'HOST_FILE_UNREADABLE',
+            message: `VS Code could not hand ${f.fileName} to OCM Lens (${f.error}). Check that the file still exists and is readable, then open it again.`,
+          },
+        ],
+  );
+  const { actions } = useAppStore.getState();
+  if (readable.length === 0) {
+    actions.loadFailed(files.length === 1 ? files[0]!.fileName : `${files.length} files`, unreadable);
     return;
   }
-  const label = `${files.length} files`;
-  const { actions } = useAppStore.getState();
+  if (readable.length === 1) {
+    await openBlobWith(readable[0]!.fileName, readable[0]!.blob, undefined, unreadable);
+    return;
+  }
+  const label = `${readable.length} files`;
   actions.loadStarted(label);
-  const response = await run({ kind: 'open-many', files });
+  const response = await run({ kind: 'open-many', files: readable });
   const source =
-    response.kind === 'bundle' && response.sourceIndex !== undefined ? files[response.sourceIndex] : undefined;
-  await commit(label, response, source ? { kind: 'blob', blob: source.blob } : null);
+    response.kind === 'bundle' && response.sourceIndex !== undefined ? readable[response.sourceIndex] : undefined;
+  await commit(label, response, source ? { kind: 'blob', blob: source.blob } : null, unreadable);
 }
 
 /** Open a delivery served next to the app (demo, or the `?open=` dev hook). */

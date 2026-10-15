@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { HostToWebviewMessage, WebviewToHostMessage } from '@sbomlens/web/vscode-protocol';
+import type { HostToWebviewMessage, WebviewToHostMessage } from '@sbomlens/vscode-shell/protocol';
 import type { HostPushFile } from './types';
 import { createVscodeHost } from './vscode';
 
@@ -43,15 +43,17 @@ describe('VS Code host', () => {
     hostSays({ type: 'ingestFiles', files: [{ fileName: 'demo.ctf', bytes: new Uint8Array([1, 2, 3]) }] });
     expect(received).toHaveLength(1);
     expect(received[0]![0]!.fileName).toBe('demo.ctf');
-    expect(new Uint8Array(await received[0]![0]!.blob.arrayBuffer())).toEqual(new Uint8Array([1, 2, 3]));
+    expect(new Uint8Array(await received[0]![0]!.blob!.arrayBuffer())).toEqual(new Uint8Array([1, 2, 3]));
   });
 
-  it('fetches large-file URIs into Blobs and degrades failures to empty files', async () => {
+  it('fetches large-file URIs into Blobs and reports unreadable ones with the reason', async () => {
     const realFetch = globalThis.fetch;
-    globalThis.fetch = (async (url: RequestInfo | URL) =>
-      String(url).includes('big.ctf')
+    globalThis.fetch = (async (url: RequestInfo | URL) => {
+      if (String(url).includes('broken.ctf')) throw new TypeError('Failed to fetch');
+      return String(url).includes('big.ctf')
         ? ({ ok: true, blob: async () => new Blob([new Uint8Array(5)]) } as Response)
-        : ({ ok: false, status: 404 } as Response)) as typeof fetch;
+        : ({ ok: false, status: 404 } as Response);
+    }) as typeof fetch;
     try {
       const host = createVscodeHost(fakeApi);
       const received: HostPushFile[][] = [];
@@ -61,12 +63,14 @@ describe('VS Code host', () => {
         files: [
           { fileName: 'big.ctf', uri: 'https://resource.test/big.ctf' },
           { fileName: 'gone.ctf', uri: 'https://resource.test/gone.ctf' },
+          { fileName: 'broken.ctf', uri: 'https://resource.test/broken.ctf' },
         ],
       });
       await vi.waitFor(() => expect(received).toHaveLength(1));
-      expect(received[0]!.map((f) => [f.fileName, f.blob.size])).toEqual([
-        ['big.ctf', 5],
-        ['gone.ctf', 0],
+      expect(received[0]!.map((f) => [f.fileName, f.blob?.size, f.error])).toEqual([
+        ['big.ctf', 5, undefined],
+        ['gone.ctf', undefined, 'HTTP 404'],
+        ['broken.ctf', undefined, 'Failed to fetch'],
       ]);
     } finally {
       globalThis.fetch = realFetch;

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { IngestPush } from './adapter';
-import type { HostToWebviewMessage, WebviewToHostMessage } from './vscode-protocol';
+import type { HostToWebviewMessage, WebviewToHostMessage } from '@sbomlens/vscode-shell/protocol';
 import { createVscodeHost } from './vscodeHost';
 
 /**
