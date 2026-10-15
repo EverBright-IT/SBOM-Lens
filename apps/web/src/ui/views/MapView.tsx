@@ -303,7 +303,7 @@ function MapNode({
       onClick={onSelect}
       onDoubleClick={onOpen}
     >
-      <title>{`${name}: ${formatCount(pkgs)} packages${isRoot ? ' (root)' : ''}\nDouble-click: open in Explore${doc.hasChildren ? ' · chevron: expand/collapse' : ''}`}</title>
+      <title>{`${name}: ${formatCount(pkgs)} package${pkgs === 1 ? '' : 's'}${isRoot ? ' (root)' : ''}\nDouble-click: open in Explore${doc.hasChildren ? ' · chevron: expand/collapse' : ''}`}</title>
       <rect
         width={metrics.nodeW}
         height={metrics.nodeH}

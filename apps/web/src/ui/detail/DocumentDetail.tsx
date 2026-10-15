@@ -62,7 +62,7 @@ export function DocumentDetail({ ws, loaded }: { ws: WorkspaceState; loaded: Loa
         <FieldRow label="Comment" value={doc.comment} info={D.comment} />
         <FieldRow
           label="Contents"
-          value={`${formatCount(loaded.indexes.packageCount)} packages · ${formatCount(loaded.indexes.fileCount)} files · ${formatCount(doc.relationships.length)} relationships`}
+          value={`${formatCount(loaded.indexes.packageCount)} package${loaded.indexes.packageCount === 1 ? '' : 's'} · ${formatCount(loaded.indexes.fileCount)} file${loaded.indexes.fileCount === 1 ? '' : 's'} · ${formatCount(doc.relationships.length)} relationship${doc.relationships.length === 1 ? '' : 's'}`}
         />
         <FieldRow
           label="Source file"

@@ -26,8 +26,14 @@ export function StatusBar() {
       >
         {formatCount(stats.documents)} document{stats.documents === 1 ? '' : 's'}
       </button>
-      <span>{formatCount(stats.packages)} packages</span>
-      {stats.files > 0 && <span>{formatCount(stats.files)} files</span>}
+      <span>
+        {formatCount(stats.packages)} package{stats.packages === 1 ? '' : 's'}
+      </span>
+      {stats.files > 0 && (
+        <span>
+          {formatCount(stats.files)} file{stats.files === 1 ? '' : 's'}
+        </span>
+      )}
       {stats.unresolvedStructural > 0 && (
         <span className="text-amber-600 dark:text-amber-400">
           {stats.unresolvedStructural} unresolved reference{stats.unresolvedStructural === 1 ? '' : 's'}

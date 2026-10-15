@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { loadFixtureDocument, loadedFromText } from '../test-fixtures';
 import type { WorkspaceState } from '../workspace/workspace';
@@ -20,8 +21,13 @@ describe('searchWorkspace', () => {
     expect(hits[0]!.element.name).toBe('openssl');
   });
 
-  it('matches purls from the blob', () => {
+  it('a purl query that stops at a namespace lists what sits below it', () => {
     const { hits } = searchWorkspace(ws, 'pkg:apk/alpine');
+    expect(hits.map((h) => h.element.name)).toEqual(['busybox']);
+  });
+
+  it('without the pkg: scheme a purl is searched as text', () => {
+    const { hits } = searchWorkspace(ws, 'apk/alpine/busy');
     expect(hits.map((h) => h.element.name)).toEqual(['busybox']);
   });
 
@@ -166,6 +172,11 @@ describe('searchWorkspace: a CPE query matches by identity', () => {
     'SPDXID: SPDXRef-P3',
     'PackageVersion: 2.3',
     'PackageDownloadLocation: NOASSERTION',
+    'PackageName: widget',
+    'SPDXID: SPDXRef-P4',
+    'PackageVersion: 3.1',
+    'PackageDownloadLocation: NOASSERTION',
+    'ExternalRef: SECURITY cpe23Type cpe:2.3:a:acme:widget:*:*:*:*:*:*:*:*',
   ];
   const ws = addDocument(emptyWorkspace, loadedFromText('cpe-search.spdx', lines.join('\n') + '\n')).workspace;
   const names = (query: string) =>
@@ -195,5 +206,102 @@ describe('searchWorkspace: a CPE query matches by identity', () => {
   it('drives the inventory too, so the hits export as the impact list', () => {
     const rows = inventoryRows(ws, 'cpe:2.3:a:acme:thing:*:*:*:*:*:*:*:*', emptyFacets);
     expect(rows.map((r) => r.element.name).sort()).toEqual(['libthing', 'thing-legacy']);
+  });
+
+  it("takes the element's own version when its CPE states none", () => {
+    expect(names('cpe:2.3:a:acme:widget:3.1:*:*:*:*:*:*:*')).toEqual(['widget']);
+    expect(names('cpe:2.3:a:acme:widget:3.2:*:*:*:*:*:*:*')).toEqual([]);
+    expect(names('cpe:/a:acme:widget')).toEqual(['widget']);
+  });
+});
+
+describe('searchWorkspace: a purl query matches by identity', () => {
+  // Advisories write purls in the spec's canonical form (encoded npm scopes,
+  // qualifiers, often no version), SBOMs in whatever their generator emits.
+  // Substring search missed the first and over-matched lodash-es.
+  const pkg = (i: number, name: string, version: string, purl: string) => [
+    `PackageName: ${name}`,
+    `SPDXID: SPDXRef-P${i}`,
+    `PackageVersion: ${version}`,
+    'PackageDownloadLocation: NOASSERTION',
+    `ExternalRef: PACKAGE-MANAGER purl ${purl}`,
+  ];
+  const lines = [
+    'SPDXVersion: SPDX-2.3',
+    'SPDXID: SPDXRef-DOCUMENT',
+    'DocumentName: purl-search',
+    'DocumentNamespace: https://example.org/spdxdocs/purl-search',
+    ...pkg(0, 'lodash', '4.17.20', 'pkg:npm/lodash@4.17.20'),
+    ...pkg(1, 'lodash-es', '4.17.21', 'pkg:npm/lodash-es@4.17.21'),
+    ...pkg(2, '@angular/core', '17.0.0', 'pkg:npm/@angular/core@17.0.0'),
+    ...pkg(3, '@angular/common', '17.0.0', 'pkg:npm/%40angular/common@17.0.0'),
+    ...pkg(4, 'log4j-core', '2.14.1', 'pkg:maven/org.apache.logging.log4j/log4j-core@2.14.1?type=jar'),
+    ...pkg(5, 'Newtonsoft.Json', '13.0.1', 'pkg:nuget/Newtonsoft.Json@13.0.1'),
+    ...pkg(6, 'typing-extensions', '4.8.0', 'pkg:pypi/typing-extensions@4.8.0'),
+    ...pkg(7, 'left-pad', '1.3.0', 'pkg:npm/left-pad'),
+  ];
+  const ws = addDocument(emptyWorkspace, loadedFromText('purl-search.spdx', lines.join('\n') + '\n')).workspace;
+  const elements = [...ws.documents.values()].flatMap((d) => d.document.elements);
+  const names = (query: string) =>
+    searchWorkspace(ws, query)
+      .hits.map((h) => h.element.name)
+      .sort();
+
+  it('a versionless purl finds the package, never one whose name merely starts the same', () => {
+    expect(names('pkg:npm/lodash')).toEqual(['lodash']);
+  });
+
+  it('a versioned purl finds only that version', () => {
+    expect(names('pkg:npm/lodash@4.17.20')).toEqual(['lodash']);
+    expect(names('pkg:npm/lodash@4.17.21')).toEqual([]);
+  });
+
+  it('reads encoded and raw npm scopes alike', () => {
+    expect(names('pkg:npm/%40angular/core@17.0.0')).toEqual(['@angular/core']);
+    expect(names('pkg:npm/@angular/common')).toEqual(['@angular/common']);
+  });
+
+  it('ignores qualifiers and subpath on either side', () => {
+    expect(names('pkg:maven/org.apache.logging.log4j/log4j-core@2.14.1?classifier=sources#src')).toEqual(['log4j-core']);
+  });
+
+  it('lists a namespace or a whole type when the query stops there', () => {
+    expect(names('pkg:npm/@angular')).toEqual(['@angular/common', '@angular/core']);
+    expect(names('pkg:maven/org.apache.logging.log4j')).toEqual(['log4j-core']);
+    expect(names('pkg:npm')).toEqual(['@angular/common', '@angular/core', 'left-pad', 'lodash', 'lodash-es']);
+    expect(names('pkg:maven/org.apache.logging.log4j@2.14.1')).toEqual([]);
+  });
+
+  it('folds letter case and the PyPI name separators', () => {
+    expect(names('pkg:nuget/newtonsoft.json@13.0.1')).toEqual(['Newtonsoft.Json']);
+    expect(names('pkg:pypi/Typing_Extensions')).toEqual(['typing-extensions']);
+  });
+
+  it("takes the element's own version when its purl states none", () => {
+    expect(names('pkg:npm/left-pad@1.3.0')).toEqual(['left-pad']);
+    expect(names('pkg:npm/left-pad@1.3.1')).toEqual([]);
+  });
+
+  it('finds every element by its own purl', () => {
+    for (const element of elements) {
+      if (element.purl) expect(names(element.purl)).toContain(element.name);
+    }
+  });
+
+  it('drives the inventory too', () => {
+    const rows = inventoryRows(ws, 'pkg:npm/lodash', emptyFacets);
+    expect(rows.map((r) => r.element.name)).toEqual(['lodash']);
+  });
+});
+
+describe('the worked example in docs/cra.md', () => {
+  it('finds the CPE-only demo component with the versionless CPE the guide quotes', () => {
+    let ws = emptyWorkspace;
+    for (const file of ['acme-web.cdx.json', 'acme-auth.cdx.json']) {
+      const text = readFileSync(new URL(`../../../../apps/web/public/examples/cdx/${file}`, import.meta.url), 'utf8');
+      ws = addDocument(ws, loadedFromText(file, text)).workspace;
+    }
+    const { hits } = searchWorkspace(ws, 'cpe:2.3:a:acme:thing:*:*:*:*:*:*:*:*');
+    expect(hits.map((h) => [h.element.name, h.element.version, h.element.purl])).toEqual([['acme-thing', '1.0', undefined]]);
   });
 });

@@ -170,7 +170,8 @@ export function InventoryView() {
         )}
         <span className="flex-1" />
         <span className="text-[11px] text-slate-400 tabular-nums">
-          {formatCount(sorted.length)} {filesHidden ? 'packages' : 'elements'}
+          {formatCount(sorted.length)} {filesHidden ? 'package' : 'element'}
+          {sorted.length === 1 ? '' : 's'}
         </span>
         <button
           type="button"

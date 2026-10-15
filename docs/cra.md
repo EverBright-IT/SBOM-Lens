@@ -39,7 +39,7 @@ before relying on these dates.
 | SBOM in a commonly used, machine-readable format (Annex I, Part II, point 1) | Reads SPDX 2.x (tag-value, JSON, YAML), SPDX 3.0.x (JSON-LD), and CycloneDX 1.x (JSON or XML) | [Supported formats](../README.md#supported-formats) |
 | Checking an SBOM against the technical reading | Built-in preset *BSI TR-03183-2 field coverage (approximation)*, including the format baseline the TR sets (SPDX 3.0.1+ or CycloneDX 1.6+) as a gated check | [Compliance profiles](compliance-profiles.md) |
 | Dependencies beyond the top level | Resolves multi-document cascades (SPDX `ExternalDocumentRef` and 3.x imports, CycloneDX BOM-Links) into one tree, with placeholders for what is missing | [How references resolve](../README.md#how-references-resolve) |
-| Article 14: which products contain the affected component? | Search by name, purl, or CPE across every loaded SBOM; the Inventory, filtered by the same query, exports the hits as CSV or JSON | [Worked example](#the-first-hours-after-an-advisory) below |
+| Article 14: which products contain the affected component? | Search across every loaded SBOM by name, or by purl or CPE matched by identity; the Inventory, filtered by the same query, exports the hits as CSV or JSON | [Worked example](#the-first-hours-after-an-advisory) below |
 | Information on fixed vulnerabilities (Annex I, Part II, point 4) | Loads CSAF 2.0 and OpenVEX documents, your own before you publish them or your suppliers', as an overlay: the stated status per component, matched by purl or CPE (and, for CSAF, by file hash); each CSAF document is measured against BSI [TR-03191](https://www.bsi.bund.de/SharedDocs/Downloads/EN/BSI/Publications/TechGuidelines/TR03191/BSI-TR-03191.html) | [VEX overlay](vex.md) |
 | Due diligence on components from suppliers (Article 13(5)) | Measures a supplier's SBOM with the same presets, and checks a delivery: hashes the delivered files and compares them with the file checksums an SPDX SBOM declares | [Delivery acceptance](acceptance.md) |
 
@@ -66,15 +66,22 @@ early warning is which of your products contain it.
 
 1. Load the SBOMs of the products you ship: drop a folder, and cascades link
    up on their own.
-2. Paste the component's identifier from the advisory into the search box. A
-   CPE is matched by identity, not as text: a versionless
+2. Paste the component's identifier from the advisory into the search box.
+   A purl or a CPE is matched by identity, not as text: a versionless
+   `pkg:maven/org.apache.logging.log4j/log4j-core` or
    `cpe:2.3:a:acme:thing:*:*:*:*:*:*:*:*` finds every version your SBOMs
-   carry, in either the CPE 2.3 or the 2.2 form, while a CPE with a concrete
-   version finds exactly that version. A purl works as well.
+   carry, whatever spelling they use (encoded or raw npm scopes, qualifiers,
+   letter case, CPE 2.2 or 2.3), and never a package whose name merely starts
+   the same. A purl that stops at a namespace, such as `pkg:npm/@angular`,
+   lists everything below it. An identifier with a version finds exactly that
+   version, compared as text: `1.0` is not `1.0.0`. So start versionless.
 3. Open **Inventory**. The same query lists every occurrence across all
-   loaded documents; export it as CSV or JSON for the record. In **Explore**,
-   the funnel next to the search box filters the tree down to the matches and
-   their ancestors, so you see where in each product the component sits.
+   loaded documents; export it as CSV or JSON for the record. That list holds
+   the candidates, not yet the answer: the advisory states which versions are
+   affected, usually as a range, and SBOM Lens does not evaluate ranges, so
+   check each listed version against it. In **Explore**, the funnel next to
+   the search box filters the tree down to the matches and their ancestors,
+   so you see where in each product the component sits.
 4. If the supplier publishes a CSAF advisory or an OpenVEX document, load it
    as well: each matched component then shows the supplier's status
    (affected, not affected, fixed, under investigation).

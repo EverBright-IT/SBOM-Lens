@@ -4,6 +4,7 @@ import type { SbomElement } from '../model/document';
 import type { ElementId } from '../model/ids';
 import type { WorkspaceState } from '../workspace/workspace';
 import { cpeMatchKey, elementCpeKeys } from './cpe';
+import { splitPurl } from './purl';
 
 /**
  * OpenVEX overlay: what the supplier COMMUNICATES about known
@@ -309,41 +310,17 @@ function strArray(value: unknown): string[] | undefined {
  * Returns undefined for anything that is not a purl.
  */
 export function purlMatchKey(purl: string): { pkg: string; version?: string } | undefined {
-  if (!purl.startsWith('pkg:')) return undefined;
-  let rest = purl.slice('pkg:'.length);
-  // Strip subpath, then qualifiers.
-  const hash = rest.indexOf('#');
-  if (hash !== -1) rest = rest.slice(0, hash);
-  const question = rest.indexOf('?');
-  if (question !== -1) rest = rest.slice(0, question);
-  const at = rest.lastIndexOf('@');
-  let version: string | undefined;
-  // A raw '/' after the '@' means the '@' belongs to an unencoded scope
-  // (pkg:npm/@angular/core), not a version separator: a purl version part
-  // never contains a raw slash. Without this guard the versionless scoped
-  // form would split into garbage and silently never match.
-  if (at > 0 && !rest.slice(at + 1).includes('/')) {
-    version = decodeSegment(rest.slice(at + 1));
-    rest = rest.slice(0, at);
-  }
-  const segments = rest.replace(/^\/+/, '').split('/').filter((s) => s !== '');
-  if (segments.length === 0) return undefined;
+  const parts = splitPurl(purl);
+  if (!parts) return undefined;
+  const { segments, version } = parts;
   const type = segments[0]!.toLowerCase();
-  const name = decodeSegment(segments[segments.length - 1]!);
+  const name = segments[segments.length - 1]!;
   const namespace = segments
     .slice(1, -1)
-    .map((s) => decodeSegment(s).toLowerCase())
+    .map((s) => s.toLowerCase())
     .join('/');
   const pkg = `${type}/${namespace}/${name}`;
-  return version !== undefined && version !== '' ? { pkg, version } : { pkg };
-}
-
-function decodeSegment(segment: string): string {
-  try {
-    return decodeURIComponent(segment);
-  } catch {
-    return segment;
-  }
+  return version !== undefined ? { pkg, version } : { pkg };
 }
 
 interface IndexedStatement {

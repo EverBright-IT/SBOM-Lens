@@ -4,6 +4,36 @@ All notable changes to SBOM Lens. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [SemVer](https://semver.org) (0.x: the API surface is the app itself).
 
+## [0.29.8] - 2026-10-15
+
+### Fixed
+- **Search by purl matches by identity, like search by CPE since v0.29.7.**
+  `docs/cra.md` said a purl works as well as a CPE for the Article 14
+  question; it did not. A purl query was a substring of the raw purl, so the
+  canonical form an advisory uses missed the SBOM's spelling
+  (`pkg:npm/%40angular/core` never found `pkg:npm/@angular/core`, a qualifier
+  in the query found nothing), and a versionless purl over-matched
+  (`pkg:npm/lodash` also listed lodash-es). A query starting with `pkg:` now
+  compares whole path segments after percent-decoding, ignores qualifiers and
+  subpath, folds letter case and the PyPI name separators, and follows the
+  version rule of the CPE search. A query that stops at a namespace
+  (`pkg:apk/alpine`, `pkg:npm/@angular`) still lists everything below it, and
+  without the `pkg:` scheme a purl is searched as text, as before. Search and
+  the VEX overlay now share one purl parser, so search finds every element
+  the overlay matches by purl or CPE.
+- A purl or CPE that states no version takes the element's own version, so
+  `pkg:npm/left-pad@1.3.0` finds a package whose purl is versionless but
+  whose version says 1.3.0.
+- Counts read "1 package", not "1 packages": Inventory, status bar, document
+  details, Licenses and the Map tooltip.
+
+### Changed
+- `docs/cra.md`: the Article 14 walkthrough covers purls, calls the hit list
+  what it is (the candidates to check against the affected range the
+  advisory states; SBOM Lens does not evaluate ranges), and recommends
+  starting versionless because versions compare as text. A test now runs the
+  guide's worked example against the demo files it names.
+
 ## [0.29.7] - 2026-10-14
 
 ### Added

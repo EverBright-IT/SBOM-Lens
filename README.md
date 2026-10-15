@@ -50,8 +50,9 @@ on [Open VSX](https://open-vsx.org/extension/everbright-it/sbomlens).
   diffs, and a per-document NTIA quality report.
 - **Useful for Cyber Resilience Act work.** Search every loaded SBOM by name,
   purl or CPE to answer the first question of an Article 14 early warning:
-  which of our products contain the exploited component? A CPE matches by
-  identity, so an advisory's versionless CPE finds every version you ship.
+  which of our products contain the exploited component? A purl or CPE
+  matches by identity, so an advisory's versionless identifier finds every
+  version you ship and nothing that merely shares a name prefix.
   Measure SBOMs against BSI TR-03183-2 and read suppliers' CSAF advisories
   next to them. [docs/cra.md](docs/cra.md) maps the obligations onto these
   features and says what SBOM Lens does not do.

@@ -99,7 +99,8 @@ export function LicensesView() {
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 px-4 py-2 text-xs dark:border-slate-800">
         <span className="text-slate-500 dark:text-slate-400">
-          {formatCount(inventory.rows.length)} identifiers across {formatCount(inventory.packagesTotal)} packages
+          {formatCount(inventory.rows.length)} identifier{inventory.rows.length === 1 ? '' : 's'} across{' '}
+          {formatCount(inventory.packagesTotal)} package{inventory.packagesTotal === 1 ? '' : 's'}
         </span>
         <span className="text-slate-400">·</span>
         <span className="text-slate-500 dark:text-slate-400" title="Declared licence missing, NONE or NOASSERTION">
