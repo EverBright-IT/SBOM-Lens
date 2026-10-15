@@ -126,6 +126,20 @@ export interface DeliveryWalk {
 const CD_MEDIA_PREFIX = 'application/vnd.ocm.software.component-descriptor';
 /** An SBOM the walker will fetch in full even past the materialization cap. */
 const SBOM_FETCH_MAX = 512 * 1024 * 1024;
+/** Markers of a descriptor manifest: ocm.software and legacy gardener spellings. */
+const CD_CONFIG_MARKER = 'component.config';
+const CD_LAYER_MARKER = 'component-descriptor';
+/** Config media types of OCI artifacts that are never component descriptors. */
+const ARTIFACT_CONFIGS = new Set([
+  'application/vnd.oci.image.config.v1+json',
+  'application/vnd.docker.container.image.v1+json',
+  'application/vnd.cncf.helm.config.v1+json',
+  'application/vnd.oci.empty.v1+json',
+]);
+const OCI_MANIFEST_TYPES = new Set([
+  'application/vnd.oci.image.manifest.v1+json',
+  'application/vnd.docker.distribution.manifest.v2+json',
+]);
 
 /** One tar, indexed: entries by name plus the source their offsets address. */
 interface TarIndex {
@@ -284,7 +298,14 @@ async function walkCtf(
     return;
   }
 
-  for (const artifact of artifacts) {
+  // Tagged artifacts are the component versions. Untagged ones are what the
+  // ocm CLI leaves next to them: the descriptor manifest a tagged index
+  // points at, a descriptor superseded by signing, and the manifests of
+  // images and charts stored by value. Tagged first, so a superseded
+  // descriptor never shadows the current one.
+  const ordered = [...artifacts.filter((a) => asString(a.tag)), ...artifacts.filter((a) => !asString(a.tag))];
+  const walked = new Set<TarStreamEntry>();
+  for (const artifact of ordered) {
     const digest = asString(artifact.digest);
     const blob = digest ? index.byName.get(`blobs/${digest.replace(':', '.')}`) : undefined;
     if (!blob) {
@@ -305,8 +326,12 @@ async function walkCtf(
         const manifestEntry = innerIndex ? manifestFromIndex(innerIndex, inner) : undefined;
         await walkOciManifest(manifestEntry, inner, walk);
       } else {
-        // Flat layout: the blob IS the OCI manifest; layers are sibling blobs.
-        await walkOciManifest(blob, index, walk);
+        // Flat layout: the blob is the descriptor manifest or an OCI index
+        // around it; layers and stored artifacts are sibling blobs.
+        const manifestEntry = descriptorManifest(blob, index);
+        if (!manifestEntry || walked.has(manifestEntry)) continue;
+        walked.add(manifestEntry);
+        await walkOciManifest(manifestEntry, index, walk, { ctf: index, superseded: !asString(artifact.tag) });
       }
     } catch {
       walk.diagnostics.push(
@@ -318,23 +343,91 @@ async function walkCtf(
 
 /** OCI image index/manifest JSON → find the manifest blob with layers. */
 function manifestFromIndex(indexEntry: TarStreamEntry, index: TarIndex): TarStreamEntry | undefined {
-  if (!indexEntry.bytes) return undefined;
+  const parsed = parseJsonEntry(indexEntry);
+  if (!parsed) return undefined;
+  if (Array.isArray(parsed.layers)) return indexEntry; // already a manifest
+  const refs = asRecordArray(parsed.manifests);
+  return descriptorInIndex(refs, index) ?? blobEntry(index, refs[0]?.digest);
+}
+
+/**
+ * The manifest carrying a component descriptor, for a CTF blob that is that
+ * manifest or an OCI index around it (the ocm CLI tags an index when it
+ * stores images or charts next to the descriptor). Undefined for image and
+ * chart manifests: those are resources stored by value, not component
+ * versions.
+ */
+function descriptorManifest(entry: TarStreamEntry, index: TarIndex): TarStreamEntry | undefined {
+  const parsed = parseJsonEntry(entry);
+  if (!parsed) return entry; // not JSON: let the walk report it as before
+  if (Array.isArray(parsed.manifests)) return descriptorInIndex(asRecordArray(parsed.manifests), index);
+  return manifestRole(parsed) === 'artifact' ? undefined : entry;
+}
+
+function descriptorInIndex(refs: Record<string, unknown>[], index: TarIndex): TarStreamEntry | undefined {
+  const typed = refs.find((r) => (asString(r.artifactType) ?? '').includes(CD_LAYER_MARKER));
+  if (typed) return blobEntry(index, typed.digest);
+  for (const ref of refs) {
+    const candidate = blobEntry(index, ref.digest);
+    const manifest = candidate ? parseJsonEntry(candidate) : undefined;
+    if (manifest && manifestRole(manifest) === 'descriptor') return candidate;
+  }
+  return undefined;
+}
+
+/** 'unknown' keeps the legacy behavior: the walk tries it as a descriptor. */
+function manifestRole(manifest: Record<string, unknown>): 'descriptor' | 'artifact' | 'unknown' {
+  const config = isRecord(manifest.config) ? (asString(manifest.config.mediaType) ?? '') : '';
+  if (config.includes(CD_CONFIG_MARKER)) return 'descriptor';
+  if (asRecordArray(manifest.layers).some((l) => (asString(l.mediaType) ?? '').includes(CD_LAYER_MARKER))) {
+    return 'descriptor';
+  }
+  return ARTIFACT_CONFIGS.has(config) ? 'artifact' : 'unknown';
+}
+
+function blobEntry(index: TarIndex, digest: unknown): TarStreamEntry | undefined {
+  const value = asString(digest);
+  return value ? index.byName.get(`blobs/${value.replace(':', '.')}`) : undefined;
+}
+
+function parseJsonEntry(entry: TarStreamEntry): Record<string, unknown> | undefined {
+  if (!entry.bytes) return undefined;
   try {
-    const parsed: unknown = JSON.parse(decode(indexEntry.bytes));
-    if (!isRecord(parsed)) return undefined;
-    if (Array.isArray(parsed.layers)) return indexEntry; // already a manifest
-    const manifests = asRecordArray(parsed.manifests);
-    const digest = manifests.length > 0 ? asString(manifests[0]!.digest) : undefined;
-    return digest ? index.byName.get(`blobs/${digest.replace(':', '.')}`) : undefined;
+    const parsed: unknown = JSON.parse(decode(entry.bytes));
+    return isRecord(parsed) ? parsed : undefined;
   } catch {
     return undefined;
   }
+}
+
+/**
+ * A CV's local blob store in a CTF: its manifest's layers, then every blob
+ * of the archive. The ocm CLI stores images and charts by value as separate
+ * manifests whose digest is the resource's localReference.
+ */
+class CtfBlobMap extends Map<string, TarStreamEntry> {
+  readonly #ctf: TarIndex;
+  constructor(ctf: TarIndex) {
+    super();
+    this.#ctf = ctf;
+  }
+  override get(key: string): TarStreamEntry | undefined {
+    return super.get(key) ?? this.#ctf.byName.get(`blobs/${key.replace(':', '.')}`);
+  }
+}
+
+interface ManifestWalkOptions {
+  /** Resolve localReferences against the whole CTF, not only the layers. */
+  ctf?: TarIndex;
+  /** Untagged: skip when a tagged artifact already carried this CV. */
+  superseded?: boolean;
 }
 
 async function walkOciManifest(
   manifestEntry: TarStreamEntry | undefined,
   index: TarIndex,
   walk: DeliveryWalk,
+  options: ManifestWalkOptions = {},
 ): Promise<void> {
   if (!manifestEntry?.bytes) return;
   let manifest: unknown;
@@ -370,7 +463,7 @@ async function walkOciManifest(
   }
 
   // Local blob store: every non-CD layer, keyed by its digest spellings.
-  const blobs = new Map<string, TarStreamEntry>();
+  const blobs = options.ctf ? new CtfBlobMap(options.ctf) : new Map<string, TarStreamEntry>();
   const layerSummaries: CollectedLayer[] = [];
   for (const layer of layers) {
     const digest = asString(layer.digest);
@@ -387,7 +480,7 @@ async function walkOciManifest(
       mediaType: asString(layer.mediaType),
     });
   }
-  await collectCd(cdText, { source: index.source, byName: blobs }, layerSummaries, walk);
+  await collectCd(cdText, { source: index.source, byName: blobs }, layerSummaries, walk, options.superseded);
 }
 
 /** Component archive: component-descriptor.yaml + blobs/<algo>.<hex>. */
@@ -417,6 +510,7 @@ async function collectCd(
   blobs: TarIndex,
   layers: CollectedLayer[],
   walk: DeliveryWalk,
+  superseded = false,
 ): Promise<void> {
   const detection = detect(cdText);
   if (detection.format !== 'ocm-cd') {
@@ -437,6 +531,9 @@ async function collectCd(
     );
     return;
   }
+  // An untagged descriptor for a CV a tag already delivered is a leftover
+  // (signing rewrites the descriptor; the old manifest stays in the CTF).
+  if (superseded && walk.cds.some((cd) => sameCv(cd.raw, named))) return;
 
   // Pass 1: inspect EVERY localBlob the delivery physically carries (kind,
   // capped previews). Content inspection caches per blob; the digest verdict
@@ -459,6 +556,25 @@ async function collectCd(
     if (!localReference) continue;
     const blob = blobs.byName.get(localReference);
     if (!blob) continue;
+    // An image or chart stored by value: the localReference is its manifest,
+    // and it is only present if every blob the manifest names is there, at
+    // the size the manifest declares (a cheap check that catches a copy cut
+    // short on its way to the air-gapped side).
+    const stored = storedArtifactParts(blob, access);
+    if (stored) {
+      const gap = storedArtifactGap(stored, blobs);
+      if (gap) {
+        walk.diagnostics.push(
+          diag(
+            'warning',
+            'OCM_ARTIFACT_INCOMPLETE',
+            `Resource "${asString(artifact.name) ?? localReference}": ${gap} of the stored OCI artifact.`,
+          ),
+        );
+        continue;
+      }
+      layers.push(...stored.map(({ digest, size, mediaType }) => ({ digest, size, mediaType })));
+    }
     blobPresent.add(localReference);
     const declared = isRecord(artifact.digest) ? artifact.digest : undefined;
     try {
@@ -468,11 +584,25 @@ async function collectCd(
           inspection = await inspectBlob(blob.bytes, asString(access.mediaType));
           inspections.set(localReference, inspection);
         }
-        const digestCheck = await checkDeclaredDigest(inspection.subjects, declared);
+        const digestCheck = await checkDeclaredDigest(
+          stored ? { ...inspection.subjects, manifest: blob.bytes } : inspection.subjects,
+          declared,
+        );
         blobInfos.set(artifact, {
           ...inspection.info,
           mediaType: asString(access.mediaType) ?? inspection.info.mediaType,
           digestCheck,
+          ...(stored
+            ? {
+                kind: 'oci-artifact' as const,
+                size: blob.size + stored.reduce((sum, part) => sum + part.size, 0),
+                oci: {
+                  layers: stored
+                    .filter((part) => part.role === 'layer')
+                    .map(({ digest, size, mediaType }) => ({ digest, size, mediaType })),
+                },
+              }
+            : {}),
         });
       } else if (isRecord(declared) && asString(declared.value) && blob.size > walk.hashBudgetRemaining) {
         // Over the eager-hash budget: the one full-byte read the walk would
@@ -600,6 +730,52 @@ async function collectCd(
 
 function componentNode(parsed: Record<string, unknown>): Record<string, unknown> | null {
   return isRecord(parsed.component) ? parsed.component : null;
+}
+
+function sameCv(raw: Record<string, unknown>, named: Record<string, unknown>): boolean {
+  const other = componentNode(raw) ?? (isRecord(raw.metadata) ? raw.metadata : null);
+  return !!other && other.name === named.name && other.version === named.version;
+}
+
+interface StoredPart extends CollectedLayer {
+  role: 'config' | 'layer';
+}
+
+/**
+ * The config and layers an OCI manifest blob names, when the resource's
+ * blob is such a manifest (image or chart stored by value). Undefined for
+ * every other blob, descriptor manifests included.
+ */
+function storedArtifactParts(blob: TarStreamEntry, access: Record<string, unknown>): StoredPart[] | undefined {
+  const mediaType = asString(access.mediaType);
+  if (mediaType ? !OCI_MANIFEST_TYPES.has(mediaType) : blob.bytes?.[0] !== 0x7b) return undefined;
+  const manifest = parseJsonEntry(blob);
+  if (!manifest || !isRecord(manifest.config) || !Array.isArray(manifest.layers)) return undefined;
+  if (manifestRole(manifest) === 'descriptor') return undefined;
+  const part = (node: Record<string, unknown>, role: StoredPart['role']): StoredPart | undefined => {
+    const digest = asString(node.digest);
+    if (!digest) return undefined;
+    return { digest, size: typeof node.size === 'number' ? node.size : 0, mediaType: asString(node.mediaType), role };
+  };
+  return [part(manifest.config, 'config'), ...asRecordArray(manifest.layers).map((l) => part(l, 'layer'))].filter(
+    (p): p is StoredPart => p !== undefined,
+  );
+}
+
+/** What keeps a stored artifact from being complete, or undefined. */
+function storedArtifactGap(stored: StoredPart[], blobs: TarIndex): string | undefined {
+  let absent = 0;
+  let resized = 0;
+  for (const part of stored) {
+    const entry = blobs.byName.get(part.digest);
+    if (!entry) absent++;
+    else if (part.size > 0 && entry.size !== part.size) resized++;
+  }
+  const gaps = [
+    absent > 0 ? `${absent} of ${stored.length} blob(s) missing from the delivery` : '',
+    resized > 0 ? `${resized} of ${stored.length} blob(s) not at the declared size` : '',
+  ].filter(Boolean);
+  return gaps.length > 0 ? gaps.join(', ') : undefined;
 }
 
 /** Fallback: treat the tar as a plain bundle of SPDX/OCM files. */

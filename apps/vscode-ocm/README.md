@@ -35,8 +35,9 @@ whether digests and signatures hold.
 
 - **Dashboard.** The delivery at a glance: component versions and roots,
   archive size, transported vs external vs broken resources, reference
-  closure, signatures, embedded SBOMs, and an honest verdict: either
-  *self-contained*, or *needs network to deploy* with the reasons.
+  closure, signatures, embedded SBOMs, and an honest verdict:
+  *self-contained*, *needs network to deploy*, or *incomplete* when stored
+  content is missing or cut short, with the reasons.
 - **Components.** The reference graph as navigation: roots first, any
   depth, components referenced twice marked as shared, cycles shown but
   never followed. Each component version in the spec's own vocabulary,

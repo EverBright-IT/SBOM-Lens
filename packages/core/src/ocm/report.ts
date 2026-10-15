@@ -116,8 +116,8 @@ export function acceptanceReport(input: AcceptanceReportInput): AcceptanceReport
     .filter((e) => e.sboms.length > 0);
 
   const reasons: string[] = [];
+  if (c.broken > 0) reasons.push(`${c.broken} localBlob resource(s) are missing from the archive or incomplete`);
   if (c.external > 0) reasons.push(`${c.external} resource(s) live outside the bundle (external access)`);
-  if (c.broken > 0) reasons.push(`${c.broken} localBlob resource(s) are missing from the archive`);
   if (c.unknown > 0) reasons.push(`${c.unknown} resource(s) use an access type this tool cannot classify`);
   if (c.unresolvedRefs > 0) reasons.push(`${c.unresolvedRefs} component reference(s) point outside the bundle`);
 
@@ -142,10 +142,14 @@ export function acceptanceReport(input: AcceptanceReportInput): AcceptanceReport
   push();
   push('## Verdict');
   push();
+  // Broken outranks external: no network brings back a localBlob the
+  // delivery lost or cut short.
   push(
-    c.airGapReady
-      ? '**SELF-CONTAINED.** Every resource is transported in the bundle and the reference closure is complete: deploying from this delivery needs no network.'
-      : `**NEEDS NETWORK TO DEPLOY.** ${reasons.join('; ')}.`,
+    c.broken > 0
+      ? `**INCOMPLETE DELIVERY.** ${reasons.join('; ')}.`
+      : c.airGapReady
+        ? '**SELF-CONTAINED.** Every resource is transported in the bundle and the reference closure is complete: deploying from this delivery needs no network.'
+        : `**NEEDS NETWORK TO DEPLOY.** ${reasons.join('; ')}.`,
   );
   push();
   push(`- ${bundle.componentVersions.length} component version(s), ${bundle.roots.length} root(s)${bundle.shared.length > 0 ? `, ${bundle.shared.length} shared via multiple references` : ''}`);

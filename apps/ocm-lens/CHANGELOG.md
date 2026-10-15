@@ -3,6 +3,35 @@
 OCM Lens 2.0 versions independently of the monorepo's 0.x line. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.0.2] - pre-release
+
+### Fixed
+- **Air-gap deliveries written by the current ocm CLI open correctly.**
+  When `ocm transfer --copy-resources` (CLI 0.13) stores images and Helm
+  charts by value, it tags an OCI index around the component descriptor and
+  the stored artifacts' manifests, lists those manifests untagged as well,
+  and keeps the descriptor that signing replaced. 2.0.1 called the stored
+  images and charts broken (so no such delivery was ever air-gap ready),
+  reported every untagged manifest as unreadable, and listed a signed
+  component version twice. Now the index resolves to its descriptor, stored
+  images and charts count as transported with their layers in the blob
+  statistics and their digest checked, and the superseded descriptor is
+  skipped. Checked against CTFs the CLI writes in both variants, by
+  reference and by value.
+- **A stored image counts as transported only when it is complete.** Every
+  blob its manifest names must be in the delivery at the declared size;
+  otherwise the resource is broken and a finding (`OCM_ARTIFACT_INCOMPLETE`)
+  says how many blobs are missing or cut short. That catches a copy that
+  did not finish on its way to the air-gapped side.
+- **A damaged delivery is called incomplete, not "needs network".** The
+  dashboard and the acceptance report had two verdicts, so a delivery with
+  broken resources read "needs network to deploy", although no network
+  brings back a blob the delivery lost. Broken resources now give a third
+  verdict, *incomplete* (report: `INCOMPLETE DELIVERY`), which outranks
+  the other two. The JSON report keeps its shape (`airGapReady` plus the
+  reasons); the broken reason comes first and now reads "missing from the
+  archive or incomplete".
+
 ## [2.0.1] - pre-release
 
 ### Fixed

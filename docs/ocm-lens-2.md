@@ -32,7 +32,19 @@ in a worker; files never leave the machine.
   bytes in the archive), `external` (ociArtifact, github, s3, ...),
   `broken` (declared localBlob, bytes missing), `none`, `unknown`.
   Versioned access spellings from the current CLI (`LocalBlob/v1`) classify
-  like their base type.
+  like their base type. An image or Helm chart stored by value (what
+  `ocm transfer --copy-resources` and `input: helm` write) is a localBlob
+  whose bytes are an OCI manifest: it counts as `transported` only when
+  every blob the manifest names is in the archive at the declared size,
+  otherwise it is `broken` with `OCM_ARTIFACT_INCOMPLETE`.
+- **CLI archive layout** (ocm CLI 0.13): a component version with stored
+  artifacts is tagged as an OCI index around its descriptor manifest and
+  the artifacts' manifests, and those manifests are listed untagged as
+  well; signing leaves the previous descriptor untagged next to the new
+  one. The walk reads tagged artifacts first, resolves an index to its
+  descriptor manifest, never reads an image or chart manifest as a
+  component version, and skips an untagged descriptor for a component
+  version a tag already delivered.
 - **Completeness**: resources only (sources are provenance, not deployment
   need). `airGapReady` additionally requires a complete in-bundle reference
   closure - an unresolved reference is a network dependency in disguise.
@@ -68,7 +80,12 @@ opened.
 schema-stable JSON (`ocm-lens-acceptance-report/v1`): verdict with reasons,
 component table, transport gaps, digest integrity, signature results, SBOM
 coverage, findings. Deterministic by construction (timestamp and tool
-version are injected), golden-tested.
+version are injected), golden-tested. The verdict is one of three:
+self-contained; needs network to deploy (external access, references
+outside the bundle, unknown access types); or incomplete delivery (a
+localBlob missing or cut short), which outranks the other two because no
+network brings such a blob back. The JSON keeps `airGapReady` plus the
+reasons, broken ones first.
 
 ## The demo delivery
 
@@ -167,6 +184,10 @@ the last pre-release.
   are not validated (key pinning is the honest alternative).
 - Deep SBOM analysis stays in SBOM Lens; OCM Lens lists, extracts, and
   hands off.
+- Stored images are checked for completeness (every layer present, at the
+  declared size), not hashed layer by layer: the resource digest covers
+  the manifest, which pins each layer by digest, and a registry verifies
+  layer digests when the delivery is imported.
 - Archive limits are inherited from the shared walker (see
   [docs/ocm.md](ocm.md)): entry caps, preview caps.
 - One delivery at a time; delivery-to-delivery diff is on the 2.x roadmap.

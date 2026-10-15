@@ -1,6 +1,6 @@
 {
   "name": "@sbomlens/ocm-lens",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "description": "OCM Lens 2.0 - understand an OCM delivery: component versions, artifacts, completeness, signatures.",
   "license": "Apache-2.0",
   "private": true,

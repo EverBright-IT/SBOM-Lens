@@ -3,7 +3,7 @@
   "displayName": "OCM Lens",
   "icon": "icon.png",
   "description": "Understand an OCM delivery right in your editor: component versions, artifacts, completeness, digests and signatures, with embedded SBOMs. CTF and component archives.",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "publisher": "everbright-it",
   "license": "Apache-2.0",
   "private": true,

@@ -48,7 +48,11 @@ export function Dashboard() {
           {LAYOUT_LABEL[bundle.layout]}
           {bundle.compressed ? ' (gzip)' : ''}
         </span>
-        {c.airGapReady ? (
+        {c.broken > 0 ? (
+          <span className="rounded border border-red-300 bg-red-50 px-1.5 py-0.5 text-[11px] text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-400">
+            incomplete · {c.broken} broken
+          </span>
+        ) : c.airGapReady ? (
           <span className="rounded border border-emerald-300 bg-emerald-50 px-1.5 py-0.5 text-[11px] text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-400">
             self-contained — air-gap ready
           </span>
