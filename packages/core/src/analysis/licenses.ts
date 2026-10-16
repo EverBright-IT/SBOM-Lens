@@ -1,6 +1,7 @@
 import { licenseIdsInExpression, licenseExpressionError } from '../parse/spec-lint';
 import { isDeprecatedLicenseId, isKnownLicenseId } from '../spec/spdx-license-ids';
 import type { DocumentId } from '../model/ids';
+import { csvCell } from '../util/csv';
 import type { WorkspaceState } from '../workspace/workspace';
 import { SPDX_LICENSE_LIST_SOURCE } from '../spec/spdx-license-ids';
 
@@ -145,8 +146,4 @@ export function licenseInventoryToMarkdown(inventory: LicenseInventory, opts: { 
   }
   lines.push('');
   return lines.join('\n');
-}
-
-function csvCell(value: string): string {
-  return /[",\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
 }

