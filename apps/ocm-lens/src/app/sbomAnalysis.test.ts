@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { OcmBundle } from '@sbomlens/core/ocm';
-import { openBlob, runSbomAnalysis } from './ingest';
+import { loadSbomPackages, openBlob, runSbomAnalysis } from './ingest';
+import { prepareAcceptanceReport } from './report';
 import { useAppStore } from './store';
 
 /**
@@ -53,6 +54,18 @@ vi.mock('../host', () => ({ host: { createWorker: () => harness.makeWorker() } }
 function delivery(sboms: { sha1: string; size: number }[]) {
   const bundle = {
     fileName: 'd.ctf.tar',
+    layout: 'ctf',
+    compressed: false,
+    archiveSize: 4,
+    completeness: {
+      transported: sboms.length,
+      external: 0,
+      broken: 0,
+      unknown: 0,
+      none: 0,
+      unresolvedRefs: 0,
+      airGapReady: true,
+    },
     roots: [],
     shared: [],
     issues: [],
@@ -137,6 +150,8 @@ beforeEach(() => {
     loadError: null,
     sbomRun: null,
     sbomError: null,
+    packageRun: null,
+    packageError: null,
   });
 });
 
@@ -231,5 +246,164 @@ describe('a worker that dies', () => {
     await vi.waitFor(() => expect(useAppStore.getState().sbomError).toBe('out of memory'));
     expect(useAppStore.getState().sbomRun).toBeNull();
     expect(useAppStore.getState().delivery!.sbomAnalyses).toEqual({});
+  });
+});
+
+/** Answers an analysis job as if every SBOM parsed. */
+function respondAnalyzed(worker: FakeWorker, message: Message) {
+  const analyses = Object.fromEntries(
+    (message.items ?? []).map((item) => [item.sha1, { state: 'analyzed', summary: {} }]),
+  );
+  worker.onmessage?.({ data: { kind: 'sbom-analyze', id: message.id, analyses } } as MessageEvent);
+}
+
+/** Answers a package job with progress, then one (empty) list per SBOM. */
+function respondPackages(worker: FakeWorker, message: Message) {
+  const items = message.items ?? [];
+  items.forEach((_, i) =>
+    worker.onmessage?.({
+      data: { kind: 'sbom-progress', id: message.id, done: i + 1, total: items.length },
+    } as MessageEvent),
+  );
+  const lists = Object.fromEntries(
+    items.map((item) => [
+      item.sha1,
+      {
+        sha1: item.sha1,
+        fileName: item.fileName,
+        document: { elements: [] },
+        subjects: [],
+        omitted: { files: 0 },
+      },
+    ]),
+  );
+  worker.onmessage?.({ data: { kind: 'sbom-packages', id: message.id, lists } } as MessageEvent);
+}
+
+const packageRequests = () =>
+  harness.requests
+    .filter((r) => r.kind === 'sbom-packages')
+    .map((r) => r.items!.map((i) => i.sha1));
+
+describe('package lists', () => {
+  beforeEach(() => {
+    harness.handle = (message, worker) => {
+      if (message.kind === 'bundle') respondBundle(worker, message.id, SBOMS);
+      if (message.kind === 'sbom-analyze') respondAnalyzed(worker, message);
+      if (message.kind === 'sbom-packages') respondPackages(worker, message);
+    };
+  });
+
+  it('are read for analysed SBOMs only, once, and again for what "Analyse now" adds', async () => {
+    await openBlob('d.ctf.tar', new Blob([new Uint8Array(4)]), { sbomBudget: 40 });
+    await settled();
+    // Opening alone reads no package list: the views ask for them.
+    expect(packageRequests()).toEqual([]);
+
+    expect(await loadSbomPackages()).toBe(true);
+    expect(packageRequests()).toEqual([[SBOMS[0]!.sha1, SBOMS[1]!.sha1]]);
+    expect(Object.keys(useAppStore.getState().delivery!.sbomPackages)).toEqual([
+      SBOMS[0]!.sha1,
+      SBOMS[1]!.sha1,
+    ]);
+    expect(useAppStore.getState().packageRun).toBeNull();
+
+    expect(await loadSbomPackages()).toBe(true);
+    expect(packageRequests()).toHaveLength(1);
+
+    await runSbomAnalysis();
+    await loadSbomPackages();
+    expect(packageRequests()).toEqual([[SBOMS[0]!.sha1, SBOMS[1]!.sha1], [SBOMS[2]!.sha1]]);
+  });
+
+  it('are read once when two views ask at the same time', async () => {
+    await openBlob('d.ctf.tar', new Blob([new Uint8Array(4)]));
+    await settled();
+    await Promise.all([loadSbomPackages(), loadSbomPackages()]);
+    expect(packageRequests()).toHaveLength(1);
+  });
+
+  it('are dropped when they arrive after another delivery opened', async () => {
+    const held: { message: Message; worker: FakeWorker }[] = [];
+    const other = [{ sha1: 'd'.repeat(40), size: 5 }];
+    let opened = 0;
+    harness.handle = (message, worker) => {
+      if (message.kind === 'bundle')
+        respondBundle(worker, message.id, opened++ === 0 ? SBOMS : other);
+      if (message.kind === 'sbom-analyze') respondAnalyzed(worker, message);
+      if (message.kind === 'sbom-packages') held.push({ message, worker });
+    };
+    await openBlob('first.ctf.tar', new Blob([new Uint8Array(4)]));
+    await settled();
+    const first = loadSbomPackages();
+    await vi.waitFor(() => expect(held).toHaveLength(1));
+    await openBlob('second.ctf.tar', new Blob([new Uint8Array(4)]));
+    await settled();
+
+    respondPackages(held[0]!.worker, held[0]!.message);
+    await first;
+    expect(useAppStore.getState().delivery!.sbomPackages).toEqual({});
+    expect(useAppStore.getState().packageRun).toBeNull();
+  });
+
+  it('stop with a message when the worker dies, and the next request starts over', async () => {
+    await openBlob('d.ctf.tar', new Blob([new Uint8Array(4)]));
+    await settled();
+    harness.handle = (message, worker) => {
+      if (message.kind === 'sbom-packages')
+        worker.onerror?.({ message: 'out of memory', preventDefault() {} } as ErrorEvent);
+    };
+    expect(await loadSbomPackages()).toBe(false);
+    expect(useAppStore.getState().packageError).toBe('out of memory');
+    expect(useAppStore.getState().packageRun).toBeNull();
+    expect(useAppStore.getState().delivery!.sbomPackages).toEqual({});
+
+    harness.handle = (message, worker) => {
+      if (message.kind === 'sbom-packages') respondPackages(worker, message);
+    };
+    expect(await loadSbomPackages()).toBe(true);
+    expect(useAppStore.getState().packageError).toBeNull();
+    expect(Object.keys(useAppStore.getState().delivery!.sbomPackages)).toHaveLength(3);
+  });
+});
+
+describe('the acceptance report export', () => {
+  it('declines while the SBOMs are still being analysed', async () => {
+    harness.handle = (message, worker) => {
+      // The analysis never answers: it is still running.
+      if (message.kind === 'bundle') respondBundle(worker, message.id, SBOMS.slice(0, 1));
+    };
+    await openBlob('d.ctf.tar', new Blob([new Uint8Array(4)]));
+    await vi.waitFor(() => expect(useAppStore.getState().sbomRun).not.toBeNull());
+    const outcome = await prepareAcceptanceReport();
+    expect(outcome.ok).toBe(false);
+    expect(!outcome.ok && outcome.reason).toContain('still being analysed (0 of 1)');
+    expect(harness.requests.some((r) => r.kind === 'sbom-packages')).toBe(false);
+  });
+
+  it('reads the package lists first, and declines with the reason when that fails', async () => {
+    harness.handle = (message, worker) => {
+      if (message.kind === 'bundle') respondBundle(worker, message.id, SBOMS);
+      if (message.kind === 'sbom-analyze') respondAnalyzed(worker, message);
+      if (message.kind === 'sbom-packages')
+        worker.onerror?.({ message: 'out of memory', preventDefault() {} } as ErrorEvent);
+    };
+    await openBlob('d.ctf.tar', new Blob([new Uint8Array(4)]));
+    await settled();
+    const outcome = await prepareAcceptanceReport();
+    expect(packageRequests()).toHaveLength(1);
+    expect(outcome.ok).toBe(false);
+    expect(!outcome.ok && outcome.reason).toContain('reading them stopped: out of memory');
+  });
+
+  it('exports once nothing is missing', async () => {
+    await openBlob('d.ctf.tar', new Blob([new Uint8Array(4)]));
+    await settled();
+    const outcome = await prepareAcceptanceReport(new Date('2026-10-16T00:00:00Z'));
+    expect(outcome.ok).toBe(true);
+    if (!outcome.ok) return;
+    expect(outcome.fileBase).toBe('d');
+    expect(outcome.report.markdown).toContain('| Generated | 2026-10-16T00:00:00.000Z by OCM Lens');
+    expect(outcome.report.json.sbomEvidence).toBeDefined();
   });
 });

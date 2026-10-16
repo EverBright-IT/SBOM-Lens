@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import clsx from 'clsx';
 import type { OcmArtifact, OcmCv, OcmTransport } from '@sbomlens/core/ocm';
+import { coveragePlaceKey } from '@sbomlens/core/ocm';
 import { useSbomEvidence } from '../app/evidence';
 import { extractBlob, runDigestChecks } from '../app/ingest';
 import { saveBytes } from '../app/download';
@@ -432,7 +433,8 @@ function ArtifactDetail({ row }: { row: Row }) {
       {downloadError && <p className="mt-2 text-xs text-red-600 dark:text-red-400">{downloadError}</p>}
       {artifact.sbom && (
         <p className="mt-2 text-xs text-slate-400">
-          For deep SBOM analysis (cascades, licenses, VEX), open the downloaded file in SBOM Lens.
+          Its packages, their licenses and versions are in the Packages view. For dependency graphs and VEX, open the
+          downloaded file in SBOM Lens.
         </p>
       )}
     </div>
@@ -444,6 +446,7 @@ function SbomSection({ cvId, index }: { cvId: string; index: number }) {
   const evidence = useSbomEvidence();
   const delivery = useAppStore((s) => s.delivery);
   const selectSbom = useAppStore((s) => s.actions.selectSbom);
+  const showPackages = useAppStore((s) => s.actions.showPackages);
   if (!evidence || !delivery) return null;
   const open = (ref: { cvId: string; index: number }) => selectSbom({ cvId: ref.cvId, role: 'resource', index: ref.index });
 
@@ -453,9 +456,20 @@ function SbomSection({ cvId, index }: { cvId: string; index: number }) {
       <Section
         title="SBOM evidence"
         action={
-          <button type="button" onClick={() => open(occurrence.at)} className="text-xs text-accent-700 hover:underline dark:text-accent-400">
-            Details
-          </button>
+          <span className="flex gap-3">
+            {occurrence.binding && occurrence.sha1 && (
+              <button
+                type="button"
+                onClick={() => showPackages({ sbom: occurrence.sha1! })}
+                className="text-xs text-accent-700 hover:underline dark:text-accent-400"
+              >
+                Packages
+              </button>
+            )}
+            <button type="button" onClick={() => open(occurrence.at)} className="text-xs text-accent-700 hover:underline dark:text-accent-400">
+              Details
+            </button>
+          </span>
         }
       >
         {occurrence.binding ? (
@@ -484,8 +498,22 @@ function SbomSection({ cvId, index }: { cvId: string; index: number }) {
 
   const row = evidence.coverage.find((r) => r.artifact.cvId === cvId && r.artifact.index === index);
   if (!row || (!row.expected && row.status === 'missing')) return null;
+  const place = coveragePlaceKey(row);
   return (
-    <Section title="SBOM evidence">
+    <Section
+      title="SBOM evidence"
+      action={
+        place ? (
+          <button
+            type="button"
+            onClick={() => showPackages({ place })}
+            className="text-xs text-accent-700 hover:underline dark:text-accent-400"
+          >
+            Packages
+          </button>
+        ) : undefined
+      }
+    >
       <div className="mb-1.5">
         <CoverageChip row={row} />
       </div>

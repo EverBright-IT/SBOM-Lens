@@ -50,6 +50,11 @@ whether digests and signatures hold.
   digest, by reference, by component), every image or binary without one
   named, and a fact sheet per SBOM: format, generator, packages, field
   coverage, NTIA minimum elements and BSI TR-03183 checks.
+- **Packages.** Every package the SBOMs list, with the image or binary it
+  ships in. Ask whether a package is in the delivery by name, purl or CPE,
+  and the answer also names what could not be searched (an image without
+  an SBOM, say). License identifiers counted, versions that differ between
+  artifacts, export as CSV or JSON.
 - **Verify.** Declared blob digests are recomputed from the delivered
   bytes; signatures (RSASSA-PSS and PKCS1-v1_5 over
   `jsonNormalisation/v4alpha1`, v3, v2) verify against a pinned or pasted
@@ -71,8 +76,9 @@ whether digests and signatures hold.
 features out: the Inventory, Conflicts, Licenses, Map, and Diff views,
 comparing two registry versions, the VEX/CSAF overlay, compliance profiles
 (`.ocmlens/profile.json`), and spec info tooltips. 2.1 brought SBOM
-evidence; the packages of a delivery (inventory, search, licenses) come
-next, then the delivery diff. One delivery is open at a time. Keys you pinned
+evidence, 2.2 the Packages view, which takes over from Inventory,
+Conflicts and Licenses for a delivery; the delivery diff comes next. One
+delivery is open at a time. Keys you pinned
 in 1.x carry over. The full list is in the
 [changelog](https://gitlab.com/everbrightit-group/sbom-lens/-/blob/main/apps/ocm-lens/CHANGELOG.md).
 

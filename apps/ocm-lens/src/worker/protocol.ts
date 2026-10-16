@@ -1,12 +1,13 @@
 import type { Diagnostic } from '@sbomlens/core';
-import type { OcmBundle, SbomAnalysis } from '@sbomlens/core/ocm';
+import type { OcmBundle, SbomAnalysis, SbomPackageList } from '@sbomlens/core/ocm';
 
 /**
  * Main thread ↔ bundle worker. Archives stream through a ByteSource, so a
  * multi-GB CTF never exists as one buffer and its bytes never reach the UI
  * thread; only the structured model, the (small, capped) extracted SBOMs
  * with their analysis summaries, and explicitly requested blobs cross back.
- * Parsed SBOM documents never leave the worker.
+ * Parsed SBOM documents never leave the worker whole: the package views get
+ * package lists without files and raw JSON.
  */
 
 interface JobSource {
@@ -62,7 +63,9 @@ export type WorkerRequest =
    */
   | { kind: 'open-many'; id: number; files: { fileName: string; blob: Blob }[] }
   /** Analyse extracted SBOMs (after opening, and on demand); progress per SBOM. */
-  | { kind: 'sbom-analyze'; id: number; items: SbomAnalysisItem[] };
+  | { kind: 'sbom-analyze'; id: number; items: SbomAnalysisItem[] }
+  /** Read the package lists of analysed SBOMs (when the package views need them); progress per SBOM. */
+  | { kind: 'sbom-packages'; id: number; items: SbomAnalysisItem[] };
 
 export type WorkerResponse =
   | {
@@ -79,5 +82,7 @@ export type WorkerResponse =
   | { kind: 'digests'; id: number; results: DigestCheckResult[] }
   | { kind: 'sbom-progress'; id: number; done: number; total: number }
   | { kind: 'sbom-analyze'; id: number; analyses: Record<string, SbomAnalysis> }
+  /** By SHA-1; null where the SBOM gave no package list. */
+  | { kind: 'sbom-packages'; id: number; lists: Record<string, SbomPackageList | null> }
   /** The worker died (crash, out of memory); every pending job gets this. */
   | { kind: 'error'; id: number; message: string };

@@ -102,7 +102,7 @@ async function commit(
   const diagnostics = [...extra, ...response.diagnostics];
   if (response.bundle) {
     actions.loadSucceeded(
-      { bundle: response.bundle, extracted: response.extracted, sbomAnalyses: {}, diagnostics },
+      { bundle: response.bundle, extracted: response.extracted, sbomAnalyses: {}, sbomPackages: {}, diagnostics },
       sourceRef,
     );
     void analyseOnLoad(sbomBudget);
@@ -369,4 +369,50 @@ export async function runSbomAnalysis(): Promise<boolean> {
   });
   if (pending.length === 0) return true;
   return analyse(pending, delivery);
+}
+
+/** One package-list read at a time; a later request waits and then reads what is still missing. */
+let packageQueue: Promise<unknown> = Promise.resolve();
+
+/**
+ * Read the package lists of every analysed SBOM that has none yet (the
+ * Packages view and the report call this; SBOMs analysed later, through
+ * "Analyse now", are read on the next call). Lists land only in the
+ * delivery they were read for.
+ */
+export function loadSbomPackages(): Promise<boolean> {
+  const next = packageQueue.then(readMissingPackages);
+  packageQueue = next.catch(() => undefined);
+  return next;
+}
+
+async function readMissingPackages(): Promise<boolean> {
+  const { delivery, actions } = useAppStore.getState();
+  if (!delivery) return false;
+  const items = sbomItems(delivery).filter(
+    (item) => delivery.sbomAnalyses[item.sha1]?.state === 'analyzed' && !(item.sha1 in delivery.sbomPackages),
+  );
+  if (items.length === 0) return true;
+  actions.setPackageError(null);
+  actions.setPackageRun({ done: 0, total: items.length });
+  try {
+    const copies = items.map((item) => ({ ...item, bytes: item.bytes.slice() }));
+    const response = await run(
+      { kind: 'sbom-packages', items: copies },
+      copies.map((item) => item.bytes.buffer as ArrayBuffer),
+      (done, total) => {
+        if (useAppStore.getState().delivery?.extracted === delivery.extracted) actions.setPackageRun({ done, total });
+      },
+    );
+    if (response.kind !== 'sbom-packages') {
+      if (useAppStore.getState().delivery?.extracted === delivery.extracted) {
+        actions.setPackageError(response.kind === 'error' ? response.message : 'reading the packages did not finish');
+      }
+      return false;
+    }
+    actions.applySbomPackages(response.lists, delivery.extracted);
+    return true;
+  } finally {
+    if (useAppStore.getState().delivery?.extracted === delivery.extracted) actions.setPackageRun(null);
+  }
 }

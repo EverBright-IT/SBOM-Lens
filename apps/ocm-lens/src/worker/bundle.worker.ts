@@ -1,6 +1,6 @@
 import { parse as parseYaml } from 'yaml';
 import { registerYamlParser, sniffContainer } from '@sbomlens/core';
-import type { OcmBundle, SbomAnalysis } from '@sbomlens/core/ocm';
+import type { OcmBundle, SbomAnalysis, SbomPackageList } from '@sbomlens/core/ocm';
 import {
   analyzeSbom,
   blobSource,
@@ -10,6 +10,7 @@ import {
   extractDeliveryBlob,
   readOcmBundle,
   readOcmBundleFrom,
+  readSbomPackages,
 } from '@sbomlens/core/ocm';
 import type { DigestCheckResult, WorkerRequest, WorkerResponse } from './protocol';
 
@@ -42,6 +43,18 @@ async function handle(job: WorkerRequest): Promise<void> {
         scope.postMessage({ kind: 'sbom-progress', id: job.id, done, total: job.items.length });
       }
       scope.postMessage({ kind: 'sbom-analyze', id: job.id, analyses });
+      return;
+    }
+
+    if (job.kind === 'sbom-packages') {
+      const lists: Record<string, SbomPackageList | null> = {};
+      let done = 0;
+      for (const item of job.items) {
+        lists[item.sha1] = await readSbomPackages(item);
+        done++;
+        scope.postMessage({ kind: 'sbom-progress', id: job.id, done, total: job.items.length });
+      }
+      scope.postMessage({ kind: 'sbom-packages', id: job.id, lists });
       return;
     }
 
@@ -128,7 +141,7 @@ async function handle(job: WorkerRequest): Promise<void> {
   } catch (error) {
     if (job.kind === 'extract') {
       scope.postMessage({ kind: 'extract', id: job.id, bytes: null, reason: String(error) });
-    } else if (job.kind === 'sbom-analyze' || job.kind === 'digests') {
+    } else if (job.kind === 'sbom-analyze' || job.kind === 'sbom-packages' || job.kind === 'digests') {
       scope.postMessage({ kind: 'error', id: job.id, message: String(error) });
     } else {
       respondBundle(job.id, {

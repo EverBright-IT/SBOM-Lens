@@ -6,7 +6,9 @@ import type {
   OcmBundle,
   OcmCv,
   OcmCvId,
+  PackageFilter,
   SbomAnalysis,
+  SbomPackageList,
 } from '@sbomlens/core/ocm';
 import type { DigestCheckResult } from '../worker/protocol';
 
@@ -20,13 +22,20 @@ export interface LoadedDelivery {
   extracted: { fileName: string; bytes: Uint8Array }[];
   /** What the worker learned about each extracted SBOM, by its SHA-1. */
   sbomAnalyses: Record<string, SbomAnalysis>;
+  /**
+   * Package lists of analysed SBOMs, by SHA-1, read when the package views
+   * or the report need them (null: the SBOM gave none).
+   */
+  sbomPackages: Record<string, SbomPackageList | null>;
   diagnostics: Diagnostic[];
 }
 
 /** Where the delivery's bytes can be re-read for on-demand blob extraction. */
 export type SourceRef = { kind: 'blob'; blob: Blob } | { kind: 'url'; url: string };
 
-export type MainView = 'dashboard' | 'components' | 'resources' | 'sboms' | 'verify';
+export type MainView = 'dashboard' | 'components' | 'resources' | 'sboms' | 'packages' | 'verify';
+
+export type PackageTab = 'packages' | 'licenses' | 'versions';
 
 export interface ArtifactRef {
   cvId: OcmCvId;
@@ -55,6 +64,13 @@ interface AppState {
   sbomRun: { done: number; total: number } | null;
   /** Why the last SBOM analysis stopped, if it did. */
   sbomError: string | null;
+  /** Package lists being read. */
+  packageRun: { done: number; total: number } | null;
+  /** Why reading package lists stopped, if it did. */
+  packageError: string | null;
+  /** The Packages view's filter and tab, kept while other views are visited. */
+  packageFilter: PackageFilter;
+  packageTab: PackageTab;
   /** Results of the last signature verification run for this delivery. */
   verification: VerificationRun | null;
   actions: {
@@ -77,6 +93,14 @@ interface AppState {
     applySbomAnalyses(analyses: Record<string, SbomAnalysis>, forExtracted?: LoadedDelivery['extracted']): void;
     setSbomRun(run: { done: number; total: number } | null): void;
     setSbomError(message: string | null): void;
+    /** Fold package lists into the delivery they were read for (see applySbomAnalyses). */
+    applySbomPackages(lists: Record<string, SbomPackageList | null>, forExtracted: LoadedDelivery['extracted']): void;
+    setPackageRun(run: { done: number; total: number } | null): void;
+    setPackageError(message: string | null): void;
+    setPackageFilter(filter: PackageFilter): void;
+    setPackageTab(tab: PackageTab): void;
+    /** Open the package list with a filter (an artifact, an SBOM, a license). */
+    showPackages(filter: PackageFilter): void;
     reset(): void;
   };
 }
@@ -92,6 +116,10 @@ export const useAppStore = create<AppState>((set) => ({
   selectedSbom: null,
   sbomRun: null,
   sbomError: null,
+  packageRun: null,
+  packageError: null,
+  packageFilter: {},
+  packageTab: 'packages',
   verification: null,
   actions: {
     loadStarted(fileName) {
@@ -109,6 +137,10 @@ export const useAppStore = create<AppState>((set) => ({
         selectedSbom: null,
         sbomRun: null,
         sbomError: null,
+        packageRun: null,
+        packageError: null,
+        packageFilter: {},
+        packageTab: 'packages',
         verification: null,
       });
     },
@@ -178,6 +210,28 @@ export const useAppStore = create<AppState>((set) => ({
     setSbomError(message) {
       set({ sbomError: message });
     },
+    applySbomPackages(lists, forExtracted) {
+      set((s) =>
+        s.delivery && s.delivery.extracted === forExtracted
+          ? { delivery: { ...s.delivery, sbomPackages: { ...s.delivery.sbomPackages, ...lists } } }
+          : {},
+      );
+    },
+    setPackageRun(run) {
+      set({ packageRun: run });
+    },
+    setPackageError(message) {
+      set({ packageError: message });
+    },
+    setPackageFilter(filter) {
+      set({ packageFilter: filter });
+    },
+    setPackageTab(tab) {
+      set({ packageTab: tab });
+    },
+    showPackages(filter) {
+      set({ packageFilter: filter, packageTab: 'packages', view: 'packages' });
+    },
     reset() {
       set({
         delivery: null,
@@ -190,6 +244,10 @@ export const useAppStore = create<AppState>((set) => ({
         selectedSbom: null,
         sbomRun: null,
         sbomError: null,
+        packageRun: null,
+        packageError: null,
+        packageFilter: {},
+        packageTab: 'packages',
         verification: null,
       });
     },

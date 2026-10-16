@@ -8,6 +8,7 @@ import { APP_VERSION } from '../version';
 import { ComponentsView } from './ComponentsView';
 import { Dashboard } from './Dashboard';
 import { EmptyState } from './EmptyState';
+import { PackagesView } from './PackagesView';
 import { ResourcesView } from './ResourcesView';
 import { SbomsView } from './SbomsView';
 import { VerifyView } from './VerifyView';
@@ -17,6 +18,7 @@ const VIEWS: { id: MainView; label: string }[] = [
   { id: 'components', label: 'Components' },
   { id: 'resources', label: 'Resources' },
   { id: 'sboms', label: 'SBOMs' },
+  { id: 'packages', label: 'Packages' },
   { id: 'verify', label: 'Verify' },
 ];
 
@@ -154,6 +156,7 @@ export function App() {
         {delivery && view === 'components' && <ComponentsView />}
         {delivery && view === 'resources' && <ResourcesView />}
         {delivery && view === 'sboms' && <SbomsView />}
+        {delivery && view === 'packages' && <PackagesView />}
         {delivery && view === 'verify' && <VerifyView />}
       </main>
 

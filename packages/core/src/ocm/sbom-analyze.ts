@@ -1,7 +1,7 @@
 import { documentQuality } from '../analysis/quality';
 import { splitPurl } from '../analysis/purl';
 import { buildIndexes } from '../graph/indexes';
-import type { SbomDocument, SbomElement } from '../model/document';
+import type { RawFields, SbomDocument, SbomElement } from '../model/document';
 import { parseDocument } from '../parse/parser';
 import { BSI_TR_03183_PROFILE } from '../profile/bsi';
 import { evaluateProfile } from '../profile/evaluate';
@@ -11,11 +11,14 @@ import type { LoadedDocument, WorkspaceState } from '../workspace/workspace';
 import { addDocuments, emptyWorkspace } from '../workspace/workspace';
 import type { SbomAnalysis, SbomSubject, SbomSummary } from './sbom-evidence';
 import { digestHex, normalizeName, normalizeRepository, normalizeVersion, parseImageReference } from './sbom-evidence';
+import type { SbomPackageList } from './sbom-packages';
 
 /**
- * The worker half of SBOM evidence: parse an extracted SBOM with the core's
- * SBOM parsers, keep a small summary, drop the document.
- * The UI only ever sees summaries (sbom-evidence.ts grades them).
+ * The worker half of SBOM evidence and the package views: parse an
+ * extracted SBOM with the core's SBOM parsers and keep a small summary
+ * (sbom-evidence.ts grades it), or, when the package views ask, its
+ * packages without files and raw JSON (sbom-packages.ts reads them).
+ * Full documents never leave here.
  */
 
 /** Load-time budget for SBOM analysis, in bytes of SBOM text. */
@@ -176,27 +179,106 @@ function specLabel(doc: SbomDocument): string {
   return version ? `${family} ${version}` : family;
 }
 
+async function parseSbom(input: SbomAnalysisInput): Promise<{ document: SbomDocument; sha1: string } | { reason: string }> {
+  const text = new TextDecoder().decode(input.bytes);
+  const sha1 = input.sha1 ?? (await sha1Hex(input.bytes.slice().buffer as ArrayBuffer));
+  const result = parseDocument({ fileName: input.fileName, text, sha1, byteSize: input.bytes.byteLength });
+  if (!result.document) {
+    return { reason: result.diagnostics.find((d) => d.severity === 'error')?.message ?? 'not an SBOM the parsers accept' };
+  }
+  return { document: result.document, sha1 };
+}
+
 /** Parse one SBOM and keep its summary. Never throws. */
 export async function analyzeSbom(input: SbomAnalysisInput, opts: { now?: number } = {}): Promise<SbomAnalysis> {
   try {
-    const text = new TextDecoder().decode(input.bytes);
-    const sha1 = input.sha1 ?? (await sha1Hex(input.bytes.slice().buffer as ArrayBuffer));
-    const result = parseDocument({ fileName: input.fileName, text, sha1, byteSize: input.bytes.byteLength });
-    if (!result.document) {
-      const reason = result.diagnostics.find((d) => d.severity === 'error')?.message ?? 'not an SBOM the parsers accept';
-      return { state: 'unreadable', reason };
-    }
+    const parsed = await parseSbom(input);
+    if ('reason' in parsed) return { state: 'unreadable', reason: parsed.reason };
     const loaded: LoadedDocument = {
-      document: result.document,
-      indexes: buildIndexes(result.document),
+      document: parsed.document,
+      indexes: buildIndexes(parsed.document),
       // The text stays out of the workspace: only the summary leaves here.
-      source: { fileName: input.fileName, byteSize: input.bytes.byteLength, sha1, text: '' },
+      source: { fileName: input.fileName, byteSize: input.bytes.byteLength, sha1: parsed.sha1, text: '' },
     };
     const ws = addDocuments(emptyWorkspace, [loaded]).workspace;
     return { state: 'analyzed', summary: sbomSummary(ws, loaded, opts.now) };
   } catch (e) {
     return { state: 'unreadable', reason: e instanceof Error ? e.message : String(e) };
   }
+}
+
+/** Parse one SBOM and keep its packages (see packageList). Never throws; null when it cannot be read. */
+export async function readSbomPackages(input: SbomAnalysisInput): Promise<SbomPackageList | null> {
+  try {
+    const parsed = await parseSbom(input);
+    return 'reason' in parsed ? null : packageList(parsed.document, parsed.sha1, input.fileName);
+  } catch {
+    return null;
+  }
+}
+
+const EMPTY_RAW: RawFields = { kind: 'json', value: {} };
+
+/**
+ * An SBOM document cut down to what the package views read: its package
+ * elements, each with identity, version, supplier, licenses and CPEs. Files
+ * (image scanners list thousands), the raw JSON and the relationships stay
+ * behind; how many files were left out travels along.
+ *
+ * Every package stays, the SBOM's subject included: the image or product
+ * an SBOM describes ships too, and a search must find it. The subject is
+ * only marked, and only while the SBOM names at most three: some
+ * generators list every package as described, and then none of them is
+ * the subject.
+ */
+export function packageList(doc: SbomDocument, sha1: string, fileName: string): SbomPackageList {
+  const elements: SbomElement[] = [];
+  let files = 0;
+  for (const element of doc.elements) {
+    if (element.kind === 'file') files++;
+    else elements.push(slimElement(element));
+  }
+  const described = new Set(doc.describes);
+  const subjects = elements.filter((el) => described.has(el.spdxId)).map((el) => el.spdxId);
+  return {
+    sha1,
+    fileName,
+    document: {
+      id: doc.id,
+      spec: doc.spec,
+      spdxId: doc.spdxId,
+      name: doc.name,
+      namespace: doc.namespace,
+      creators: [],
+      describes: [],
+      externalDocumentRefs: [],
+      elements,
+      relationships: [],
+      diagnostics: [],
+    },
+    subjects: subjects.length <= MAX_INFERRED_SUBJECTS ? subjects : [],
+    omitted: { files },
+  };
+}
+
+function slimElement(element: SbomElement): SbomElement {
+  // Search matches CPEs from the external references; the other
+  // references (often a dozen per package) are not needed here.
+  const cpes = (element.externalRefs ?? []).filter((ref) => ref.locator.toLowerCase().startsWith('cpe:'));
+  return {
+    id: element.id,
+    documentId: element.documentId,
+    spdxId: element.spdxId,
+    kind: element.kind,
+    name: element.name,
+    ...(element.version !== undefined ? { version: element.version } : {}),
+    ...(element.purl !== undefined ? { purl: element.purl } : {}),
+    ...(element.supplier !== undefined ? { supplier: element.supplier } : {}),
+    ...(element.licenseConcluded !== undefined ? { licenseConcluded: element.licenseConcluded } : {}),
+    ...(element.licenseDeclared !== undefined ? { licenseDeclared: element.licenseDeclared } : {}),
+    ...(cpes.length > 0 ? { externalRefs: cpes } : {}),
+    raw: EMPTY_RAW,
+  };
 }
 
 /**

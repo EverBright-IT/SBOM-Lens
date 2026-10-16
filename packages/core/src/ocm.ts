@@ -78,10 +78,43 @@ export type { SbomAnalysisInput } from './ocm/sbom-analyze';
 export {
   analyzeDeliverySboms,
   analyzeSbom,
+  packageList,
+  readSbomPackages,
   SBOM_ANALYSIS_BUDGET_DEFAULT,
   sbomSubject,
   sbomSummary,
 } from './ocm/sbom-analyze';
+export type {
+  DeliveryConflict,
+  DeliveryLicenseRow,
+  DeliveryLicenses,
+  DeliveryPackage,
+  DeliveryPackages,
+  NotListedReason,
+  PackageAnswer,
+  PackageFilter,
+  PackagePlace,
+  PackageScope,
+  PackageSearch,
+  PackageSource,
+  PackagesExportMeta,
+  SbomPackageList,
+} from './ocm/sbom-packages';
+export {
+  coveragePlaceKey,
+  deliveryConflicts,
+  deliveryLicenses,
+  deliveryPackages,
+  isIdentifier,
+  NOT_LISTED_LABEL,
+  packagesToCsv,
+  packagesToJson,
+  packageWorkspace,
+  placeBinding,
+  placeLabel,
+  searchAnswer,
+  searchPackages,
+} from './ocm/sbom-packages';
 export type { ByteSource } from './util/bytesource';
 export { blobSource } from './util/bytesource';
 

@@ -16,7 +16,8 @@ export function EmptyState({ onPickFile }: { onPickFile: () => void }) {
         <p className="mx-auto mt-2 max-w-md text-sm text-slate-500 dark:text-slate-400">
           Drop an OCM delivery anywhere in this window: a CTF (<code>.ctf</code>/<code>.tar</code>/
           <code>.tgz</code>), a component archive, or a bare component descriptor. You get the
-          delivery as one picture: components, artifacts, completeness, signatures.
+          delivery as one picture: components, artifacts, completeness, signatures, SBOMs and the
+          packages they list.
         </p>
         <div className="mt-5 flex justify-center gap-2">
           <button
@@ -38,7 +39,7 @@ export function EmptyState({ onPickFile }: { onPickFile: () => void }) {
             type="button"
             onClick={() => void openSbomDemo()}
             disabled={loading !== null}
-            title="A delivery whose SBOMs show every binding level: by digest, by reference, by component, external, missing"
+            title="A delivery whose SBOMs show every binding level (by digest, by reference, by component, external, missing), with packages to search"
             className="rounded border border-slate-200 px-3 py-1.5 text-sm text-slate-700 hover:border-accent-300 hover:text-accent-700 disabled:opacity-50 dark:border-slate-700 dark:text-slate-200 dark:hover:border-accent-700 dark:hover:text-accent-400"
           >
             SBOM demo

@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
-import { acceptanceReport, digestSummary } from '@sbomlens/core/ocm';
+import { digestSummary } from '@sbomlens/core/ocm';
 import { saveBytes } from '../app/download';
 import { runDigestChecks } from '../app/ingest';
+import { prepareAcceptanceReport } from '../app/report';
 import { useAppStore } from '../app/store';
 import { addTrustedKey, loadTrustedKeys, removeTrustedKey } from '../app/trustedKeys';
 import { runVerification } from '../app/verifyRun';
-import { APP_VERSION } from '../version';
 import { BUTTON_PRIMARY, BUTTON_SECONDARY, Chip, Section, formatBytes } from './bits';
 
 /**
@@ -26,6 +26,9 @@ export function VerifyView() {
   const [keyError, setKeyError] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
   const [digestRun, setDigestRun] = useState<{ done: number; total: number } | null>(null);
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
+  const sbomRun = useAppStore((s) => s.sbomRun);
 
   const bundle = delivery?.bundle ?? null;
   const signedCvs = bundle?.componentVersions.filter((cv) => (cv.signatures?.length ?? 0) > 0) ?? [];
@@ -77,17 +80,29 @@ export function VerifyView() {
     setTrusted(loadTrustedKeys());
   };
 
-  const exportReport = (format: 'markdown' | 'json') => {
-    const report = acceptanceReport({
-      bundle,
-      signatures: verification?.entries,
-      toolVersion: APP_VERSION,
-      generatedAt: new Date().toISOString(),
-      sbomAnalyses: delivery.sbomAnalyses,
-    });
-    const base = bundle.fileName.replace(/(\.(ctf|tar|tgz|gz|yaml|yml|json))+$/i, '');
-    if (format === 'markdown') saveBytes(`${base}.acceptance.md`, 'text/markdown', report.markdown);
-    else saveBytes(`${base}.acceptance.json`, 'application/json', JSON.stringify(report.json, null, 2));
+  // The report is complete or not exported: prepareAcceptanceReport reads
+  // missing package lists first and declines while SBOMs are analysed.
+  const exportReport = async (format: 'markdown' | 'json') => {
+    setExporting(true);
+    setExportError(null);
+    try {
+      const outcome = await prepareAcceptanceReport();
+      if (!outcome.ok) {
+        setExportError(outcome.reason);
+        return;
+      }
+      if (format === 'markdown') {
+        saveBytes(`${outcome.fileBase}.acceptance.md`, 'text/markdown', outcome.report.markdown);
+      } else {
+        saveBytes(
+          `${outcome.fileBase}.acceptance.json`,
+          'application/json',
+          JSON.stringify(outcome.report.json, null, 2),
+        );
+      }
+    } finally {
+      setExporting(false);
+    }
   };
 
   const findArtifact = (cvId: string, artifactName: string) => {
@@ -107,14 +122,35 @@ export function VerifyView() {
         <h1 className="text-lg font-semibold">Verify delivery</h1>
         {running && <span className="text-xs text-slate-400">verifying...</span>}
         <span className="ml-auto flex gap-2">
-          <button type="button" onClick={() => exportReport('markdown')} className={BUTTON_SECONDARY}>
-            Export report (Markdown)
+          <button
+            type="button"
+            disabled={exporting || sbomRun !== null}
+            title={sbomRun ? 'Available when the SBOM analysis is done' : undefined}
+            onClick={() => void exportReport('markdown')}
+            className={BUTTON_SECONDARY}
+          >
+            {exporting ? 'Preparing report...' : 'Export report (Markdown)'}
           </button>
-          <button type="button" onClick={() => exportReport('json')} className={BUTTON_SECONDARY}>
+          <button
+            type="button"
+            disabled={exporting || sbomRun !== null}
+            title={sbomRun ? 'Available when the SBOM analysis is done' : undefined}
+            onClick={() => void exportReport('json')}
+            className={BUTTON_SECONDARY}
+          >
             JSON
           </button>
         </span>
       </div>
+      {sbomRun && (
+        <p className="-mt-2 mb-4 text-xs text-slate-500 dark:text-slate-400">
+          The SBOMs are being analysed ({sbomRun.done} of {sbomRun.total}); the report waits for the
+          result.
+        </p>
+      )}
+      {exportError && (
+        <p className="-mt-2 mb-4 text-xs text-red-600 dark:text-red-400">{exportError}</p>
+      )}
 
       <Section title="Integrity — blob digests">
         {bundle.digestsDeferred && (

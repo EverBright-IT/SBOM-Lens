@@ -338,6 +338,7 @@ function SbomDetail({
   onClose: () => void;
 }) {
   const selectCv = useAppStore((s) => s.actions.selectCv);
+  const showPackages = useAppStore((s) => s.actions.showPackages);
   const artifact = artifactAt(bundle, occurrence.at);
   const analysis = occurrence.sha1 ? delivery.sbomAnalyses[occurrence.sha1] : undefined;
   const summary = analysis?.state === 'analyzed' ? analysis.summary : undefined;
@@ -395,7 +396,18 @@ function SbomDetail({
             <KV label="Name">{summary.documentName || '-'}</KV>
             <KV label="Generator">{generatorLabel(summary.creators)}</KV>
             {summary.created && <KV label="Created">{summary.created}</KV>}
-            <KV label="Packages">{summary.packages}</KV>
+            <KV label="Packages">
+              {summary.packages}
+              {occurrence.sha1 && (
+                <button
+                  type="button"
+                  onClick={() => showPackages({ sbom: occurrence.sha1! })}
+                  className="ml-2 text-xs text-accent-700 hover:underline dark:text-accent-400"
+                >
+                  Show in Packages
+                </button>
+              )}
+            </KV>
             <KV label="Relationships">{summary.relationships}</KV>
             {artifact.sbom && <KV label="Size">{formatBytes(artifact.sbom.size)}</KV>}
             <KV label="Subject">

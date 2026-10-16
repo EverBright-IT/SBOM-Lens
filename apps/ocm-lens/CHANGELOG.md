@@ -3,6 +3,66 @@
 OCM Lens 2.0 versions independently of the monorepo's 0.x line. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.2.0] - pre-release
+
+### Added
+- **Packages: what ships, where, and is X in it?** A new Packages view
+  lists every package the delivery's SBOMs name, once per identity and
+  version, with the place it ships: the image or binary its SBOM is bound
+  to (by digest or reference), the component version a release SBOM names,
+  or the SBOM alone when it identifies nothing. The binding strength from
+  the SBOM evidence travels with every place. An SBOM's subject (the image
+  or product it describes) ships too: it is listed, marked and searchable,
+  so per SBOM the count matches its fact sheet. Filters by ecosystem (purl
+  type), artifact and license; the table stays fast for deliveries with
+  tens of thousands of packages. This is the OCM-native successor of the
+  1.x Inventory, Conflicts and Licenses views announced with 2.0.
+- **Search by name, purl or CPE, with an honest "not found".** A purl
+  (`pkg:deb/debian/openssl`, with or without version) or a CPE matches by
+  identity, so `pkg:npm/lodash` never finds lodash-es. Every answer says
+  where the matches ship and which artifacts that ship software were not
+  searched, and why: no SBOM, an SBOM outside the delivery, not analysed
+  yet, unreadable. It also names artifacts searched only through an SBOM
+  that does not identify them or that states a different digest (it may
+  describe a local build), how many packages state no purl or CPE (only a
+  name search finds those), and when a filter narrows the search. A search
+  for a vulnerable component therefore never reads as an all-clear for an
+  image nobody could look into.
+- **Licenses.** The license identifiers the packages name (concluded, else
+  declared), checked against the SPDX License List and counted, with the
+  artifacts they ship in; packages without a license and values that are
+  not SPDX expressions are counted separately. What a license obliges is
+  not judged.
+- **Versions.** Packages that ship in more than one version, those that
+  differ between artifacts first (two images carrying different openssl
+  releases); several versions inside one artifact on request.
+- **Export.** CSV (one line per package and artifact) and JSON
+  (`ocm-lens-packages/v1`, with what the list does not cover) of the
+  current filter. The CSV follows the formula guard of the SBOM Lens
+  exports (0.29.9): a cell that starts with `=`, `+`, `-` or `@`, with a
+  tab, CR or LF, or with the full-width form of one of the four gets a
+  leading single quote, so a spreadsheet reads it as text. npm scopes such
+  as `@types/node` keep their name.
+- **Acceptance report.** Key figures in a new "Packages" section (packages,
+  ecosystems, license identifiers, versions that differ between artifacts,
+  artifacts the list does not cover) and an additive `packages` object in
+  the JSON; the schema stays `ocm-lens-acceptance-report/v1`. The export
+  reads the package lists first, so the report does not depend on which
+  views were open, and it waits while SBOMs are being analysed: a report
+  is complete or not exported, with the reason. Its order no longer
+  depends on the machine's locale.
+- Links into the package list from the SBOM fact sheet and from the SBOM
+  evidence of an artifact in the Resources view.
+
+### Changed
+- **Package lists reach the UI, documents still do not.** The worker hands
+  over each analysed SBOM's packages (identity, version, supplier,
+  licenses, CPEs) when the Packages view or the report first needs them;
+  files (image scanners list thousands), the raw JSON and the
+  relationships stay in the worker. Files are counted, not listed. Every
+  package element is kept, also in SBOMs that name all their packages as
+  described.
+
 ## [2.1.0] - pre-release
 
 ### Added

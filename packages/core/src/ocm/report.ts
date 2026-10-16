@@ -1,6 +1,8 @@
 import type { OcmArtifact, OcmBundle, OcmCv } from '../model/ocm-bundle';
 import type { ResourceRef, SbomAnalysis, SbomBinding, SbomCoverageRow, SbomEvidence } from './sbom-evidence';
 import { ntiaLabel, ntiaSummary, sbomEvidence } from './sbom-evidence';
+import type { DeliveryConflict, DeliveryLicenses, DeliveryPackages, SbomPackageList } from './sbom-packages';
+import { deliveryConflicts, deliveryLicenses, deliveryPackages, NOT_LISTED_LABEL, placeLabel } from './sbom-packages';
 import type { SignatureVerdict } from './verify';
 
 /**
@@ -32,6 +34,12 @@ export interface AcceptanceReportInput {
    * SBOMs as before.
    */
   sbomAnalyses?: Readonly<Record<string, SbomAnalysis>>;
+  /**
+   * The analysed SBOMs' package lists (by SHA-1; null where none could be
+   * read). With them and the analyses, the report adds the delivery's
+   * package figures; the full list belongs in the package export.
+   */
+  sbomPackages?: Readonly<Record<string, SbomPackageList | null>>;
 }
 
 export interface AcceptanceReport {
@@ -123,6 +131,7 @@ export function acceptanceReport(input: AcceptanceReportInput): AcceptanceReport
     .map((cv) => ({ cv, sboms: cv.resources.filter((r) => r.sbom) }))
     .filter((e) => e.sboms.length > 0);
   const evidence = input.sbomAnalyses ? sbomEvidence(bundle, input.sbomAnalyses) : undefined;
+  const packages = evidence && input.sbomPackages ? packageFigures(deliveryPackages(evidence, input.sbomPackages)) : undefined;
 
   const reasons: string[] = [];
   if (c.broken > 0) reasons.push(`${c.broken} localBlob resource(s) are missing from the archive or incomplete`);
@@ -178,6 +187,7 @@ export function acceptanceReport(input: AcceptanceReportInput): AcceptanceReport
       ? `- ${evidenceLine(evidence)}`
       : `- SBOMs: ${sbomCarriers.length} of ${bundle.componentVersions.length} component version(s) carry embedded SBOMs`,
   );
+  if (packages) push(`- ${packagesLine(packages)}`);
   push();
   push('## Component versions');
   push();
@@ -241,6 +251,10 @@ export function acceptanceReport(input: AcceptanceReportInput): AcceptanceReport
   push();
   if (evidence) {
     for (const line of evidenceSection(bundle, evidence, input.sbomAnalyses!)) push(line);
+    if (packages) {
+      push();
+      for (const line of packagesSection(bundle, packages)) push(line);
+    }
   } else {
     push('## Embedded SBOMs');
     push();
@@ -297,10 +311,121 @@ export function acceptanceReport(input: AcceptanceReportInput): AcceptanceReport
     },
     signatures: signatures ?? null,
     ...(evidence ? { sbomEvidence: evidenceJson(bundle, evidence, input.sbomAnalyses!) } : {}),
+    ...(packages ? { packages: packagesJson(bundle, packages) } : {}),
     findings: findings.map((d) => ({ severity: d.severity, code: d.code, message: d.message })),
   };
 
   return { markdown: lines.join('\n'), json };
+}
+
+interface PackageFigures {
+  model: DeliveryPackages;
+  licenses: DeliveryLicenses;
+  conflicts: DeliveryConflict[];
+}
+
+function packageFigures(model: DeliveryPackages): PackageFigures {
+  return { model, licenses: deliveryLicenses(model), conflicts: deliveryConflicts(model) };
+}
+
+function packagesLine({ model, conflicts }: PackageFigures): string {
+  const across = conflicts.filter((c) => c.acrossPlaces).length;
+  return `Packages: ${model.packages.length} listed by ${model.sources.length} analysed SBOM(s); ${
+    across === 0 ? 'no package differs in version between artifacts' : `${across} package(s) differ in version between artifacts`
+  }`;
+}
+
+const KIND_LABEL = { listed: 'on the SPDX License List', deprecated: 'deprecated there', ref: 'LicenseRef', unknown: 'not on the list' } as const;
+
+/** Key figures only: the full list with every artifact belongs in the package export. */
+function packagesSection(bundle: OcmBundle, { model, licenses, conflicts }: PackageFigures): string[] {
+  const out: string[] = ['## Packages', ''];
+  out.push(
+    `${model.packages.length} package(s) listed by ${model.sources.length} analysed SBOM(s), each identity and version counted once${model.subjects > 0 ? `, ${model.subjects} of them an SBOM's subject (the image or product it describes)` : ''}.${model.omitted.files > 0 ? ` Not counted: ${model.omitted.files} file entries.` : ''} The package export (CSV or JSON) lists every package with the artifact it ships in.`,
+  );
+  out.push('');
+  if (model.ecosystems.length > 0) {
+    out.push(`- Ecosystems (purl type): ${model.ecosystems.map((e) => `${e.ecosystem ?? 'without purl'} ${e.packages}`).join(', ')}`);
+  }
+  const kinds = (Object.keys(KIND_LABEL) as (keyof typeof KIND_LABEL)[])
+    .filter((k) => licenses.kinds[k] > 0)
+    .map((k) => `${licenses.kinds[k]} ${KIND_LABEL[k]}`);
+  out.push(
+    `- License identifiers: ${licenses.rows.length} distinct${kinds.length > 0 ? ` (${kinds.join(', ')})` : ''}; ${licenses.withoutLicense} package(s) without a license${licenses.subjectsWithoutLicense > 0 ? ` (${licenses.subjectsWithoutLicense} of them SBOM subjects)` : ''}; ${licenses.unparsed.reduce((n, u) => n + u.packages, 0)} with a value that is not an SPDX expression`,
+  );
+  if (licenses.rows.length > 0) {
+    const top = licenses.rows.slice(0, 10).map((r) => `${r.id} (${r.packages})`);
+    out.push(`- Most named: ${top.join(', ')}${licenses.rows.length > 10 ? `, and ${licenses.rows.length - 10} more` : ''}`);
+  }
+  const where = (ref: ResourceRef) => `${ref.cvId} ${resourceAt(bundle, ref)?.name ?? '?'}`;
+  if (model.scope.notListed.length > 0) {
+    out.push(
+      `- Not covered by this list: ${model.scope.notListed.map(({ row, reason }) => `${where(row.artifact)} (${NOT_LISTED_LABEL[reason]})`).join('; ')}`,
+    );
+  }
+  if (model.scope.unverified.length > 0) {
+    out.push(
+      `- Covered only by an SBOM that does not identify them: ${model.scope.unverified.map((row) => where(row.artifact)).join('; ')}`,
+    );
+  }
+  if (model.scope.digestDiffers.length > 0) {
+    out.push(
+      `- Covered by an SBOM that states a different digest (it may describe a local build, not the delivered bytes): ${model.scope.digestDiffers.map((row) => where(row.artifact)).join('; ')}`,
+    );
+  }
+  out.push('');
+  out.push('License identifiers are counted, not judged: what a license obliges is not part of this report.');
+
+  const across = conflicts.filter((c) => c.acrossPlaces);
+  if (across.length > 0) {
+    out.push('', '### Versions that differ between artifacts', '', '| Package | Versions |', '| --- | --- |');
+    for (const conflict of across.slice(0, 15)) {
+      const versions = conflict.versions.map(
+        (v) => `${v.version} in ${v.package.places.map((p) => placeLabel(bundle, p)).join(', ')}`,
+      );
+      const identity = conflict.key.startsWith('purl:') ? ` (${conflict.key.slice('purl:'.length)})` : '';
+      out.push(`| ${conflict.name}${identity} | ${versions.join('; ')} |`);
+    }
+    if (across.length > 15) out.push('', `... and ${across.length - 15} more in the package views and the JSON report.`);
+  }
+  const within = conflicts.length - across.length;
+  if (within > 0) {
+    out.push('', `${within} more package(s) occur in several versions inside one artifact.`);
+  }
+  return out;
+}
+
+function packagesJson(bundle: OcmBundle, { model, licenses, conflicts }: PackageFigures): Record<string, unknown> {
+  const named = (ref: ResourceRef) => ({ cvId: ref.cvId, artifact: resourceAt(bundle, ref)?.name ?? null });
+  return {
+    total: model.packages.length,
+    sboms: model.sources.length,
+    subjects: model.subjects,
+    omitted: model.omitted,
+    ecosystems: model.ecosystems.map((e) => ({ ecosystem: e.ecosystem ?? null, packages: e.packages })),
+    licenses: {
+      identifiers: licenses.rows.map((r) => ({ id: r.id, kind: r.kind, packages: r.packages })),
+      withoutLicense: licenses.withoutLicense,
+      subjectsWithoutLicense: licenses.subjectsWithoutLicense,
+      notSpdxExpressions: licenses.unparsed.reduce((n, u) => n + u.packages, 0),
+    },
+    conflicts: conflicts.map((c) => ({
+      name: c.name,
+      identity: c.key,
+      acrossArtifacts: c.acrossPlaces,
+      versions: c.versions.map((v) => ({
+        version: v.version,
+        foundIn: v.package.places.map((p) => ({
+          cvId: p.cvId,
+          artifact: p.kind === 'artifact' && p.ref ? (resourceAt(bundle, p.ref)?.name ?? null) : null,
+          binding: p.strength,
+        })),
+      })),
+    })),
+    notListed: model.scope.notListed.map(({ row, reason }) => ({ ...named(row.artifact), reason })),
+    unverified: model.scope.unverified.map((row) => named(row.artifact)),
+    digestDiffers: model.scope.digestDiffers.map((row) => named(row.artifact)),
+  };
 }
 
 function evidenceLine(evidence: SbomEvidence): string {
