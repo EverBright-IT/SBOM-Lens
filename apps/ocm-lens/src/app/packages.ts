@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
-import type { DeliveryPackages, SbomPackageList } from '@sbomlens/core/ocm';
-import { deliveryPackages, packageWorkspace } from '@sbomlens/core/ocm';
+import type { DeliveryPackages, DeliveryVex, SbomPackageList } from '@sbomlens/core/ocm';
+import { deliveryPackages, deliveryVex, packageWorkspace } from '@sbomlens/core/ocm';
 import { useSbomEvidence } from './evidence';
 import { useAppStore } from './store';
 
@@ -24,5 +24,18 @@ export function useDeliveryPackages(): DeliveryPackages | null {
   return useMemo(
     () => (evidence && lists && ws ? deliveryPackages(evidence, lists, ws) : null),
     [evidence, lists, ws],
+  );
+}
+
+/**
+ * What the delivery's VEX and CSAF documents state about its packages;
+ * null while no document is known. Recomputed when the packages or the
+ * sources change.
+ */
+export function useDeliveryVex(model: DeliveryPackages | null): DeliveryVex | null {
+  const sources = useAppStore((s) => s.delivery?.vexSources);
+  return useMemo(
+    () => (model && sources && sources.length > 0 ? deliveryVex(model, sources) : null),
+    [model, sources],
   );
 }

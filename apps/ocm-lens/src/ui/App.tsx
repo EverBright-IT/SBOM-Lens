@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react';
 import clsx from 'clsx';
-import { openFile, openFromUrl } from '../app/ingest';
+import { addVexFiles, isVexFile, openFile, openFromUrl } from '../app/ingest';
 import { IS_VSCODE } from '../host';
 import type { MainView } from '../app/store';
 import { useAppStore } from '../app/store';
@@ -95,12 +95,13 @@ export function App() {
   }, []);
 
   // Drop anywhere in the window: the gesture every viewer should honor.
+  // A VEX or CSAF document joins the open delivery instead of replacing it.
   useEffect(() => {
     const over = (e: DragEvent) => e.preventDefault();
     const drop = (e: DragEvent) => {
       e.preventDefault();
-      const file = e.dataTransfer?.files?.[0];
-      if (file) void openFile(file);
+      const files = [...(e.dataTransfer?.files ?? [])];
+      if (files.length > 0) void openOrAdd(files);
     };
     window.addEventListener('dragover', over);
     window.addEventListener('drop', drop);
@@ -189,10 +190,39 @@ export function App() {
         accept=".ctf,.tar,.tgz,.gz,.yaml,.yml,.json"
         onChange={(e) => {
           const file = e.target.files?.[0];
-          if (file) void openFile(file);
+          if (file) void openOrAdd([file]);
           e.target.value = '';
         }}
       />
     </div>
   );
+}
+
+/**
+ * A dropped or picked file: VEX and CSAF documents are added to the open
+ * delivery (and need one); anything else opens as the delivery.
+ */
+async function openOrAdd(files: File[]): Promise<void> {
+  const vex: File[] = [];
+  const others: File[] = [];
+  for (const file of files) (await isVexFile(file) ? vex : others).push(file);
+  // A delivery dropped together with its VEX files opens first.
+  if (others[0]) await openFile(others[0]);
+  const { delivery, actions } = useAppStore.getState();
+  if (vex.length > 0) {
+    if (!delivery) {
+      actions.loadFailed(vex[0]!.name, [
+        {
+          severity: 'error',
+          code: 'VEX_NEEDS_DELIVERY',
+          message:
+            'This is a VEX or CSAF document. Open the delivery it speaks about first, then add it under Packages > Vulnerabilities.',
+        },
+      ]);
+      return;
+    }
+    actions.setPackageTab('vulnerabilities');
+    actions.setView('packages');
+    await addVexFiles(vex);
+  }
 }

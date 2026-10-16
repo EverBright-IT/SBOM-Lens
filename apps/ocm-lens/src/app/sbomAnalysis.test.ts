@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { OcmBundle } from '@sbomlens/core/ocm';
-import { loadSbomPackages, openBlob, runSbomAnalysis } from './ingest';
+import { addVexFiles, loadSbomPackages, loadVexSources, openBlob, runSbomAnalysis } from './ingest';
 import { prepareAcceptanceReport } from './report';
 import { useAppStore } from './store';
 
@@ -15,7 +15,13 @@ interface Message {
   kind: string;
   id: number;
   options?: Record<string, unknown>;
-  items?: { sha1: string; fileName: string; bytes: Uint8Array }[];
+  items?: {
+    sha1: string;
+    key: string;
+    fileName: string;
+    bytes: Uint8Array;
+    localReference?: string;
+  }[];
 }
 
 interface FakeWorker {
@@ -51,7 +57,7 @@ const harness = vi.hoisted(() => {
 vi.mock('../host', () => ({ host: { createWorker: () => harness.makeWorker() } }));
 
 /** A delivery with one SBOM resource per entry; sizes are the SBOM byte lengths. */
-function delivery(sboms: { sha1: string; size: number }[]) {
+function delivery(sboms: { sha1: string; size: number }[], withVex = false, withNotes = false) {
   const bundle = {
     fileName: 'd.ctf.tar',
     layout: 'ctf',
@@ -94,6 +100,55 @@ function delivery(sboms: { sha1: string; size: number }[]) {
           },
         })),
       },
+      ...(withVex
+        ? [
+            {
+              id: 'example.org/app/vex@1.0.0',
+              name: 'example.org/app/vex',
+              version: '1.0.0',
+              references: [],
+              sources: [],
+              diagnostics: [],
+              resources: [
+                {
+                  role: 'resource',
+                  name: 'vex',
+                  type: 'vex',
+                  transport: 'transported',
+                  raw: {},
+                  access: { type: 'localBlob', raw: { localReference: 'sha256:vex' } },
+                  blob: { size: 120, kind: 'json', mediaType: 'application/vnd.openvex+json' },
+                },
+                {
+                  role: 'resource',
+                  name: 'advisory',
+                  type: 'csaf',
+                  transport: 'external',
+                  raw: {},
+                  access: { type: 'wget', raw: { url: 'https://example.org/a.json' } },
+                },
+                ...(withNotes
+                  ? [
+                      {
+                        role: 'resource',
+                        name: 'notes',
+                        type: 'blob',
+                        transport: 'transported',
+                        raw: {},
+                        access: { type: 'localBlob', raw: { localReference: 'sha256:notes' } },
+                        blob: {
+                          size: 40,
+                          kind: 'json',
+                          mediaType: 'application/json',
+                          previews: [{ name: 'notes', text: '{"todo":"add csaf_version later"}' }],
+                        },
+                      },
+                    ]
+                  : []),
+              ],
+            },
+          ]
+        : []),
     ],
   } as unknown as OcmBundle;
   return {
@@ -152,6 +207,8 @@ beforeEach(() => {
     sbomError: null,
     packageRun: null,
     packageError: null,
+    vexLoading: false,
+    vexError: null,
   });
 });
 
@@ -405,5 +462,193 @@ describe('the acceptance report export', () => {
     expect(outcome.fileBase).toBe('d');
     expect(outcome.report.markdown).toContain('| Generated | 2026-10-16T00:00:00.000Z by OCM Lens');
     expect(outcome.report.json.sbomEvidence).toBeDefined();
+  });
+});
+
+const VEX_DOCUMENT = {
+  id: 'vex-1',
+  fileName: 'vex',
+  format: 'openvex',
+  statements: [],
+  diagnostics: [],
+};
+
+describe('VEX documents', () => {
+  beforeEach(() => {
+    harness.handle = (message, worker) => {
+      if (message.kind === 'bundle')
+        worker.onmessage?.({
+          data: { kind: 'bundle', id: message.id, ...delivery([], true) },
+        } as MessageEvent);
+      if (message.kind === 'vex-read') {
+        const results = Object.fromEntries(
+          (message.items ?? []).map((item) => [
+            item.key,
+            item.localReference
+              ? { document: VEX_DOCUMENT }
+              : { reason: 'neither an OpenVEX nor a CSAF 2.0 document' },
+          ]),
+        );
+        worker.onmessage?.({ data: { kind: 'vex-read', id: message.id, results } } as MessageEvent);
+      }
+    };
+  });
+
+  it('of the delivery are named when it opens and read on request; external ones never', async () => {
+    await openBlob('d.ctf.tar', new Blob([new Uint8Array(4)]));
+    const sources = () => useAppStore.getState().delivery!.vexSources;
+    expect(sources().map((s) => [s.key, s.name, s.state])).toEqual([
+      ['res:example.org/app/vex@1.0.0#0', 'vex', 'pending'],
+      ['res:example.org/app/vex@1.0.0#1', 'advisory', 'external'],
+    ]);
+    expect(harness.requests.some((r) => r.kind === 'vex-read')).toBe(false);
+
+    expect(await loadVexSources()).toBe(true);
+    const read = harness.requests.filter((r) => r.kind === 'vex-read');
+    expect(read).toHaveLength(1);
+    expect(read[0]!.items).toEqual([
+      { key: 'res:example.org/app/vex@1.0.0#0', fileName: 'vex', localReference: 'sha256:vex' },
+    ]);
+    expect(sources().map((s) => s.state)).toEqual(['loaded', 'external']);
+
+    // Nothing pending: a second request reads nothing.
+    await loadVexSources();
+    expect(harness.requests.filter((r) => r.kind === 'vex-read')).toHaveLength(1);
+  });
+
+  it('added by the reader are read, kept with the reason when unusable, and removable', async () => {
+    await openBlob('d.ctf.tar', new Blob([new Uint8Array(4)]));
+    expect(await addVexFiles([new File(['{"a":1}'], 'notes.json')])).toBe(true);
+    const added = useAppStore
+      .getState()
+      .delivery!.vexSources.find((s) => s.origin.kind === 'file')!;
+    expect(added).toMatchObject({
+      name: 'notes.json',
+      state: 'unreadable',
+      reason: 'neither an OpenVEX nor a CSAF 2.0 document',
+    });
+    useAppStore.getState().actions.removeVexEntry(added.key);
+    expect(useAppStore.getState().delivery!.vexSources.map((s) => s.origin.kind)).toEqual([
+      'resource',
+      'resource',
+    ]);
+    // Documents of the delivery cannot be removed.
+    useAppStore.getState().actions.removeVexEntry('res:example.org/app/vex@1.0.0#0');
+    expect(useAppStore.getState().delivery!.vexSources).toHaveLength(2);
+  });
+
+  it('added by the reader are read before a report asked for meanwhile', async () => {
+    await openBlob('d.ctf.tar', new Blob([new Uint8Array(4)]));
+    // A file that takes a while to read (a large one, a slow disk).
+    const slow = new File(['{"a":1}'], 'notes.json');
+    const bytes = await slow.arrayBuffer();
+    Object.defineProperty(slow, 'arrayBuffer', {
+      value: () => new Promise<ArrayBuffer>((resolve) => setTimeout(() => resolve(bytes), 20)),
+    });
+    void addVexFiles([slow]);
+    const outcome = await prepareAcceptanceReport();
+    expect(outcome.ok).toBe(true);
+    if (!outcome.ok) return;
+    expect(outcome.report.markdown).toContain(
+      '| notes.json | - | added file notes.json | - | unreadable: neither an OpenVEX nor a CSAF 2.0 document |',
+    );
+  });
+
+  it('added by the reader say why when the file cannot be read', async () => {
+    await openBlob('d.ctf.tar', new Blob([new Uint8Array(4)]));
+    const gone = new File(['{}'], 'gone.json');
+    Object.defineProperty(gone, 'arrayBuffer', {
+      value: () => Promise.reject(new Error('the file was moved')),
+    });
+    expect(await addVexFiles([gone])).toBe(true);
+    expect(
+      useAppStore.getState().delivery!.vexSources.find((s) => s.origin.kind === 'file'),
+    ).toMatchObject({
+      name: 'gone.json',
+      state: 'unreadable',
+      reason: 'the file could not be read (the file was moved)',
+    });
+    expect(harness.requests.some((r) => r.kind === 'vex-read')).toBe(false);
+  });
+
+  it("stop with the reason when the worker dies: added files say why, the delivery's own stay pending", async () => {
+    harness.handle = (message, worker) => {
+      if (message.kind === 'bundle')
+        worker.onmessage?.({
+          data: { kind: 'bundle', id: message.id, ...delivery([], true) },
+        } as MessageEvent);
+      if (message.kind === 'vex-read')
+        worker.onerror?.({ message: 'out of memory', preventDefault() {} } as ErrorEvent);
+    };
+    await openBlob('d.ctf.tar', new Blob([new Uint8Array(4)]));
+    expect(await addVexFiles([new File(['{}'], 'a.json')])).toBe(false);
+    expect(await loadVexSources()).toBe(false);
+    expect(
+      useAppStore
+        .getState()
+        .delivery!.vexSources.map(
+          (s) => `${s.name} ${s.state}${'reason' in s && s.reason ? `: ${s.reason}` : ''}`,
+        ),
+    ).toEqual(['vex pending', 'advisory external', 'a.json unreadable: out of memory']);
+    expect(useAppStore.getState().vexError).toBe('out of memory');
+    expect(useAppStore.getState().vexLoading).toBe(false);
+  });
+});
+
+describe('VEX candidates too large to be a VEX document', () => {
+  it('are never extracted: a typed one says why, a marked one is dropped, an added file is not read', async () => {
+    const big = 64 * 1024 * 1024;
+    harness.handle = (message, worker) => {
+      if (message.kind === 'bundle') {
+        const d = delivery([], true, true);
+        for (const r of d.bundle.componentVersions[1]!.resources) if (r.blob) r.blob.size = big;
+        worker.onmessage?.({ data: { kind: 'bundle', id: message.id, ...d } } as MessageEvent);
+      }
+    };
+    await openBlob('d.ctf.tar', new Blob([new Uint8Array(4)]));
+    expect(await loadVexSources()).toBe(true);
+    const huge = new File(['{}'], 'huge.json');
+    Object.defineProperty(huge, 'size', { value: big });
+    expect(await addVexFiles([huge])).toBe(true);
+    expect(harness.requests.some((r) => r.kind === 'vex-read')).toBe(false);
+    expect(
+      useAppStore
+        .getState()
+        .delivery!.vexSources.map(
+          (s) => `${s.name} ${s.state}${'reason' in s && s.reason ? `: ${s.reason}` : ''}`,
+        ),
+    ).toEqual([
+      'vex unreadable: larger than 8 MB, not read',
+      'advisory external',
+      'huge.json unreadable: larger than 8 MB, not read',
+    ]);
+  });
+});
+
+describe('a blob only a content marker pointed at', () => {
+  it('is dropped when it does not read as VEX after all', async () => {
+    harness.handle = (message, worker) => {
+      if (message.kind === 'bundle')
+        worker.onmessage?.({
+          data: { kind: 'bundle', id: message.id, ...delivery([], true, true) },
+        } as MessageEvent);
+      if (message.kind === 'vex-read') {
+        const results = Object.fromEntries(
+          (message.items ?? []).map((item) => [
+            item.key,
+            item.localReference === 'sha256:notes'
+              ? { reason: 'neither an OpenVEX nor a CSAF 2.0 document' }
+              : { document: VEX_DOCUMENT },
+          ]),
+        );
+        worker.onmessage?.({ data: { kind: 'vex-read', id: message.id, results } } as MessageEvent);
+      }
+    };
+    await openBlob('d.ctf.tar', new Blob([new Uint8Array(4)]));
+    const names = () =>
+      useAppStore.getState().delivery!.vexSources.map((s) => `${s.name} ${s.state}`);
+    expect(names()).toEqual(['vex pending', 'advisory external', 'notes pending']);
+    await loadVexSources();
+    expect(names()).toEqual(['vex loaded', 'advisory external']);
   });
 });

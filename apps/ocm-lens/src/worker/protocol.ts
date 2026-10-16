@@ -1,4 +1,5 @@
 import type { Diagnostic } from '@sbomlens/core';
+import type { VexDocument } from '@sbomlens/core';
 import type { OcmBundle, SbomAnalysis, SbomPackageList } from '@sbomlens/core/ocm';
 
 /**
@@ -35,6 +36,14 @@ export interface SbomAnalysisItem {
   bytes: Uint8Array;
 }
 
+/** A VEX or CSAF document to read: bytes the reader added, or a blob of the delivery. */
+export type VexReadItem = { key: string; fileName: string } & (
+  | { bytes: Uint8Array }
+  | { localReference: string }
+);
+
+export type VexReadResult = { document: VexDocument } | { reason: string };
+
 export interface DigestCheckRequest {
   cvId: string;
   role: 'resource' | 'source';
@@ -65,7 +74,9 @@ export type WorkerRequest =
   /** Analyse extracted SBOMs (after opening, and on demand); progress per SBOM. */
   | { kind: 'sbom-analyze'; id: number; items: SbomAnalysisItem[] }
   /** Read the package lists of analysed SBOMs (when the package views need them); progress per SBOM. */
-  | { kind: 'sbom-packages'; id: number; items: SbomAnalysisItem[] };
+  | { kind: 'sbom-packages'; id: number; items: SbomAnalysisItem[] }
+  /** Read VEX and CSAF documents; blobs of the delivery come from the source. */
+  | { kind: 'vex-read'; id: number; items: VexReadItem[]; blob?: Blob; buffer?: ArrayBuffer };
 
 export type WorkerResponse =
   | {
@@ -84,5 +95,6 @@ export type WorkerResponse =
   | { kind: 'sbom-analyze'; id: number; analyses: Record<string, SbomAnalysis> }
   /** By SHA-1; null where the SBOM gave no package list. */
   | { kind: 'sbom-packages'; id: number; lists: Record<string, SbomPackageList | null> }
+  | { kind: 'vex-read'; id: number; results: Record<string, VexReadResult> }
   /** The worker died (crash, out of memory); every pending job gets this. */
   | { kind: 'error'; id: number; message: string };

@@ -9,8 +9,9 @@ import type {
   PackageFilter,
   SbomAnalysis,
   SbomPackageList,
+  VexSource,
 } from '@sbomlens/core/ocm';
-import type { DigestCheckResult } from '../worker/protocol';
+import type { DigestCheckResult, VexReadResult } from '../worker/protocol';
 
 /**
  * One delivery at a time: the product's job is understanding THIS bundle.
@@ -27,15 +28,26 @@ export interface LoadedDelivery {
    * or the report need them (null: the SBOM gave none).
    */
   sbomPackages: Record<string, SbomPackageList | null>;
+  /**
+   * VEX and CSAF documents: found in the delivery when it opened (read on
+   * first need), and files the reader added.
+   */
+  vexSources: VexEntry[];
   diagnostics: Diagnostic[];
 }
+
+/**
+ * A VEX or CSAF source with the key the app tracks it by. byContent: found
+ * by a content marker only, so it is dropped if it does not read as VEX.
+ */
+export type VexEntry = VexSource & { key: string; byContent?: boolean };
 
 /** Where the delivery's bytes can be re-read for on-demand blob extraction. */
 export type SourceRef = { kind: 'blob'; blob: Blob } | { kind: 'url'; url: string };
 
 export type MainView = 'dashboard' | 'components' | 'resources' | 'sboms' | 'packages' | 'verify';
 
-export type PackageTab = 'packages' | 'licenses' | 'versions';
+export type PackageTab = 'packages' | 'licenses' | 'versions' | 'vulnerabilities';
 
 export interface ArtifactRef {
   cvId: OcmCvId;
@@ -71,6 +83,10 @@ interface AppState {
   /** The Packages view's filter and tab, kept while other views are visited. */
   packageFilter: PackageFilter;
   packageTab: PackageTab;
+  /** VEX documents being read. */
+  vexLoading: boolean;
+  /** Why reading VEX documents stopped, if it did. */
+  vexError: string | null;
   /** Results of the last signature verification run for this delivery. */
   verification: VerificationRun | null;
   actions: {
@@ -97,6 +113,13 @@ interface AppState {
     applySbomPackages(lists: Record<string, SbomPackageList | null>, forExtracted: LoadedDelivery['extracted']): void;
     setPackageRun(run: { done: number; total: number } | null): void;
     setPackageError(message: string | null): void;
+    /** Fold read results into the sources they were read for (see applySbomAnalyses). */
+    applyVexResults(results: Record<string, VexReadResult>, forExtracted: LoadedDelivery['extracted']): void;
+    addVexEntries(entries: VexEntry[], forExtracted: LoadedDelivery['extracted']): void;
+    /** Remove an added file (documents of the delivery stay). */
+    removeVexEntry(key: string): void;
+    setVexLoading(loading: boolean): void;
+    setVexError(message: string | null): void;
     setPackageFilter(filter: PackageFilter): void;
     setPackageTab(tab: PackageTab): void;
     /** Open the package list with a filter (an artifact, an SBOM, a license). */
@@ -120,6 +143,8 @@ export const useAppStore = create<AppState>((set) => ({
   packageError: null,
   packageFilter: {},
   packageTab: 'packages',
+  vexLoading: false,
+  vexError: null,
   verification: null,
   actions: {
     loadStarted(fileName) {
@@ -141,6 +166,8 @@ export const useAppStore = create<AppState>((set) => ({
         packageError: null,
         packageFilter: {},
         packageTab: 'packages',
+        vexLoading: false,
+        vexError: null,
         verification: null,
       });
     },
@@ -223,6 +250,47 @@ export const useAppStore = create<AppState>((set) => ({
     setPackageError(message) {
       set({ packageError: message });
     },
+    applyVexResults(results, forExtracted) {
+      set((s) => {
+        if (!s.delivery || s.delivery.extracted !== forExtracted) return {};
+        const vexSources = s.delivery.vexSources.flatMap((entry): VexEntry[] => {
+          const result = results[entry.key];
+          if (!result) return [entry];
+          if ('document' in result) {
+            return [{ key: entry.key, origin: entry.origin, name: entry.name, state: 'loaded', document: result.document }];
+          }
+          // A blob only a marker pointed at was not a VEX document after all.
+          if (entry.byContent) return [];
+          return [{ key: entry.key, origin: entry.origin, name: entry.name, state: 'unreadable', reason: result.reason }];
+        });
+        return { delivery: { ...s.delivery, vexSources } };
+      });
+    },
+    addVexEntries(entries, forExtracted) {
+      set((s) =>
+        s.delivery && s.delivery.extracted === forExtracted
+          ? { delivery: { ...s.delivery, vexSources: [...s.delivery.vexSources, ...entries] } }
+          : {},
+      );
+    },
+    removeVexEntry(key) {
+      set((s) =>
+        s.delivery
+          ? {
+              delivery: {
+                ...s.delivery,
+                vexSources: s.delivery.vexSources.filter((e) => e.key !== key || e.origin.kind !== 'file'),
+              },
+            }
+          : {},
+      );
+    },
+    setVexLoading(loading) {
+      set({ vexLoading: loading });
+    },
+    setVexError(message) {
+      set({ vexError: message });
+    },
     setPackageFilter(filter) {
       set({ packageFilter: filter });
     },
@@ -248,6 +316,8 @@ export const useAppStore = create<AppState>((set) => ({
         packageError: null,
         packageFilter: {},
         packageTab: 'packages',
+        vexLoading: false,
+        vexError: null,
         verification: null,
       });
     },

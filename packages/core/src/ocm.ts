@@ -80,6 +80,7 @@ export {
   analyzeSbom,
   packageList,
   readSbomPackages,
+  readVexDocument,
   SBOM_ANALYSIS_BUDGET_DEFAULT,
   sbomSubject,
   sbomSummary,
@@ -115,6 +116,22 @@ export {
   searchAnswer,
   searchPackages,
 } from './ocm/sbom-packages';
+export type {
+  DeliveryVex,
+  VexOrigin,
+  VexResource,
+  VexSource,
+  VexStatusCounts,
+  VexUnmatched,
+  VexVulnerability,
+} from './ocm/sbom-vex';
+export {
+  deliveryVex,
+  findVulnerabilities,
+  tr03191Summary,
+  VEX_STATUS_LABEL,
+  vexResources,
+} from './ocm/sbom-vex';
 export type { ByteSource } from './util/bytesource';
 export { blobSource } from './util/bytesource';
 

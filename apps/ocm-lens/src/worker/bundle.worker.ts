@@ -11,8 +11,9 @@ import {
   readOcmBundle,
   readOcmBundleFrom,
   readSbomPackages,
+  readVexDocument,
 } from '@sbomlens/core/ocm';
-import type { DigestCheckResult, WorkerRequest, WorkerResponse } from './protocol';
+import type { DigestCheckResult, VexReadResult, WorkerRequest, WorkerResponse } from './protocol';
 
 // YAML lives in the worker chunk only; the main bundle stays lean.
 registerYamlParser(parseYaml);
@@ -55,6 +56,25 @@ async function handle(job: WorkerRequest): Promise<void> {
         scope.postMessage({ kind: 'sbom-progress', id: job.id, done, total: job.items.length });
       }
       scope.postMessage({ kind: 'sbom-packages', id: job.id, lists });
+      return;
+    }
+
+    if (job.kind === 'vex-read') {
+      const source = job.blob ? blobSource(job.blob) : job.buffer ? bufferAsSource(job.buffer) : undefined;
+      const results: Record<string, VexReadResult> = {};
+      for (const item of job.items) {
+        if ('bytes' in item) {
+          results[item.key] = await readVexDocument(item);
+          continue;
+        }
+        const blob = source ? await extractDeliveryBlob(source, item.localReference) : undefined;
+        results[item.key] = !blob
+          ? { reason: 'the delivery could not be read again' }
+          : blob.ok
+            ? await readVexDocument({ fileName: item.fileName, bytes: blob.bytes })
+            : { reason: blob.reason };
+      }
+      scope.postMessage({ kind: 'vex-read', id: job.id, results });
       return;
     }
 
@@ -141,7 +161,12 @@ async function handle(job: WorkerRequest): Promise<void> {
   } catch (error) {
     if (job.kind === 'extract') {
       scope.postMessage({ kind: 'extract', id: job.id, bytes: null, reason: String(error) });
-    } else if (job.kind === 'sbom-analyze' || job.kind === 'sbom-packages' || job.kind === 'digests') {
+    } else if (
+      job.kind === 'sbom-analyze' ||
+      job.kind === 'sbom-packages' ||
+      job.kind === 'vex-read' ||
+      job.kind === 'digests'
+    ) {
       scope.postMessage({ kind: 'error', id: job.id, message: String(error) });
     } else {
       respondBundle(job.id, {

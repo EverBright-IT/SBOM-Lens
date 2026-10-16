@@ -1,7 +1,7 @@
 import type { AcceptanceReport } from '@sbomlens/core/ocm';
 import { acceptanceReport } from '@sbomlens/core/ocm';
 import { APP_VERSION } from '../version';
-import { loadSbomPackages } from './ingest';
+import { loadSbomPackages, loadVexSources } from './ingest';
 import { useAppStore } from './store';
 
 export type ReportOutcome =
@@ -20,6 +20,9 @@ export async function prepareAcceptanceReport(now = new Date()): Promise<ReportO
   if (started.sbomRun) return { ok: false, reason: analysing(started.sbomRun) };
 
   const loaded = await loadSbomPackages();
+  // The delivery's own VEX documents belong in the report; one that cannot
+  // be read is reported as unreadable, not left out.
+  await loadVexSources();
   const { delivery, sbomRun, packageError, verification } = useAppStore.getState();
   if (!delivery || delivery.extracted !== started.delivery.extracted) {
     return { ok: false, reason: 'Another delivery was opened meanwhile.' };
@@ -38,6 +41,7 @@ export async function prepareAcceptanceReport(now = new Date()): Promise<ReportO
     generatedAt: now.toISOString(),
     sbomAnalyses: delivery.sbomAnalyses,
     sbomPackages: delivery.sbomPackages,
+    vexSources: delivery.vexSources,
   });
   const fileBase = delivery.bundle.fileName.replace(/(\.(ctf|tar|tgz|gz|yaml|yml|json))+$/i, '');
   return { ok: true, report, fileBase };

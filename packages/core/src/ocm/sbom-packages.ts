@@ -2,6 +2,8 @@ import { NO_VERSION, packageKey } from '../analysis/conflicts';
 import { cpeMatchKey } from '../analysis/cpe';
 import type { LicenseIdKind } from '../analysis/licenses';
 import { kindOf } from '../analysis/licenses';
+import type { VexStatus } from '../analysis/vex';
+import { worstVexStatus } from '../analysis/vex';
 import { splitPurl } from '../analysis/purl';
 import { buildIndexes } from '../graph/indexes';
 import { emptyFacets, searchWorkspace } from '../graph/search';
@@ -22,6 +24,7 @@ import type {
   SbomEvidence,
   SbomOccurrence,
 } from './sbom-evidence';
+import type { DeliveryVex, VexOrigin } from './sbom-vex';
 
 /**
  * The packages of a delivery: every package the analysed SBOMs list,
@@ -451,6 +454,8 @@ export interface PackageFilter {
   licenseId?: string;
   /** The SHA-1 of an SBOM: the packages it lists. */
   sbom?: string;
+  /** The worst status VEX statements give a package; 'none': no statement. Needs the VEX model. */
+  vex?: VexStatus | 'none';
 }
 
 export interface PackageSearch {
@@ -467,7 +472,11 @@ export interface PackageSearch {
  * matches by identity, anything else by name, version and purl text.
  * Matches by relevance, otherwise by name.
  */
-export function searchPackages(model: DeliveryPackages, filter: PackageFilter): PackageSearch {
+export function searchPackages(
+  model: DeliveryPackages,
+  filter: PackageFilter,
+  vex?: DeliveryVex,
+): PackageSearch {
   const text = filter.text?.trim() ?? '';
   let rows: DeliveryPackage[];
   if (text === '') {
@@ -495,6 +504,10 @@ export function searchPackages(model: DeliveryPackages, filter: PackageFilter): 
     if (filter.sbom !== undefined && !pkg.occurrences.some((o) => o.docId === sbomSource?.docId))
       return false;
     if (filter.ecosystem !== undefined && (pkg.ecosystem ?? '') !== filter.ecosystem) return false;
+    if (filter.vex !== undefined && vex) {
+      const worst = worstVexStatus(vex.byPackage.get(pkg));
+      if ((worst ?? 'none') !== filter.vex) return false;
+    }
     if (filter.place !== undefined && !pkg.places.some((p) => p.key === filter.place)) return false;
     if (filter.licenseId !== undefined) {
       if (
@@ -600,7 +613,8 @@ export function searchAnswer(
     filter.ecosystem !== undefined ||
     filter.place !== undefined ||
     filter.licenseId !== undefined ||
-    filter.sbom !== undefined;
+    filter.sbom !== undefined ||
+    filter.vex !== undefined;
   const { notListed, unverified, digestDiffers } = model.scope;
   return {
     ...(identifier ? { identifier } : {}),
@@ -799,11 +813,26 @@ const CSV_COLUMNS = [
 
 /**
  * One line per package and place: a package that ships in two images is
- * two lines, so a spreadsheet can filter by artifact.
+ * two lines, so a spreadsheet can filter by artifact. With VEX documents
+ * loaded, two columns say what the supplier states about the package.
  */
-export function packagesToCsv(bundle: OcmBundle, rows: readonly DeliveryPackage[]): string {
-  const lines = [CSV_COLUMNS.join(',')];
+export function packagesToCsv(
+  bundle: OcmBundle,
+  rows: readonly DeliveryPackage[],
+  vex?: DeliveryVex,
+): string {
+  const withVex = vex !== undefined && vex.documents.length > 0;
+  const lines = [
+    [...CSV_COLUMNS, ...(withVex ? ['vex_status', 'vex_vulnerabilities'] : [])].join(','),
+  ];
   for (const pkg of rows) {
+    const findings = withVex ? (vex.byPackage.get(pkg) ?? []) : [];
+    const vexCells = withVex
+      ? [
+          worstVexStatus(findings) ?? '',
+          findings.map((f) => `${f.vulnerability} (${f.status})`).join('; '),
+        ]
+      : [];
     // A package always gets a line, even one no place could be found for.
     for (const place of pkg.places.length > 0 ? pkg.places : [undefined]) {
       const artifact =
@@ -824,6 +853,7 @@ export function packagesToCsv(bundle: OcmBundle, rows: readonly DeliveryPackage[
             .map((ref) => `${artifactAt(bundle, ref)?.name ?? '?'} (${ref.cvId})`)
             .join('; '),
           pkg.subject ? 'yes' : '',
+          ...vexCells,
         ]
           .map(csvCell)
           .join(','),
@@ -840,17 +870,23 @@ export interface PackagesExportMeta {
   filter?: PackageFilter;
 }
 
-/** The rows with every place, plus what the list does not speak for. */
+/**
+ * The rows with every place, plus what the list does not speak for. With
+ * VEX documents loaded, each package carries what they state about it.
+ */
 export function packagesToJson(
   bundle: OcmBundle,
   model: DeliveryPackages,
   rows: readonly DeliveryPackage[],
   meta: PackagesExportMeta,
+  vex?: DeliveryVex,
 ): string {
   const named = (ref: ResourceRef) => ({
     componentVersion: ref.cvId,
     resource: artifactAt(bundle, ref)?.name ?? null,
   });
+  const withVex = vex !== undefined && vex.documents.length > 0;
+  const origin = (o: VexOrigin) => (o.kind === 'resource' ? named(o.ref) : { file: o.fileName });
   return (
     JSON.stringify(
       {
@@ -867,6 +903,18 @@ export function packagesToJson(
           licenses: pkg.licenses,
           supplier: pkg.supplier ?? null,
           sbomSubject: pkg.subject,
+          ...(withVex
+            ? {
+                vex: (vex.byPackage.get(pkg) ?? []).map((f) => ({
+                  vulnerability: f.vulnerability,
+                  status: f.status,
+                  ...(f.justification ? { justification: f.justification } : {}),
+                  ...(f.impactStatement ? { impactStatement: f.impactStatement } : {}),
+                  ...(f.actionStatement ? { actionStatement: f.actionStatement } : {}),
+                  document: f.sourceFile,
+                })),
+              }
+            : {}),
           foundIn: pkg.places.map((place) => {
             const artifact =
               place.kind === 'artifact' && place.ref ? artifactAt(bundle, place.ref) : undefined;
@@ -888,6 +936,16 @@ export function packagesToJson(
         unverified: model.scope.unverified.map((row) => named(row.artifact)),
         digestDiffers: model.scope.digestDiffers.map((row) => named(row.artifact)),
         omitted: model.omitted,
+        ...(withVex
+          ? {
+              vexDocuments: vex.documents.map((d) => ({
+                name: d.name,
+                id: d.document.id,
+                format: d.document.format ?? null,
+                origin: origin(d.origin),
+              })),
+            }
+          : {}),
       },
       null,
       2,

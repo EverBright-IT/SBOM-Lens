@@ -355,10 +355,15 @@ interface IndexEntry {
  * order (the app loads in ingest order; a CLI should sort by path).
  * Findings are sorted alarming-first (affected before not_affected), and
  * the whole result is deterministic for identical inputs.
+ *
+ * `reached`, when given, collects every statement that applies to at least
+ * one element, whether or not the time rule kept it: what remains outside
+ * names products the workspace does not hold.
  */
 export function matchVex(
   ws: WorkspaceState,
   vexDocs: readonly VexDocument[],
+  reached?: Set<VexStatement>,
 ): Map<ElementId, VexFinding[]> {
   // match key -> index rows (both exact-version and versionless).
   const index = new Map<string, IndexEntry[]>();
@@ -413,6 +418,7 @@ export function matchVex(
         }
       }
       if (applicable.size === 0) continue;
+      if (reached) for (const candidate of applicable.keys()) reached.add(candidate.statement);
 
       // A statement reachable both directly and through a subcomponent is
       // one statement: the direct path wins and nothing is superseded.

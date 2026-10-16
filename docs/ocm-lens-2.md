@@ -73,7 +73,8 @@ opened.
   graded by what matched, with a fact sheet per SBOM (see below).
 - **Packages** (2.2): every package the SBOMs list, with the artifact it
   ships in; search by name, purl or CPE; license identifiers; versions that
-  differ between artifacts; CSV/JSON export (see below).
+  differ between artifacts; CSV/JSON export (see below). Since 2.3 also
+  what the supplier states about known vulnerabilities (VEX and CSAF).
 - **Verify**: digests aggregated (checked at load time, mismatches linked),
   signature verification against pinned keys (pref key shared with 1.x) or
   a pasted PEM key/certificate (chain NOT validated - the certificate is
@@ -139,7 +140,10 @@ and version (`packageKey`: the purl without version, else the lowercased
 name; plus the version), with every place they ship: the artifact the SBOM
 is bound to by digest or reference, the component version it names (by
 component), or, for an SBOM that identifies nothing, that SBOM alone. The
-binding strength from the SBOM evidence travels with each place.
+binding strength from the SBOM evidence travels with each place. Packages
+without a purl are identified by name and version only, so two of them
+from different ecosystems with the same name and version share one row: a
+search then names one place too many rather than one too few.
 
 - **Search** goes through the core workspace search: a purl
   (`pkg:deb/debian/openssl`, with or without version) or a CPE matches by
@@ -179,6 +183,40 @@ the report needs them, as their own worker job; the UI loads them into one
 core workspace (`packageWorkspace`) and `deliveryPackages` joins them with
 the SBOM evidence. Both are pure and shared by the view and the report.
 
+## Vulnerability communication (2.3)
+
+The Vulnerabilities tab of the Packages view shows what the supplier
+states about known vulnerabilities in the delivered packages. The sources
+are OpenVEX and CSAF 2.0 documents, offline only:
+
+- **in the delivery**: a resource whose type or media type names VEX, CSAF
+  or an advisory, or a JSON or text blob whose content preview carries the
+  OpenVEX `@context` or the CSAF `csaf_version` (`vexResources`). Stored
+  ones are read through the worker when the view or the report needs them
+  (the walker shared with 1.x stays unchanged); one declared with an
+  external access is named and never fetched, and one larger than the
+  core's 8 MB document limit is named as unreadable without being
+  extracted (the same limit applies to added files).
+- **added by the reader**: a button in the tab, or a file dropped onto an
+  open delivery (a VEX or CSAF file never replaces the delivery; without
+  one open, the app says to open the delivery first).
+
+Matching is the core's `matchVex` (purl, CPE, file hash; the OpenVEX time
+rule; versionless identifiers cover every version), run against the
+package workspace. `deliveryVex` adds the delivery view: per package the
+most cautious statement any of its SBOM elements received, per
+vulnerability the packages and places it reaches, and the statements that
+reach no package (`matchVex` reports which statements reached an element
+through its optional `reached` set). Those stay visible with the artifacts
+the package list does not cover, because the named product may ship
+there. A vulnerability search that finds nothing says that no statement
+was found, not that the delivery is unaffected; packages without a purl or
+CPE are counted, since no statement can name them.
+
+Exports carry `vex_status` and the vulnerabilities per package when
+documents are loaded; the acceptance report gets a "Vulnerability
+communication" line and section and an additive `vex` object.
+
 ## The acceptance report
 
 `acceptanceReport` renders the delivery acceptance protocol as Markdown and
@@ -216,6 +254,10 @@ image config digest), by reference (scanned on another registry, digest
 differs), and by component (a release SBOM), one SBOM outside the delivery
 and one image without any. Its packages feed the Packages view: purls and
 CPEs to search by, licenses, and openssl in two versions in two images.
+Its VEX documents feed the Vulnerabilities tab: OpenVEX for the whole shop
+(one statement names a product no SBOM lists), a CSAF advisory stored as a
+generic JSON blob in the api component, and one declared outside the
+delivery. Vulnerability ids are demo ids (`GHSA-demo-ecme-NNNN`).
 
 ## The VS Code extension (apps/vscode-ocm)
 
@@ -304,10 +346,13 @@ the last pre-release.
   are not validated (key pinning is the honest alternative).
 - SBOMs are graded as evidence (binding, coverage, fact sheet), and their
   packages are listed with where they ship. Vulnerability statements come
-  later and only from files (VEX/CSAF in the delivery or dropped in), never
-  from an online lookup. Dependency graphs and cascades stay in SBOM Lens;
-  files listed in SBOMs are counted, not listed. SBOMs attached to images
-  as OCI referrers are not read.
+  only from VEX and CSAF files (in the delivery or added), never from an
+  online lookup; OCM Lens does not scan. Dependency graphs and cascades
+  stay in SBOM Lens; files listed in SBOMs are counted, not listed, so a
+  statement that names a product only by a file hash reaches a package
+  with that checksum, never a file entry (it then shows as a statement
+  without a package). SBOMs and VEX documents attached to images as OCI
+  referrers are not read.
 - Stored images are checked for completeness (every layer present, at the
   declared size), not hashed layer by layer: the resource digest covers
   the manifest, which pins each layer by digest, and a registry verifies

@@ -57,6 +57,42 @@ describe('sniffVex', () => {
   });
 });
 
+describe('matchVex reached statements', () => {
+  it('collects every statement that applies to an element, superseded ones included', () => {
+    const ws = wsWith(['openssl', '3.0.13', 'pkg:apk/alpine/openssl@3.0.13']);
+    const older = parseOpenVex(
+      'old.json',
+      JSON.parse(
+        vexJson(
+          [
+            { vulnerability: { name: 'CVE-2026-0001' }, products: [{ '@id': 'pkg:apk/alpine/openssl' }], status: 'affected' },
+            { vulnerability: { name: 'CVE-2026-0002' }, products: [{ '@id': 'pkg:apk/alpine/curl' }], status: 'affected' },
+          ],
+          { '@id': 'old', timestamp: '2026-01-01T00:00:00Z' },
+        ),
+      ),
+    );
+    const newer = parseOpenVex(
+      'new.json',
+      JSON.parse(
+        vexJson(
+          [{ vulnerability: { name: 'CVE-2026-0001' }, products: [{ '@id': 'pkg:apk/alpine/openssl' }], status: 'fixed' }],
+          { '@id': 'new', timestamp: '2026-02-01T00:00:00Z' },
+        ),
+      ),
+    );
+    const reached = new Set<(typeof older.statements)[number]>();
+    const map = matchVex(ws, [older, newer], reached);
+    expect(findingsFor(ws, 'openssl', map)!.map((f) => f.status)).toEqual(['fixed']);
+    expect(reached.has(older.statements[0]!)).toBe(true);
+    expect(reached.has(newer.statements[0]!)).toBe(true);
+    // curl is in no document of the workspace.
+    expect(reached.has(older.statements[1]!)).toBe(false);
+    // Without the set the result is the same.
+    expect(matchVex(ws, [older, newer])).toEqual(map);
+  });
+});
+
 describe('parseOpenVex', () => {
   it('parses the current shape including subcomponents', () => {
     const raw = JSON.parse(

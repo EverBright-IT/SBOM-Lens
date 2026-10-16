@@ -1,4 +1,7 @@
 import { documentQuality } from '../analysis/quality';
+import { MAX_CSAF_BYTES, parseCsaf, sniffCsaf } from '../analysis/csaf';
+import type { VexDocument } from '../analysis/vex';
+import { MAX_VEX_BYTES, parseOpenVex, sniffVex } from '../analysis/vex';
 import { splitPurl } from '../analysis/purl';
 import { buildIndexes } from '../graph/indexes';
 import type { RawFields, SbomDocument, SbomElement } from '../model/document';
@@ -6,6 +9,7 @@ import { parseDocument } from '../parse/parser';
 import { BSI_TR_03183_PROFILE } from '../profile/bsi';
 import { evaluateProfile } from '../profile/evaluate';
 import { NTIA_PROFILE } from '../profile/ntia';
+import { gunzip, sniffContainer } from '../util/binary';
 import { sha1Hex } from '../util/sha1';
 import type { LoadedDocument, WorkspaceState } from '../workspace/workspace';
 import { addDocuments, emptyWorkspace } from '../workspace/workspace';
@@ -221,7 +225,8 @@ const EMPTY_RAW: RawFields = { kind: 'json', value: {} };
 
 /**
  * An SBOM document cut down to what the package views read: its package
- * elements, each with identity, version, supplier, licenses and CPEs. Files
+ * elements, each with identity, version, supplier, licenses, checksums and
+ * CPEs. Files
  * (image scanners list thousands), the raw JSON and the relationships stay
  * behind; how many files were left out travels along.
  *
@@ -276,6 +281,8 @@ function slimElement(element: SbomElement): SbomElement {
     ...(element.supplier !== undefined ? { supplier: element.supplier } : {}),
     ...(element.licenseConcluded !== undefined ? { licenseConcluded: element.licenseConcluded } : {}),
     ...(element.licenseDeclared !== undefined ? { licenseDeclared: element.licenseDeclared } : {}),
+    // CSAF advisories may name a product by its file hash (TR-03191 4.4).
+    ...(element.checksums && element.checksums.length > 0 ? { checksums: element.checksums } : {}),
     ...(cpes.length > 0 ? { externalRefs: cpes } : {}),
     raw: EMPTY_RAW,
   };
@@ -301,4 +308,29 @@ export async function analyzeDeliverySboms(
     result[entry.sha1] = await analyzeSbom(entry, opts.now === undefined ? {} : { now: opts.now });
   }
   return result;
+}
+
+/**
+ * Read one VEX or CSAF document (OpenVEX JSON or CSAF 2.0 JSON, possibly
+ * gzip-stored). Never throws: anything else comes back with the reason.
+ */
+export async function readVexDocument(input: {
+  fileName: string;
+  bytes: Uint8Array;
+}): Promise<{ document: VexDocument } | { reason: string }> {
+  try {
+    let bytes = input.bytes;
+    if (sniffContainer(bytes) === 'gzip') bytes = await gunzip(bytes, MAX_CSAF_BYTES);
+    if (bytes.byteLength > Math.max(MAX_VEX_BYTES, MAX_CSAF_BYTES)) {
+      return { reason: `larger than ${Math.max(MAX_VEX_BYTES, MAX_CSAF_BYTES) / (1024 * 1024)} MB` };
+    }
+    const text = new TextDecoder().decode(bytes);
+    const vex = sniffVex(text);
+    if (vex.isVex) return { document: parseOpenVex(input.fileName, vex.raw) };
+    const csaf = sniffCsaf(text);
+    if (csaf.isCsaf) return { document: parseCsaf(input.fileName, csaf.raw) };
+    return { reason: 'neither an OpenVEX nor a CSAF 2.0 document' };
+  } catch (e) {
+    return { reason: e instanceof Error ? e.message : String(e) };
+  }
 }

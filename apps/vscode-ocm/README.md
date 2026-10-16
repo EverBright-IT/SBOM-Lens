@@ -55,6 +55,12 @@ whether digests and signatures hold.
   and the answer also names what could not be searched (an image without
   an SBOM, say). License identifiers counted, versions that differ between
   artifacts, export as CSV or JSON.
+- **Vulnerabilities.** What the supplier states about known
+  vulnerabilities in the shipped packages, from OpenVEX and CSAF 2.0
+  documents in the delivery or added by you, read offline: status per
+  package and image, the supplier's action or justification, and the
+  statements that name nothing in the package list. OCM Lens does not scan;
+  a package without a statement is not cleared.
 - **Verify.** Declared blob digests are recomputed from the delivered
   bytes; signatures (RSASSA-PSS and PKCS1-v1_5 over
   `jsonNormalisation/v4alpha1`, v3, v2) verify against a pinned or pasted
@@ -77,8 +83,8 @@ features out: the Inventory, Conflicts, Licenses, Map, and Diff views,
 comparing two registry versions, the VEX/CSAF overlay, compliance profiles
 (`.ocmlens/profile.json`), and spec info tooltips. 2.1 brought SBOM
 evidence, 2.2 the Packages view, which takes over from Inventory,
-Conflicts and Licenses for a delivery; the delivery diff comes next. One
-delivery is open at a time. Keys you pinned
+Conflicts and Licenses for a delivery, and 2.3 the VEX/CSAF overlay; the
+delivery diff comes next. One delivery is open at a time. Keys you pinned
 in 1.x carry over. The full list is in the
 [changelog](https://gitlab.com/everbrightit-group/sbom-lens/-/blob/main/apps/ocm-lens/CHANGELOG.md).
 

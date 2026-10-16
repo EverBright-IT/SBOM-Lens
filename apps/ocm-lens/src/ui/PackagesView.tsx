@@ -1,19 +1,23 @@
-import type { ReactNode } from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import clsx from 'clsx';
 import { useVirtualizer } from '@tanstack/react-virtual';
+import type { VexDocument, VexFinding, VexStatus } from '@sbomlens/core';
+import { worstVexStatus } from '@sbomlens/core';
 import type {
   DeliveryPackage,
   DeliveryPackages,
+  DeliveryVex,
   OcmBundle,
   PackageFilter,
   PackagePlace,
   PackageSearch,
   SbomCoverageRow,
+  VexSource,
 } from '@sbomlens/core/ocm';
 import {
   deliveryConflicts,
   deliveryLicenses,
+  findVulnerabilities,
   NOT_LISTED_LABEL,
   packagesToCsv,
   packagesToJson,
@@ -21,11 +25,13 @@ import {
   placeLabel,
   searchAnswer,
   searchPackages,
+  tr03191Summary,
+  VEX_STATUS_LABEL,
 } from '@sbomlens/core/ocm';
 import { saveBytes } from '../app/download';
 import { useSbomEvidence } from '../app/evidence';
-import { loadSbomPackages, runSbomAnalysis } from '../app/ingest';
-import { useDeliveryPackages } from '../app/packages';
+import { addVexFiles, loadSbomPackages, loadVexSources, runSbomAnalysis } from '../app/ingest';
+import { useDeliveryPackages, useDeliveryVex } from '../app/packages';
 import type { PackageTab } from '../app/store';
 import { useAppStore } from '../app/store';
 import { APP_VERSION } from '../version';
@@ -39,10 +45,49 @@ import { artifactAt } from './sbomBits';
  * how firmly its SBOM is tied to that artifact. Search takes a name, a purl
  * or a CPE; every answer also says which artifacts it could not look into.
  * Licenses are counted, not judged; versions that differ between artifacts
- * get their own tab.
+ * get their own tab, and so does what the supplier states about known
+ * vulnerabilities (VEX and CSAF, read offline).
  */
 
 const ROW_HEIGHT = 30;
+
+const PACKAGE_GRID =
+  'grid-cols-[minmax(9rem,2fr)_minmax(5rem,1fr)_5.5rem_minmax(6rem,1.2fr)_minmax(10rem,2.2fr)]';
+// With VEX the status sits right after the version: it is what the reader
+// came for, and narrow panes cut the table from the right.
+const PACKAGE_GRID_VEX =
+  'grid-cols-[minmax(8rem,2fr)_minmax(4.5rem,1fr)_8rem_4.5rem_minmax(5rem,1fr)_minmax(9rem,2fr)]';
+
+const VEX_TONE: Record<VexStatus, ChipTone> = {
+  affected: 'danger',
+  under_investigation: 'warn',
+  fixed: 'ok',
+  not_affected: 'neutral',
+};
+
+function VexChip({ status, title, count }: { status: VexStatus; title?: string; count?: number }) {
+  return (
+    <Chip tone={VEX_TONE[status]} {...(title ? { title } : {})}>
+      {count !== undefined ? `${count} ` : ''}
+      {VEX_STATUS_LABEL[status]}
+    </Chip>
+  );
+}
+
+/** The worst status the supplier states for a package, with the vulnerabilities as a tooltip. */
+function VexCell({ findings }: { findings: readonly VexFinding[] | undefined }) {
+  const worst = worstVexStatus(findings);
+  if (!worst || !findings) return <span className="text-xs text-slate-400">-</span>;
+  return (
+    <span className="flex min-w-0 items-center gap-1 overflow-hidden">
+      <VexChip
+        status={worst}
+        title={findings.map((f) => `${f.vulnerability}: ${VEX_STATUS_LABEL[f.status]}`).join('\n')}
+      />
+      {findings.length > 1 && <span className="text-xs text-slate-400">{findings.length}</span>}
+    </span>
+  );
+}
 
 const STRENGTH_TONE: Record<PackagePlace['strength'], ChipTone> = {
   digest: 'ok',
@@ -70,7 +115,17 @@ export function PackagesView() {
   const packageError = useAppStore((s) => s.packageError);
   const evidence = useSbomEvidence();
   const model = useDeliveryPackages();
+  const vex = useDeliveryVex(model);
+  const vexSources = useAppStore((s) => s.delivery?.vexSources);
+  const extracted = useAppStore((s) => s.delivery?.extracted);
+  const vexLoading = useAppStore((s) => s.vexLoading);
+  const vexError = useAppStore((s) => s.vexError);
   const [selected, setSelected] = useState<string | null>(null);
+
+  // The delivery's own VEX documents are read when the view opens.
+  useEffect(() => {
+    if (extracted) void loadVexSources();
+  }, [extracted]);
 
   // Package lists are read on first need, and again when "Analyse now"
   // brings more analysed SBOMs.
@@ -78,9 +133,22 @@ export function PackagesView() {
     if (analyses) void loadSbomPackages();
   }, [analyses]);
 
+  // A status filter needs read VEX documents: once none is left (the last
+  // added file removed), it no longer applies, so it must not narrow the
+  // answer or describe the export either.
+  const applied = useMemo(() => {
+    if (filter.vex === undefined || (vex !== null && vex.documents.length > 0)) return filter;
+    const rest: PackageFilter = { ...filter };
+    delete rest.vex;
+    return rest;
+  }, [filter, vex]);
+
   // Search stays synchronous: a few milliseconds even for large deliveries,
   // and the answer box must never pair a new question with an old result.
-  const search = useMemo(() => (model ? searchPackages(model, filter) : null), [model, filter]);
+  const search = useMemo(
+    () => (model ? searchPackages(model, applied, vex ?? undefined) : null),
+    [model, applied, vex],
+  );
   const licenses = useMemo(() => (model ? deliveryLicenses(model) : null), [model]);
   const conflicts = useMemo(() => (model ? deliveryConflicts(model) : []), [model]);
 
@@ -92,17 +160,23 @@ export function PackagesView() {
   const exportRows = (format: 'csv' | 'json') => {
     const base = bundle.fileName.replace(/(\.(ctf|tar|tgz|gz|yaml|yml|json))+$/i, '');
     if (format === 'csv') {
-      saveBytes(`${base}.packages.csv`, 'text/csv', packagesToCsv(bundle, search.rows));
+      saveBytes(
+        `${base}.packages.csv`,
+        'text/csv',
+        packagesToCsv(bundle, search.rows, vex ?? undefined),
+      );
     } else {
-      const active = Object.fromEntries(Object.entries(filter).filter(([, v]) => v !== undefined));
+      const active = Object.fromEntries(Object.entries(applied).filter(([, v]) => v !== undefined));
       saveBytes(
         `${base}.packages.json`,
         'application/json',
-        packagesToJson(bundle, model, search.rows, {
-          generatedAt: new Date().toISOString(),
-          toolVersion: APP_VERSION,
-          filter: active,
-        }),
+        packagesToJson(
+          bundle,
+          model,
+          search.rows,
+          { generatedAt: new Date().toISOString(), toolVersion: APP_VERSION, filter: active },
+          vex ?? undefined,
+        ),
       );
     }
   };
@@ -111,6 +185,7 @@ export function PackagesView() {
     { id: 'packages', label: `All packages (${model.packages.length})` },
     { id: 'licenses', label: `Licenses (${licenses.rows.length})` },
     { id: 'versions', label: `Versions (${across})` },
+    { id: 'vulnerabilities', label: `Vulnerabilities (${vex?.vulnerabilities.length ?? 0})` },
   ];
 
   return (
@@ -180,9 +255,10 @@ export function PackagesView() {
           <PackagesTab
             model={model}
             bundle={bundle}
-            filter={filter}
+            filter={applied}
             search={search}
             licenseIds={licenses.rows.map((r) => r.id)}
+            vex={vex}
             selected={selected}
             onSelect={setSelected}
             onFilter={setFilter}
@@ -194,6 +270,25 @@ export function PackagesView() {
             bundle={bundle}
             onPick={(licenseId) => {
               setFilter({ licenseId });
+              setTab('packages');
+            }}
+          />
+        )}
+        {tab === 'vulnerabilities' && (
+          <VulnerabilitiesTab
+            vex={vex}
+            model={model}
+            bundle={bundle}
+            sources={vexSources ?? []}
+            loading={vexLoading}
+            error={vexError}
+            onPackage={(pkg) => {
+              setFilter({ text: pkg.purl ?? pkg.name });
+              setTab('packages');
+              setSelected(pkg.id);
+            }}
+            onPlace={(place) => {
+              setFilter({ place: place.key });
               setTab('packages');
             }}
           />
@@ -216,6 +311,7 @@ export function PackagesView() {
             pkg={selectedPackage}
             model={model}
             bundle={bundle}
+            findings={vex?.byPackage.get(selectedPackage)}
             onSelect={setSelected}
             onClose={() => setSelected(null)}
           />
@@ -342,6 +438,7 @@ function PackagesTab({
   filter,
   search,
   licenseIds,
+  vex,
   selected,
   onSelect,
   onFilter,
@@ -351,6 +448,7 @@ function PackagesTab({
   filter: PackageFilter;
   search: PackageSearch;
   licenseIds: string[];
+  vex: DeliveryVex | null;
   selected: string | null;
   onSelect: (id: string) => void;
   onFilter: (filter: PackageFilter) => void;
@@ -370,6 +468,9 @@ function PackagesTab({
     onFilter(next);
   };
   const byPlace = (place: PackagePlace) => set({ place: place.key });
+  // With VEX documents loaded the table gains a column for the supplier's statements.
+  const withVex = vex !== null && vex.documents.length > 0;
+  const grid = withVex ? PACKAGE_GRID_VEX : PACKAGE_GRID;
   const sbomSource =
     filter.sbom !== undefined ? model.sources.find((s) => s.sha1 === filter.sbom) : undefined;
   const text = filter.text?.trim() ?? '';
@@ -410,6 +511,25 @@ function PackagesTab({
           ]}
           onChange={(licenseId) => set({ licenseId })}
         />
+        {withVex && (
+          <FilterSelect
+            label="VEX"
+            value={filter.vex}
+            options={[
+              ...(['affected', 'under_investigation', 'fixed', 'not_affected'] as const).map(
+                (status) => ({
+                  value: status,
+                  label: `${VEX_STATUS_LABEL[status]} (${vex.counts[status]})`,
+                }),
+              ),
+              {
+                value: 'none',
+                label: `no statement (${vex.counts.without + vex.counts.unmatchable})`,
+              },
+            ]}
+            onChange={(value) => set({ vex: value as VexStatus | 'none' | undefined })}
+          />
+        )}
         {sbomSource && (
           <button
             type="button"
@@ -433,9 +553,15 @@ function PackagesTab({
         <NoLists model={model} bundle={bundle} />
       ) : (
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border border-slate-200 dark:border-slate-800">
-          <div className="grid grid-cols-[minmax(9rem,2fr)_minmax(5rem,1fr)_5.5rem_minmax(6rem,1.2fr)_minmax(10rem,2.2fr)] gap-2 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-500 dark:bg-slate-900 dark:text-slate-400">
+          <div
+            className={clsx(
+              'grid gap-2 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-500 dark:bg-slate-900 dark:text-slate-400',
+              grid,
+            )}
+          >
             <span>Package</span>
             <span>Version</span>
+            {withVex && <span>VEX</span>}
             <span>Ecosystem</span>
             <span>License</span>
             <span>Ships in</span>
@@ -449,7 +575,8 @@ function PackagesTab({
                     key={pkg.id}
                     onClick={() => onSelect(pkg.id)}
                     className={clsx(
-                      'absolute inset-x-0 grid cursor-pointer grid-cols-[minmax(9rem,2fr)_minmax(5rem,1fr)_5.5rem_minmax(6rem,1.2fr)_minmax(10rem,2.2fr)] items-center gap-2 border-t border-slate-100 px-3 text-sm dark:border-slate-800/60',
+                      'absolute inset-x-0 grid cursor-pointer items-center gap-2 border-t border-slate-100 px-3 text-sm dark:border-slate-800/60',
+                      grid,
                       selected === pkg.id
                         ? 'bg-accent-50 dark:bg-accent-950'
                         : 'hover:bg-slate-50 dark:hover:bg-slate-900',
@@ -468,6 +595,7 @@ function PackagesTab({
                     >
                       {pkg.version ?? '-'}
                     </span>
+                    {withVex && <VexCell findings={vex.byPackage.get(pkg)} />}
                     <span className="truncate text-xs text-slate-500 dark:text-slate-400">
                       {pkg.ecosystem ?? '-'}
                     </span>
@@ -651,6 +779,9 @@ function NoLists({ model, bundle }: { model: DeliveryPackages; bundle: OcmBundle
   );
 }
 
+const LICENSE_GRID =
+  'grid grid-cols-[minmax(10rem,2fr)_9rem_5.5rem_minmax(10rem,3fr)] items-center gap-2 px-3';
+
 function LicensesTab({
   licenses,
   bundle,
@@ -661,8 +792,19 @@ function LicensesTab({
   onPick: (licenseId: string) => void;
 }) {
   const unparsed = licenses.unparsed.reduce((n, u) => n + u.packages, 0);
+  // Real deliveries name hundreds of identifiers (syft writes a LicenseRef
+  // per unrecognized license text): the list is virtualized like the
+  // package table. The last row stands for packages without a license.
+  const count = licenses.rows.length + (licenses.withoutLicense > 0 ? 1 : 0);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const virtualizer = useVirtualizer({
+    count,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => ROW_HEIGHT,
+    overscan: 20,
+  });
   return (
-    <div className="min-h-0 flex-1 overflow-auto">
+    <div className="flex min-h-0 flex-1 flex-col">
       <div className="mb-3 flex flex-wrap gap-2">
         <Chip tone="accent">{licenses.rows.length} identifier(s)</Chip>
         {licenses.kinds.deprecated > 0 && (
@@ -700,64 +842,95 @@ function LicensesTab({
         Identifiers are checked against the SPDX License List and counted; what a license obliges,
         or whether two fit together, is not judged here.
       </p>
-      {licenses.rows.length + licenses.withoutLicense === 0 ? (
-        <p className="text-sm text-slate-500 dark:text-slate-400">No packages.</p>
-      ) : (
-        <Table head={['Identifier', 'Status', 'Packages', 'Ships in']}>
-          {licenses.rows.map((row) => (
-            <tr
-              key={row.id}
-              onClick={() => onPick(row.id)}
-              className="cursor-pointer border-t border-slate-100 hover:bg-slate-50 dark:border-slate-800/60 dark:hover:bg-slate-900"
-              title="Show these packages"
-            >
-              <td className="px-3 py-1.5 font-mono text-xs">{row.id}</td>
-              <td className="px-3 py-1.5 text-xs text-slate-500 dark:text-slate-400">
-                {KIND_LABEL[row.kind]}
-              </td>
-              <td className="px-3 py-1.5 text-slate-500 dark:text-slate-400">{row.packages}</td>
-              <td className="px-3 py-1.5">
-                <span className="flex flex-wrap gap-1">
-                  {row.places.slice(0, 4).map((place) => (
-                    <PlaceChip key={place.key} place={place} bundle={bundle} />
-                  ))}
-                  {row.places.length > 4 && (
-                    <span className="text-xs text-slate-400">+{row.places.length - 4}</span>
-                  )}
-                </span>
-              </td>
-            </tr>
-          ))}
-          {licenses.withoutLicense > 0 && (
-            <tr
-              onClick={() => onPick('')}
-              className="cursor-pointer border-t border-slate-100 hover:bg-slate-50 dark:border-slate-800/60 dark:hover:bg-slate-900"
-            >
-              <td className="px-3 py-1.5 text-xs text-slate-500 italic dark:text-slate-400">
-                without a license
-              </td>
-              <td className="px-3 py-1.5 text-xs text-slate-500 dark:text-slate-400">
-                missing, NONE or NOASSERTION
-              </td>
-              <td className="px-3 py-1.5 text-slate-500 dark:text-slate-400">
-                {licenses.withoutLicense}
-              </td>
-              <td />
-            </tr>
-          )}
-        </Table>
-      )}
       {licenses.unparsed.length > 0 && (
-        <Section title="Values that are not SPDX expressions">
-          <ul className="space-y-0.5 text-xs text-slate-600 dark:text-slate-300">
-            {licenses.unparsed.slice(0, 50).map((u) => (
+        <details className="mb-3 text-xs">
+          <summary className="cursor-pointer text-slate-500 dark:text-slate-400">
+            Values that are not SPDX expressions ({licenses.unparsed.length})
+          </summary>
+          <ul className="mt-1 max-h-40 space-y-0.5 overflow-auto text-slate-600 dark:text-slate-300">
+            {licenses.unparsed.map((u) => (
               <li key={u.value}>
                 <span className="font-mono">{u.value}</span>
                 <span className="ml-2 text-slate-400">{u.packages} package(s)</span>
               </li>
             ))}
           </ul>
-        </Section>
+        </details>
+      )}
+      {count === 0 ? (
+        <p className="text-sm text-slate-500 dark:text-slate-400">No packages.</p>
+      ) : (
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border border-slate-200 dark:border-slate-800">
+          <div
+            className={clsx(
+              LICENSE_GRID,
+              'bg-slate-50 py-1.5 text-xs font-medium text-slate-500 dark:bg-slate-900 dark:text-slate-400',
+            )}
+          >
+            <span>Identifier</span>
+            <span>Status</span>
+            <span>Packages</span>
+            <span>Ships in</span>
+          </div>
+          <div ref={scrollRef} className="min-h-0 flex-1 overflow-auto">
+            <div className="relative" style={{ height: virtualizer.getTotalSize() }}>
+              {virtualizer.getVirtualItems().map((item) => {
+                const row = licenses.rows[item.index];
+                const rowClass = clsx(
+                  LICENSE_GRID,
+                  'absolute inset-x-0 cursor-pointer border-t border-slate-100 text-sm hover:bg-slate-50 dark:border-slate-800/60 dark:hover:bg-slate-900',
+                );
+                if (!row) {
+                  return (
+                    <div
+                      key="without-license"
+                      onClick={() => onPick('')}
+                      className={rowClass}
+                      style={{ top: item.start, height: ROW_HEIGHT }}
+                      title="Show these packages"
+                    >
+                      <span className="text-xs text-slate-500 italic dark:text-slate-400">
+                        without a license
+                      </span>
+                      <span className="truncate text-xs text-slate-500 dark:text-slate-400">
+                        missing, NONE or NOASSERTION
+                      </span>
+                      <span className="text-slate-500 dark:text-slate-400">
+                        {licenses.withoutLicense}
+                      </span>
+                      <span />
+                    </div>
+                  );
+                }
+                return (
+                  <div
+                    key={row.id}
+                    onClick={() => onPick(row.id)}
+                    className={rowClass}
+                    style={{ top: item.start, height: ROW_HEIGHT }}
+                    title="Show these packages"
+                  >
+                    <span className="truncate font-mono text-xs" title={row.id}>
+                      {row.id}
+                    </span>
+                    <span className="truncate text-xs text-slate-500 dark:text-slate-400">
+                      {KIND_LABEL[row.kind]}
+                    </span>
+                    <span className="text-slate-500 dark:text-slate-400">{row.packages}</span>
+                    <span className="flex min-w-0 items-center gap-1 overflow-hidden">
+                      {row.places.slice(0, 3).map((place) => (
+                        <PlaceChip key={place.key} place={place} bundle={bundle} />
+                      ))}
+                      {row.places.length > 3 && (
+                        <span className="text-xs text-slate-400">+{row.places.length - 3}</span>
+                      )}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -850,16 +1023,297 @@ function VersionsTab({
   );
 }
 
+/** BSI TR-03191 on a CSAF document: how many applicable requirements hold. A measurement, not a verdict. */
+function Tr03191Chip({ document }: { document: VexDocument }) {
+  const tr = document.format === 'csaf' ? tr03191Summary(document) : undefined;
+  if (!tr) return null;
+  return (
+    <Chip
+      tone={tr.passed === tr.total ? 'ok' : 'neutral'}
+      title={
+        tr.open.length > 0 ? `Not met: ${tr.open.join('; ')}` : 'Every applicable requirement holds'
+      }
+    >
+      BSI TR-03191 {tr.passed} of {tr.total}
+    </Chip>
+  );
+}
+
+const VEX_SOURCE_STATE: Record<VexSource['state'], { label: string; tone: ChipTone }> = {
+  loaded: { label: 'read', tone: 'ok' },
+  pending: { label: 'not read yet', tone: 'neutral' },
+  external: { label: 'outside the delivery', tone: 'warn' },
+  unreadable: { label: 'unreadable', tone: 'danger' },
+};
+
+/**
+ * "What does the supplier say about this vulnerability?" The statements of
+ * the delivery's VEX and CSAF documents (and of files the reader adds),
+ * per vulnerability, with the packages and places they reach. A missing
+ * statement is said to be one, never presented as an all-clear.
+ */
+function VulnerabilitiesTab({
+  vex,
+  model,
+  bundle,
+  sources,
+  loading,
+  error,
+  onPackage,
+  onPlace,
+}: {
+  vex: DeliveryVex | null;
+  model: DeliveryPackages;
+  bundle: OcmBundle;
+  sources: readonly (VexSource & { key: string })[];
+  loading: boolean;
+  error: string | null;
+  onPackage: (pkg: DeliveryPackage) => void;
+  onPlace: (place: PackagePlace) => void;
+}) {
+  const [query, setQuery] = useState('');
+  const fileInput = useRef<HTMLInputElement>(null);
+  const removeVexEntry = useAppStore((s) => s.actions.removeVexEntry);
+  const selectArtifact = useAppStore((s) => s.actions.selectArtifact);
+  const rows = useMemo(() => (vex ? findVulnerabilities(vex, query) : []), [vex, query]);
+  const documents = vex?.documents.length ?? 0;
+  const where = (row: SbomCoverageRow) => {
+    const cv = bundle.componentVersions.find((c) => c.id === row.artifact.cvId);
+    return `${cv ? (cv.name.split('/').pop() ?? cv.name) : row.artifact.cvId} · ${artifactAt(bundle, row.artifact)?.name ?? '?'}`;
+  };
+  const notListed = model.scope.notListed;
+  // Listed, but with neither a purl nor a CPE: no statement can name them.
+  const unmatchable = vex?.counts.unmatchable ?? 0;
+  const mayShip = [
+    notListed.length > 0
+      ? `in an artifact the list does not cover: ${notListed
+          .map(({ row, reason }) => `${where(row)} (${NOT_LISTED_LABEL[reason]})`)
+          .join('; ')}`
+      : '',
+    unmatchable > 0
+      ? `as one of the ${unmatchable} listed package(s) without a purl or CPE, which no statement can name`
+      : '',
+  ].filter(Boolean);
+
+  return (
+    <div className="min-h-0 flex-1 overflow-auto">
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        {vex && documents > 0 ? (
+          <>
+            {(['affected', 'under_investigation', 'fixed', 'not_affected'] as const).map(
+              (status) => (
+                <VexChip
+                  key={status}
+                  status={status}
+                  count={vex.counts[status]}
+                  title="Packages with this as their worst stated status"
+                />
+              ),
+            )}
+            <Chip title="Packages no statement names, with or without a purl or CPE">
+              {vex.counts.without + vex.counts.unmatchable} without a statement
+            </Chip>
+          </>
+        ) : (
+          <span className="text-sm text-slate-500 dark:text-slate-400">
+            No VEX or CSAF document read for this delivery.
+          </span>
+        )}
+        <button
+          type="button"
+          onClick={() => fileInput.current?.click()}
+          className={clsx(BUTTON_SECONDARY, 'ml-auto')}
+        >
+          Add VEX or CSAF file...
+        </button>
+        <input
+          ref={fileInput}
+          type="file"
+          multiple
+          hidden
+          accept=".json,application/json"
+          onChange={(e) => {
+            const files = [...(e.target.files ?? [])];
+            if (files.length > 0) void addVexFiles(files);
+            e.target.value = '';
+          }}
+        />
+      </div>
+      <p className="mb-3 max-w-3xl text-xs text-slate-500 dark:text-slate-400">
+        What the supplier states about known vulnerabilities, from OpenVEX and CSAF documents in the
+        delivery or added here, matched to the package list by purl, CPE and file hash. Read
+        offline: nothing is looked up and nothing is scanned, so a package without a statement is
+        not cleared.
+      </p>
+      {loading && <p className="mb-2 text-xs text-slate-500">Reading VEX documents...</p>}
+      {error && !loading && (
+        <p className="mb-2 text-xs text-red-600 dark:text-red-400">
+          Reading the VEX documents stopped: {error}.
+        </p>
+      )}
+
+      {sources.length > 0 && (
+        <Section title={`Documents (${sources.length})`}>
+          <ul className="space-y-1 text-sm">
+            {sources.map((source) => {
+              const state = VEX_SOURCE_STATE[source.state];
+              return (
+                <li key={source.key} className="flex flex-wrap items-center gap-2">
+                  <span className="font-medium">
+                    {source.state === 'loaded'
+                      ? (source.document.title ?? source.document.id)
+                      : source.name}
+                  </span>
+                  {source.state === 'loaded' && (
+                    <Chip>{source.document.format === 'csaf' ? 'CSAF' : 'OpenVEX'}</Chip>
+                  )}
+                  {source.state === 'loaded' && <Tr03191Chip document={source.document} />}
+                  <Chip
+                    tone={state.tone}
+                    title={source.state !== 'loaded' ? source.reason : undefined}
+                  >
+                    {state.label}
+                  </Chip>
+                  {source.state === 'loaded' && (
+                    <span className="text-xs text-slate-400">
+                      {source.document.statements.length} statement(s)
+                      {source.document.author ? `, ${source.document.author}` : ''}
+                    </span>
+                  )}
+                  {source.origin.kind === 'resource' ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (source.origin.kind !== 'resource') return;
+                        const { cvId, index } = source.origin.ref;
+                        selectArtifact({ cvId, role: 'resource', index });
+                      }}
+                      className="font-mono text-xs text-slate-400 hover:text-accent-700 dark:hover:text-accent-400"
+                    >
+                      {source.origin.ref.cvId} · {source.name}
+                    </button>
+                  ) : (
+                    <>
+                      <span className="text-xs text-slate-400">added file</span>
+                      <button
+                        type="button"
+                        onClick={() => removeVexEntry(source.key)}
+                        className="text-xs text-accent-700 hover:underline dark:text-accent-400"
+                      >
+                        Remove
+                      </button>
+                    </>
+                  )}
+                  {source.state === 'unreadable' && source.reason && (
+                    <span className="text-xs text-red-600 dark:text-red-400">{source.reason}</span>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </Section>
+      )}
+
+      {vex && documents > 0 && (
+        <>
+          <div className="mb-2 flex items-center gap-2">
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Vulnerability id or alias: CVE-..., GHSA-..."
+              className="w-80 max-w-full rounded border border-slate-200 bg-transparent px-2 py-1 text-sm outline-none focus:border-accent-400 dark:border-slate-700"
+            />
+            <span className="ml-auto text-xs text-slate-400">
+              {rows.length} of {vex.vulnerabilities.length} vulnerabilities
+            </span>
+          </div>
+          {rows.length === 0 && query.trim() !== '' && (
+            <p className="mb-3 rounded border border-slate-200 px-2.5 py-2 text-sm dark:border-slate-700">
+              No statement about "{query.trim()}" in the {documents} document
+              {documents === 1 ? '' : 's'}. A missing statement is not an all-clear: the supplier
+              may not have said anything about it yet.
+            </p>
+          )}
+          <ul className="space-y-2">
+            {rows.slice(0, 500).map((v) => (
+              <li
+                key={v.id}
+                className="rounded border border-slate-200 px-2.5 py-1.5 dark:border-slate-800"
+              >
+                <div className="mb-1 flex flex-wrap items-center gap-2">
+                  <span className="font-mono text-sm font-medium">{v.id}</span>
+                  <VexChip status={v.status} />
+                  {v.aliases.length > 0 && (
+                    <span className="truncate font-mono text-xs text-slate-400">
+                      {v.aliases.join(', ')}
+                    </span>
+                  )}
+                </div>
+                {v.description && (
+                  <p className="mb-1 text-xs text-slate-600 dark:text-slate-300">{v.description}</p>
+                )}
+                <ul className="space-y-0.5">
+                  {v.packages.map(({ pkg, finding }) => (
+                    <li key={pkg.id} className="flex flex-wrap items-center gap-1.5 text-xs">
+                      <button
+                        type="button"
+                        onClick={() => onPackage(pkg)}
+                        className="font-medium hover:text-accent-700 dark:hover:text-accent-400"
+                      >
+                        {pkg.name} {pkg.version ?? ''}
+                      </button>
+                      <VexChip status={finding.status} />
+                      {pkg.places.map((place) => (
+                        <PlaceChip
+                          key={place.key}
+                          place={place}
+                          bundle={bundle}
+                          onClick={onPlace}
+                        />
+                      ))}
+                      {(finding.actionStatement ??
+                        finding.impactStatement ??
+                        finding.justification) && (
+                        <span className="text-slate-500 dark:text-slate-400">
+                          {finding.actionStatement ??
+                            finding.impactStatement ??
+                            finding.justification}
+                        </span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+                {v.unmatched.length > 0 && (
+                  <p className="mt-1 text-xs text-amber-700 dark:text-amber-400">
+                    {v.packages.length > 0 ? 'Also names' : 'Names'} no package in the list:{' '}
+                    {[...new Set(v.unmatched.flatMap((u) => u.products))].slice(0, 5).join(', ')}.
+                    {mayShip.length > 0 ? ` It may still ship ${mayShip.join(', or ')}.` : ''}
+                  </p>
+                )}
+              </li>
+            ))}
+          </ul>
+          {rows.length > 500 && (
+            <p className="mt-2 text-xs text-slate-400">and {rows.length - 500} more</p>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 function PackageDetail({
   pkg,
   model,
   bundle,
+  findings,
   onSelect,
   onClose,
 }: {
   pkg: DeliveryPackage;
   model: DeliveryPackages;
   bundle: OcmBundle;
+  findings: readonly VexFinding[] | undefined;
   onSelect: (id: string) => void;
   onClose: () => void;
 }) {
@@ -966,6 +1420,31 @@ function PackageDetail({
         </ul>
       </Section>
 
+      {findings && findings.length > 0 && (
+        <Section title="What the supplier states (VEX)">
+          <ul className="space-y-1.5">
+            {findings.map((f) => (
+              <li key={f.vulnerability} className="text-sm">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="font-mono text-xs">{f.vulnerability}</span>
+                  <VexChip status={f.status} />
+                </div>
+                {(f.actionStatement ?? f.impactStatement ?? f.justification) && (
+                  <div className="mt-0.5 text-xs text-slate-600 dark:text-slate-300">
+                    {f.actionStatement ?? f.impactStatement ?? f.justification}
+                  </div>
+                )}
+                <div className="text-xs text-slate-400">
+                  {f.sourceFile}
+                  {f.timestamp ? `, ${f.timestamp.slice(0, 10)}` : ''}
+                  {f.viaSubcomponent ? ', as a component of a named product' : ''}
+                </div>
+              </li>
+            ))}
+          </ul>
+        </Section>
+      )}
+
       {others.length > 0 && (
         <Section title="Other versions in this delivery">
           <ul className="space-y-0.5">
@@ -986,25 +1465,6 @@ function PackageDetail({
           </ul>
         </Section>
       )}
-    </div>
-  );
-}
-
-function Table({ head, children }: { head: string[]; children: ReactNode }) {
-  return (
-    <div className="overflow-x-auto rounded-md border border-slate-200 dark:border-slate-800">
-      <table className="w-full text-sm">
-        <thead className="bg-slate-50 text-left text-xs text-slate-500 dark:bg-slate-900 dark:text-slate-400">
-          <tr>
-            {head.map((h) => (
-              <th key={h} className="px-3 py-1.5 font-medium">
-                {h}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>{children}</tbody>
-      </table>
     </div>
   );
 }

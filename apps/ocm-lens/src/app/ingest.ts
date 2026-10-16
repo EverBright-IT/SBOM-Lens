@@ -1,16 +1,19 @@
 import type { Diagnostic } from '@sbomlens/core';
-import type { SbomAnalysis } from '@sbomlens/core/ocm';
-import { SBOM_ANALYSIS_BUDGET_DEFAULT } from '@sbomlens/core/ocm';
+import { MAX_CSAF_BYTES, MAX_VEX_BYTES } from '@sbomlens/core';
+import type { OcmBundle, SbomAnalysis } from '@sbomlens/core/ocm';
+import { SBOM_ANALYSIS_BUDGET_DEFAULT, vexResources } from '@sbomlens/core/ocm';
 import type { HostPushFile } from '../host';
 import { host } from '../host';
 import type {
   BundleWalkOptions,
   DigestCheckRequest,
   SbomAnalysisItem,
+  VexReadItem,
+  VexReadResult,
   WorkerRequest,
   WorkerResponse,
 } from '../worker/protocol';
-import type { ArtifactRef, LoadedDelivery, SourceRef } from './store';
+import type { ArtifactRef, LoadedDelivery, SourceRef, VexEntry } from './store';
 import { useAppStore } from './store';
 
 /** File → worker → store. One worker, jobs correlated by id. */
@@ -102,7 +105,14 @@ async function commit(
   const diagnostics = [...extra, ...response.diagnostics];
   if (response.bundle) {
     actions.loadSucceeded(
-      { bundle: response.bundle, extracted: response.extracted, sbomAnalyses: {}, sbomPackages: {}, diagnostics },
+      {
+        bundle: response.bundle,
+        extracted: response.extracted,
+        sbomAnalyses: {},
+        sbomPackages: {},
+        vexSources: deliveryVexSources(response.bundle),
+        diagnostics,
+      },
       sourceRef,
     );
     void analyseOnLoad(sbomBudget);
@@ -414,5 +424,166 @@ async function readMissingPackages(): Promise<boolean> {
     return true;
   } finally {
     if (useAppStore.getState().delivery?.extracted === delivery.extracted) actions.setPackageRun(null);
+  }
+}
+
+/**
+ * The VEX and CSAF documents the delivery holds or declares: stored ones
+ * wait to be read, external ones are named and never fetched (offline only).
+ */
+function deliveryVexSources(bundle: OcmBundle): VexEntry[] {
+  return vexResources(bundle).map((resource) => ({
+    key: `res:${resource.ref.cvId}#${resource.ref.index}`,
+    origin: { kind: 'resource', ref: resource.ref },
+    name: resource.name,
+    state: resource.presence === 'local' ? 'pending' : 'external',
+    ...(resource.byContent ? { byContent: true } : {}),
+  }));
+}
+
+/** One VEX read at a time, like the package lists. */
+let vexQueue: Promise<unknown> = Promise.resolve();
+
+/**
+ * Read the delivery's VEX and CSAF documents that are still pending (the
+ * Packages view and the report call this). Results land only in the
+ * delivery they were read for.
+ */
+export function loadVexSources(): Promise<boolean> {
+  const next = vexQueue.then(readPendingVex);
+  vexQueue = next.catch(() => undefined);
+  return next;
+}
+
+async function readPendingVex(): Promise<boolean> {
+  const { delivery } = useAppStore.getState();
+  if (!delivery) return false;
+  const pending = delivery.vexSources.filter((entry) => entry.state === 'pending');
+  if (pending.length === 0) return true;
+  const items: VexReadItem[] = [];
+  const oversized: Record<string, VexReadResult> = {};
+  for (const entry of pending) {
+    if (entry.origin.kind !== 'resource') continue;
+    const { cvId, index } = entry.origin.ref;
+    const artifact = delivery.bundle.componentVersions.find((cv) => cv.id === cvId)?.resources[index];
+    const access = artifact?.access?.raw ?? {};
+    const localReference =
+      typeof access.localReference === 'string'
+        ? access.localReference
+        : typeof access.filename === 'string'
+          ? access.filename
+          : undefined;
+    if (!localReference) continue;
+    // Never extracted: no VEX or CSAF document is this large, and a blob
+    // only typed or marked as one could be anything.
+    if ((artifact?.blob?.size ?? 0) > VEX_DOCUMENT_MAX) oversized[entry.key] = { reason: TOO_LARGE };
+    else items.push({ key: entry.key, fileName: entry.name, localReference });
+  }
+  if (Object.keys(oversized).length > 0) {
+    useAppStore.getState().actions.applyVexResults(oversized, delivery.extracted);
+  }
+  if (items.length === 0) return true;
+  const source = await jobSource();
+  return readVex(items, delivery, source ?? {});
+}
+
+/** The largest VEX or CSAF document the core reads (after decompression). */
+const VEX_DOCUMENT_MAX = Math.max(MAX_VEX_BYTES, MAX_CSAF_BYTES);
+const TOO_LARGE = `larger than ${VEX_DOCUMENT_MAX / (1024 * 1024)} MB, not read`;
+
+let addedFiles = 0;
+
+/**
+ * Add VEX or CSAF files the reader dropped or picked to the open delivery.
+ * They are listed at once and read in turn with the delivery's own
+ * documents, so a report asked for meanwhile waits for them. Files that are
+ * neither, or cannot be read, stay listed as unreadable, with the reason.
+ */
+export function addVexFiles(files: readonly File[]): Promise<boolean> {
+  const { delivery, actions } = useAppStore.getState();
+  if (!delivery || files.length === 0) return Promise.resolve(false);
+  const entries: VexEntry[] = files.map((file) => ({
+    key: `file:${++addedFiles}`,
+    origin: { kind: 'file', fileName: file.name },
+    name: file.name,
+    state: 'pending',
+  }));
+  actions.addVexEntries(entries, delivery.extracted);
+  const next = vexQueue.then(() => readAddedFiles(files, entries, delivery));
+  vexQueue = next.catch(() => undefined);
+  return next;
+}
+
+async function readAddedFiles(
+  files: readonly File[],
+  entries: readonly VexEntry[],
+  delivery: LoadedDelivery,
+): Promise<boolean> {
+  const items: VexReadItem[] = [];
+  const unreadable: Record<string, VexReadResult> = {};
+  for (const [i, file] of files.entries()) {
+    const key = entries[i]!.key;
+    if (file.size > VEX_DOCUMENT_MAX) {
+      unreadable[key] = { reason: TOO_LARGE };
+      continue;
+    }
+    try {
+      items.push({ key, fileName: file.name, bytes: new Uint8Array(await file.arrayBuffer()) });
+    } catch (e) {
+      unreadable[key] = { reason: `the file could not be read (${e instanceof Error ? e.message : String(e)})` };
+    }
+  }
+  if (Object.keys(unreadable).length > 0) {
+    useAppStore.getState().actions.applyVexResults(unreadable, delivery.extracted);
+  }
+  return readVex(items, delivery, {});
+}
+
+async function readVex(
+  items: VexReadItem[],
+  delivery: LoadedDelivery,
+  source: { blob?: Blob; buffer?: ArrayBuffer },
+): Promise<boolean> {
+  const { actions } = useAppStore.getState();
+  const current = () => useAppStore.getState().delivery?.extracted === delivery.extracted;
+  if (items.length === 0) return true;
+  actions.setVexError(null);
+  actions.setVexLoading(true);
+  try {
+    const transfer = [
+      ...items.flatMap((item) => ('bytes' in item ? [item.bytes.buffer as ArrayBuffer] : [])),
+      ...(source.buffer ? [source.buffer] : []),
+    ];
+    const response = await run({ kind: 'vex-read', items, ...source }, transfer);
+    if (response.kind !== 'vex-read') {
+      const message = response.kind === 'error' ? response.message : 'reading the documents did not finish';
+      // An added file was handed over and cannot be read twice: it says why
+      // instead of waiting. The delivery's own documents stay pending and
+      // are read again on the next request.
+      const files: Record<string, VexReadResult> = {};
+      for (const item of items) if ('bytes' in item) files[item.key] = { reason: message };
+      actions.applyVexResults(files, delivery.extracted);
+      if (current()) actions.setVexError(message);
+      return false;
+    }
+    actions.applyVexResults(response.results, delivery.extracted);
+    return true;
+  } finally {
+    if (current()) actions.setVexLoading(false);
+  }
+}
+
+/** VEX and CSAF are JSON documents of a few MB at most, named by a marker near the top. */
+const VEX_FILE_MAX = 8 * 1024 * 1024;
+
+/** Whether a dropped file is a VEX or CSAF document rather than a delivery. */
+export async function isVexFile(file: File): Promise<boolean> {
+  if (file.size > VEX_FILE_MAX) return false;
+  try {
+    const head = await file.slice(0, 64 * 1024).text();
+    return head.trimStart().startsWith('{') && (head.includes('openvex.dev') || head.includes('csaf_version'));
+  } catch {
+    // Unreadable: opening it as a delivery says why.
+    return false;
   }
 }

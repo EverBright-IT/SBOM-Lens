@@ -535,8 +535,12 @@ export function buildDemoDeliveryCtf() {
 // stored manifest, and an image config digest), by reference (scanned on
 // another registry before the push), by component (a release SBOM), an SBOM
 // that lives outside the delivery, and an image without any. Real SHA-256
-// digests throughout; the packages (one shared, one in two versions) are
-// there for the package views to come.
+// digests throughout; the packages (purls, CPEs, licenses, openssl in two
+// versions) feed the package views. Since 2.3 the shop also carries what
+// its supplier states about vulnerabilities: an OpenVEX document for the
+// whole shop, a CSAF advisory in the api component that only its content
+// gives away (a generic JSON blob), and one declared outside the delivery.
+// Demo identifiers only (GHSA-demo-ecme-NNNN).
 
 const SBOM_DEMO_CREATED = '2026-10-01T00:00:00Z';
 const OCI_MANIFEST = 'application/vnd.oci.image.manifest.v1+json';
@@ -732,12 +736,81 @@ export function buildSbomDemoCtf() {
     ),
   );
   const chart = blobOf('ecme gateway helm chart 3.2.0 (demo bytes)');
+  const shopVex = blobOf(
+    JSON.stringify({
+      '@context': 'https://openvex.dev/ns/v0.2.0',
+      '@id': 'https://vex.ecme.example/shop/3.2.0',
+      author: 'ECME Corp Product Security',
+      timestamp: SBOM_DEMO_CREATED,
+      version: 1,
+      statements: [
+        {
+          vulnerability: { name: 'GHSA-demo-ecme-0001' },
+          products: [{ '@id': 'pkg:deb/debian/openssl@3.0.11' }],
+          status: 'affected',
+          action_statement: 'Update the worker image to openssl 3.0.13 (shop 3.2.1).',
+        },
+        {
+          vulnerability: { name: 'GHSA-demo-ecme-0001' },
+          products: [{ '@id': 'pkg:deb/debian/openssl@3.0.13' }],
+          status: 'fixed',
+        },
+        {
+          vulnerability: { name: 'GHSA-demo-ecme-0002' },
+          products: [{ '@id': 'pkg:npm/lodash@4.17.21' }],
+          status: 'not_affected',
+          justification: 'vulnerable_code_not_in_execute_path',
+          impact_statement: 'The web image calls no lodash template function.',
+        },
+        {
+          vulnerability: { name: 'GHSA-demo-ecme-0003' },
+          products: [{ '@id': 'pkg:deb/debian/libcurl4@7.88.1' }],
+          status: 'under_investigation',
+        },
+      ],
+    }),
+  );
+  const apiCsaf = blobOf(
+    JSON.stringify({
+      document: {
+        csaf_version: '2.0',
+        category: 'csaf_vex',
+        title: 'ECME shop api 3.2.0: vulnerability status (demo)',
+        publisher: { category: 'vendor', name: 'ECME Corp Product Security', namespace: 'https://ecme.example' },
+        tracking: {
+          id: 'ECME-VEX-2026-0004',
+          status: 'final',
+          version: '1',
+          initial_release_date: SBOM_DEMO_CREATED,
+          current_release_date: SBOM_DEMO_CREATED,
+          revision_history: [{ number: '1', date: SBOM_DEMO_CREATED, summary: 'Initial release (demo data).' }],
+        },
+        distribution: { tlp: { label: 'WHITE' } },
+      },
+      product_tree: {
+        full_product_names: [
+          { product_id: 'CSAFPID-0001', name: 'fastapi 0.115.0', product_identification_helper: { purl: 'pkg:pypi/fastapi@0.115.0' } },
+          { product_id: 'CSAFPID-0002', name: 'uvicorn 0.30.6', product_identification_helper: { purl: 'pkg:pypi/uvicorn@0.30.6' } },
+        ],
+      },
+      vulnerabilities: [
+        {
+          ids: [{ system_name: 'GitHub Security Advisory', text: 'GHSA-demo-ecme-0004' }],
+          notes: [{ category: 'description', text: 'Demo advisory: request smuggling in an HTTP parser.' }],
+          product_status: { under_investigation: ['CSAFPID-0001'], known_not_affected: ['CSAFPID-0002'] },
+          flags: [{ label: 'vulnerable_code_not_in_execute_path', product_ids: ['CSAFPID-0002'] }],
+        },
+      ],
+    }),
+  );
 
   const components = [
     ['ecme.org/shop/api', [
       localResource('image', 'ociImage', api.manifest, OCI_MANIFEST, { referenceName: 'shop/api:3.2.0' }),
       localResource('sbom', 'sbom', apiSbom, 'application/spdx+json'),
-    ], [apiSbom]],
+      // A generic JSON blob: only its content says it is a CSAF advisory.
+      localResource('advisory', 'blob', apiCsaf, 'application/json'),
+    ], [apiSbom, apiCsaf]],
     ['ecme.org/shop/web', [
       externalImage('image', `registry.ecme.example/shop/web:3.2.0@sha256:${webPushed}`),
       localResource('sbom', 'sbom', webSbom, 'application/spdx+json'),
@@ -760,13 +833,25 @@ export function buildSbomDemoCtf() {
         relation: 'external',
         access: { type: 'wget', url: 'https://downloads.ecme.example/shop/3.2.0/payments.spdx.json', mediaType: 'application/spdx+json' },
       },
+      {
+        name: 'advisory',
+        version: '3.2.0',
+        type: 'csaf',
+        relation: 'external',
+        access: { type: 'wget', url: 'https://downloads.ecme.example/shop/3.2.0/payments.csaf.json', mediaType: 'application/csaf+json' },
+      },
     ], []],
     ['ecme.org/shop/gateway', [
       externalImage('image', 'registry.ecme.example/shop/gateway:3.2.0'),
       localResource('chart', 'helmChart', chart, 'application/vnd.cncf.helm.chart.content.v1.tar+gzip'),
     ], [chart]],
   ];
-  const root = ['ecme.org/shop', [], [], components.map(([name]) => name)];
+  const root = [
+    'ecme.org/shop',
+    [localResource('vex', 'vex', shopVex, 'application/vnd.openvex+json')],
+    [shopVex],
+    components.map(([name]) => name),
+  ];
 
   const entries = [];
   const artifacts = [];

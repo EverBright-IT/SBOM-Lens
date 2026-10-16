@@ -3,6 +3,53 @@
 OCM Lens 2.0 versions independently of the monorepo's 0.x line. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.3.0] - pre-release
+
+### Added
+- **What does the supplier say about a vulnerability?** A new
+  Vulnerabilities tab in the Packages view reads the OpenVEX and CSAF 2.0
+  documents a delivery carries (found by resource type, media type or
+  content, also in a generic JSON blob) and any the reader adds (a button,
+  or drop the file onto an open delivery). Offline only: a document
+  declared with an external access is named and never fetched; nothing is
+  looked up, nothing is scanned.
+- **Statements on the packages that ship.** They are matched to the
+  delivery's packages by purl, CPE and file hash, with the OpenVEX time
+  rule; a package listed by several SBOMs gets the most cautious statement
+  any of them receives. Per vulnerability: the stated status, the packages
+  it reaches with the image or component version they ship in, and the
+  supplier's action, impact or justification. Statements that name no
+  package in the list stay visible, together with the artifacts the list
+  does not cover, because the product may ship there. Search by
+  vulnerability id or alias; a missing statement is called one, never an
+  all-clear.
+- The package table gains a VEX column and filter (worst stated status, or
+  no statement), the package detail lists the statements, and the CSV and
+  JSON exports carry the status and the vulnerabilities when documents are
+  loaded.
+- **Acceptance report.** A "Vulnerability communication" line and section:
+  the documents (read, not read, outside the delivery, unreadable), the
+  packages by stated status, the vulnerabilities that affect or are under
+  investigation, and the statements without a package; an additive `vex`
+  object in the JSON (the schema stays `ocm-lens-acceptance-report/v1`).
+  The export reads the delivery's VEX documents first.
+- **SBOM demo.** An OpenVEX document for the whole shop, a CSAF advisory
+  stored as a generic JSON blob, and one declared outside the delivery.
+  Demo identifiers only.
+
+### Changed
+- Package lists keep the package checksums, so a CSAF advisory that names
+  a product by its file hash reaches it.
+- The Licenses tab is virtualized like the package table: real deliveries
+  name hundreds of license identifiers (one LicenseRef per unrecognized
+  license text).
+
+### Fixed
+- The acceptance report keeps every name and note inside its table cell or
+  list item: a line break or a pipe in a delivery's names, an SBOM's
+  fields or a supplier's note no longer breaks a table or adds lines the
+  report never wrote.
+
 ## [2.2.0] - pre-release
 
 ### Added

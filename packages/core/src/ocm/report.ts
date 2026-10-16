@@ -3,6 +3,8 @@ import type { ResourceRef, SbomAnalysis, SbomBinding, SbomCoverageRow, SbomEvide
 import { ntiaLabel, ntiaSummary, sbomEvidence } from './sbom-evidence';
 import type { DeliveryConflict, DeliveryLicenses, DeliveryPackages, SbomPackageList } from './sbom-packages';
 import { deliveryConflicts, deliveryLicenses, deliveryPackages, NOT_LISTED_LABEL, placeLabel } from './sbom-packages';
+import type { DeliveryVex, VexOrigin, VexSource } from './sbom-vex';
+import { deliveryVex, tr03191Summary, VEX_STATUS_LABEL } from './sbom-vex';
 import type { SignatureVerdict } from './verify';
 
 /**
@@ -40,6 +42,11 @@ export interface AcceptanceReportInput {
    * package figures; the full list belongs in the package export.
    */
   sbomPackages?: Readonly<Record<string, SbomPackageList | null>>;
+  /**
+   * VEX and CSAF documents of the delivery or added to it, read or not.
+   * With any, the report adds what the supplier states about the packages.
+   */
+  vexSources?: readonly VexSource[];
 }
 
 export interface AcceptanceReport {
@@ -118,6 +125,15 @@ function formatBytes(n: number): string {
   return `${value >= 100 ? Math.round(value) : value.toFixed(1)} ${units[unit]}`;
 }
 
+/**
+ * Text from the delivery or a supplier document, made safe for a table cell
+ * or a list item: a line break or a pipe in a name or a supplier's note must
+ * not end the cell or open a section the report never wrote.
+ */
+function inline(text: string): string {
+  return text.replace(/\s+/g, ' ').trim().replace(/\|/g, '\\|');
+}
+
 export function acceptanceReport(input: AcceptanceReportInput): AcceptanceReport {
   const { bundle, signatures, toolVersion, generatedAt } = input;
   const c = bundle.completeness;
@@ -132,6 +148,11 @@ export function acceptanceReport(input: AcceptanceReportInput): AcceptanceReport
     .filter((e) => e.sboms.length > 0);
   const evidence = input.sbomAnalyses ? sbomEvidence(bundle, input.sbomAnalyses) : undefined;
   const packages = evidence && input.sbomPackages ? packageFigures(deliveryPackages(evidence, input.sbomPackages)) : undefined;
+  // Without package lists every statement names something the list lacks.
+  const vex =
+    input.vexSources && input.vexSources.length > 0
+      ? deliveryVex(packages?.model ?? deliveryPackages(evidence ?? sbomEvidence(bundle, {}), {}), input.vexSources)
+      : undefined;
 
   const reasons: string[] = [];
   if (c.broken > 0) reasons.push(`${c.broken} localBlob resource(s) are missing from the archive or incomplete`);
@@ -154,7 +175,7 @@ export function acceptanceReport(input: AcceptanceReportInput): AcceptanceReport
   push();
   push('| | |');
   push('| --- | --- |');
-  push(`| Delivery | \`${bundle.fileName}\` |`);
+  push(`| Delivery | \`${inline(bundle.fileName)}\` |`);
   push(`| Layout | ${LAYOUT_LABEL[bundle.layout]}${bundle.compressed ? ' (gzip)' : ''} |`);
   push(`| Size | ${formatBytes(bundle.archiveSize)} |`);
   push(`| Generated | ${generatedAt} by OCM Lens ${toolVersion} (client-side, nothing uploaded) |`);
@@ -188,6 +209,7 @@ export function acceptanceReport(input: AcceptanceReportInput): AcceptanceReport
       : `- SBOMs: ${sbomCarriers.length} of ${bundle.componentVersions.length} component version(s) carry embedded SBOMs`,
   );
   if (packages) push(`- ${packagesLine(packages)}`);
+  if (vex) push(`- ${vexLine(vex, input.vexSources!)}`);
   push();
   push('## Component versions');
   push();
@@ -196,7 +218,7 @@ export function acceptanceReport(input: AcceptanceReportInput): AcceptanceReport
   for (const cv of bundle.componentVersions) {
     const open = cv.references.filter((r) => !r.target).length;
     push(
-      `| ${cv.name} | ${cv.version} | ${cv.provider?.name ?? '-'} | ${cv.resources.length} | ${cv.references.length}${open > 0 ? ` (${open} open)` : ''} | ${(cv.signatures?.length ?? 0) > 0 ? 'yes' : '-'} | ${cv.resources.some((r) => r.sbom) ? 'yes' : '-'} |`,
+      `| ${inline(cv.name)} | ${inline(cv.version)} | ${inline(cv.provider?.name ?? '-')} | ${cv.resources.length} | ${cv.references.length}${open > 0 ? ` (${open} open)` : ''} | ${(cv.signatures?.length ?? 0) > 0 ? 'yes' : '-'} | ${cv.resources.some((r) => r.sbom) ? 'yes' : '-'} |`,
     );
   }
 
@@ -206,12 +228,12 @@ export function acceptanceReport(input: AcceptanceReportInput): AcceptanceReport
     push();
     for (const { cv, artifact } of gaps) {
       push(
-        `- ${cv.id}: resource \`${artifact.name}\` (${artifact.type ?? 'untyped'}) is ${artifact.transport}${artifact.access?.type ? ` via \`${artifact.access.type}\`` : ''}${artifact.location ? ` — ${artifact.location}` : ''}`,
+        `- ${inline(cv.id)}: resource \`${inline(artifact.name)}\` (${inline(artifact.type ?? 'untyped')}) is ${artifact.transport}${artifact.access?.type ? ` via \`${inline(artifact.access.type)}\`` : ''}${artifact.location ? ` — ${inline(artifact.location)}` : ''}`,
       );
     }
     for (const cv of bundle.componentVersions) {
       for (const ref of cv.references) {
-        if (!ref.target) push(`- ${cv.id}: reference \`${ref.name}\` → ${ref.componentName}@${ref.version} is not in this bundle`);
+        if (!ref.target) push(`- ${inline(cv.id)}: reference \`${inline(ref.name)}\` → ${inline(`${ref.componentName}@${ref.version}`)} is not in this bundle`);
       }
     }
   }
@@ -230,7 +252,7 @@ export function acceptanceReport(input: AcceptanceReportInput): AcceptanceReport
   } else {
     push(`**${digests.mismatch.length} MISMATCH(ES)** — the delivered bytes do not match the descriptor:`);
     push();
-    for (const m of digests.mismatch) push(`- ${m.cvId}: \`${m.artifact}\``);
+    for (const m of digests.mismatch) push(`- ${inline(m.cvId)}: \`${inline(m.artifact)}\``);
   }
 
   push();
@@ -244,7 +266,7 @@ export function acceptanceReport(input: AcceptanceReportInput): AcceptanceReport
     push('| Component | Signature | Verdict | Key | Detail |');
     push('| --- | --- | --- | --- | --- |');
     for (const entry of signatures) {
-      push(`| ${entry.cvId} | ${entry.name} | ${entry.verdict} | ${entry.keyLabel ?? '-'} | ${entry.reason ?? '-'} |`);
+      push(`| ${inline(entry.cvId)} | ${inline(entry.name)} | ${entry.verdict} | ${inline(entry.keyLabel ?? '-')} | ${inline(entry.reason ?? '-')} |`);
     }
   }
 
@@ -263,17 +285,22 @@ export function acceptanceReport(input: AcceptanceReportInput): AcceptanceReport
     } else {
       for (const { cv, sboms } of sbomCarriers) {
         for (const r of sboms) {
-          push(`- ${cv.id}: \`${r.name}\` (${r.sbom!.format}, ${formatBytes(r.sbom!.size)})`);
+          push(`- ${inline(cv.id)}: \`${inline(r.name)}\` (${r.sbom!.format}, ${formatBytes(r.sbom!.size)})`);
         }
       }
     }
+  }
+
+  if (vex) {
+    push();
+    for (const line of vexSection(bundle, vex, input.vexSources!)) push(line);
   }
 
   if (findings.length > 0) {
     push();
     push(`## Findings (${findings.length})`);
     push();
-    for (const d of findings.slice(0, 50)) push(`- ${d.severity}: ${d.message}`);
+    for (const d of findings.slice(0, 50)) push(`- ${d.severity}: ${inline(d.message)}`);
     if (findings.length > 50) push(`- ... and ${findings.length - 50} more`);
   }
   push();
@@ -312,6 +339,7 @@ export function acceptanceReport(input: AcceptanceReportInput): AcceptanceReport
     signatures: signatures ?? null,
     ...(evidence ? { sbomEvidence: evidenceJson(bundle, evidence, input.sbomAnalyses!) } : {}),
     ...(packages ? { packages: packagesJson(bundle, packages) } : {}),
+    ...(vex ? { vex: vexJson(bundle, vex, input.vexSources!) } : {}),
     findings: findings.map((d) => ({ severity: d.severity, code: d.code, message: d.message })),
   };
 
@@ -345,7 +373,7 @@ function packagesSection(bundle: OcmBundle, { model, licenses, conflicts }: Pack
   );
   out.push('');
   if (model.ecosystems.length > 0) {
-    out.push(`- Ecosystems (purl type): ${model.ecosystems.map((e) => `${e.ecosystem ?? 'without purl'} ${e.packages}`).join(', ')}`);
+    out.push(`- Ecosystems (purl type): ${model.ecosystems.map((e) => `${inline(e.ecosystem ?? 'without purl')} ${e.packages}`).join(', ')}`);
   }
   const kinds = (Object.keys(KIND_LABEL) as (keyof typeof KIND_LABEL)[])
     .filter((k) => licenses.kinds[k] > 0)
@@ -354,10 +382,10 @@ function packagesSection(bundle: OcmBundle, { model, licenses, conflicts }: Pack
     `- License identifiers: ${licenses.rows.length} distinct${kinds.length > 0 ? ` (${kinds.join(', ')})` : ''}; ${licenses.withoutLicense} package(s) without a license${licenses.subjectsWithoutLicense > 0 ? ` (${licenses.subjectsWithoutLicense} of them SBOM subjects)` : ''}; ${licenses.unparsed.reduce((n, u) => n + u.packages, 0)} with a value that is not an SPDX expression`,
   );
   if (licenses.rows.length > 0) {
-    const top = licenses.rows.slice(0, 10).map((r) => `${r.id} (${r.packages})`);
+    const top = licenses.rows.slice(0, 10).map((r) => `${inline(r.id)} (${r.packages})`);
     out.push(`- Most named: ${top.join(', ')}${licenses.rows.length > 10 ? `, and ${licenses.rows.length - 10} more` : ''}`);
   }
-  const where = (ref: ResourceRef) => `${ref.cvId} ${resourceAt(bundle, ref)?.name ?? '?'}`;
+  const where = (ref: ResourceRef) => inline(`${ref.cvId} ${resourceAt(bundle, ref)?.name ?? '?'}`);
   if (model.scope.notListed.length > 0) {
     out.push(
       `- Not covered by this list: ${model.scope.notListed.map(({ row, reason }) => `${where(row.artifact)} (${NOT_LISTED_LABEL[reason]})`).join('; ')}`,
@@ -384,7 +412,7 @@ function packagesSection(bundle: OcmBundle, { model, licenses, conflicts }: Pack
         (v) => `${v.version} in ${v.package.places.map((p) => placeLabel(bundle, p)).join(', ')}`,
       );
       const identity = conflict.key.startsWith('purl:') ? ` (${conflict.key.slice('purl:'.length)})` : '';
-      out.push(`| ${conflict.name}${identity} | ${versions.join('; ')} |`);
+      out.push(`| ${inline(conflict.name + identity)} | ${inline(versions.join('; '))} |`);
     }
     if (across.length > 15) out.push('', `... and ${across.length - 15} more in the package views and the JSON report.`);
   }
@@ -425,6 +453,143 @@ function packagesJson(bundle: OcmBundle, { model, licenses, conflicts }: Package
     notListed: model.scope.notListed.map(({ row, reason }) => ({ ...named(row.artifact), reason })),
     unverified: model.scope.unverified.map((row) => named(row.artifact)),
     digestDiffers: model.scope.digestDiffers.map((row) => named(row.artifact)),
+  };
+}
+
+function vexLine(vex: DeliveryVex, sources: readonly VexSource[]): string {
+  const unread = sources.length - vex.documents.length;
+  const read = `${vex.documents.length} VEX/CSAF document(s) read${unread > 0 ? `, ${unread} not read` : ''}`;
+  // Both counts are about delivered packages; a statement that names none
+  // is counted on its own, not as an open question about the delivery.
+  const reaching = vex.vulnerabilities.filter((v) => v.packages.length > 0);
+  const affected = reaching.filter((v) => v.status === 'affected').length;
+  const open = reaching.filter((v) => v.status === 'under_investigation').length;
+  const unmatched = vex.unmatched.length > 0 ? `; ${vex.unmatched.length} statement(s) name no listed package` : '';
+  return `Vulnerability communication: ${read}; per the supplier, ${affected} vulnerability(ies) affect a delivered package, ${open} under investigation${unmatched}`;
+}
+
+function originLabel(bundle: OcmBundle, origin: VexOrigin): string {
+  return origin.kind === 'resource'
+    ? inline(`${origin.ref.cvId} ${resourceAt(bundle, origin.ref)?.name ?? '?'}`)
+    : `added file ${inline(origin.fileName)}`;
+}
+
+const VEX_STATE_LABEL = {
+  pending: 'not read',
+  external: 'outside the delivery, not fetched',
+  unreadable: 'unreadable',
+} as const;
+
+/** What the supplier states, as facts: OCM Lens matches statements, it scans nothing. */
+function vexSection(bundle: OcmBundle, vex: DeliveryVex, sources: readonly VexSource[]): string[] {
+  const out: string[] = ['## Vulnerability communication (VEX)', ''];
+  out.push(
+    `What the supplier states about known vulnerabilities in the delivered packages, read offline from ${vex.documents.length} document(s) with ${vex.statements} statement(s). OCM Lens matches these statements to the package list by purl, CPE and file hash; it does not scan. A package without a statement is not cleared.`,
+  );
+  out.push('', '| Document | Format | From | Statements | State |', '| --- | --- | --- | --- | --- |');
+  for (const source of sources) {
+    if (source.state === 'loaded') {
+      const d = source.document;
+      const tr = d.format === 'csaf' ? tr03191Summary(d) : undefined;
+      const format = d.format === 'csaf' ? `CSAF${tr ? ` (BSI TR-03191: ${tr.passed} of ${tr.total})` : ''}` : 'OpenVEX';
+      out.push(
+        `| ${inline(d.title ?? d.id)} | ${format} | ${originLabel(bundle, source.origin)} | ${d.statements.length} | read |`,
+      );
+    } else {
+      out.push(
+        `| ${inline(source.name)} | - | ${originLabel(bundle, source.origin)} | - | ${VEX_STATE_LABEL[source.state]}${source.reason ? `: ${inline(source.reason)}` : ''} |`,
+      );
+    }
+  }
+  const c = vex.counts;
+  out.push(
+    '',
+    `- Packages: ${c.affected} affected, ${c.under_investigation} under investigation, ${c.fixed} fixed, ${c.not_affected} not affected; ${c.without} with a purl or CPE but no statement; ${c.unmatchable} without either`,
+  );
+  if (vex.unmatched.length > 0) {
+    const ids = [...new Set(vex.unmatched.map((u) => inline(u.vulnerability)))];
+    out.push(
+      `- Statements that name no package in the list: ${vex.unmatched.length} (${ids.slice(0, 10).join(', ')}${ids.length > 10 ? ', ...' : ''}). Their products may still ship in an artifact the package list does not cover${c.unmatchable > 0 ? `, or as one of the ${c.unmatchable} package(s) without a purl or CPE, which no statement can name` : ''}.`,
+    );
+  }
+  const actionable = vex.vulnerabilities.filter((v) => v.status === 'affected' || v.status === 'under_investigation');
+  if (actionable.length > 0) {
+    out.push('', '| Vulnerability | Status | Packages | Supplier\'s note |', '| --- | --- | --- | --- |');
+    for (const v of actionable.slice(0, 25)) {
+      const packages =
+        v.packages.length === 0
+          ? 'none in the package list'
+          : v.packages
+              .map(({ pkg, finding }) => {
+                const where = pkg.places.map((p) => placeLabel(bundle, p)).join(', ');
+                return inline(`${pkg.name} ${pkg.version ?? ''}`) + `${where ? ` in ${inline(where)}` : ''} (${VEX_STATUS_LABEL[finding.status]})`;
+              })
+              .join('; ');
+      // The note of a package in the vulnerability's own status: a sibling's
+      // "not affected" justification says nothing about the affected one.
+      const note =
+        v.packages
+          .filter(({ finding }) => finding.status === v.status)
+          .map(({ finding }) => finding.actionStatement ?? finding.impactStatement ?? finding.justification)
+          .find(Boolean) ?? '-';
+      out.push(`| ${inline(v.id)} | ${VEX_STATUS_LABEL[v.status]} | ${packages} | ${inline(note)} |`);
+    }
+    if (actionable.length > 25) out.push('', `... and ${actionable.length - 25} more in the JSON report.`);
+  }
+  const settled = vex.vulnerabilities.length - actionable.length;
+  if (settled > 0) {
+    out.push('', `${settled} more vulnerability(ies) are stated fixed or not affected (listed in the JSON report).`);
+  }
+  return out;
+}
+
+function vexJson(bundle: OcmBundle, vex: DeliveryVex, sources: readonly VexSource[]): Record<string, unknown> {
+  const origin = (o: VexOrigin) =>
+    o.kind === 'resource' ? { cvId: o.ref.cvId, artifact: resourceAt(bundle, o.ref)?.name ?? null } : { file: o.fileName };
+  return {
+    documents: sources.map((source) =>
+      source.state === 'loaded'
+        ? {
+            name: source.name,
+            id: source.document.id,
+            title: source.document.title ?? null,
+            format: source.document.format ?? 'openvex',
+            origin: origin(source.origin),
+            state: 'read',
+            statements: source.document.statements.length,
+          }
+        : { name: source.name, origin: origin(source.origin), state: source.state, reason: source.reason ?? null },
+    ),
+    statements: vex.statements,
+    counts: vex.counts,
+    vulnerabilities: vex.vulnerabilities.map((v) => ({
+      id: v.id,
+      aliases: v.aliases,
+      status: v.status,
+      packages: v.packages.map(({ pkg, finding }) => ({
+        name: pkg.name,
+        version: pkg.version ?? null,
+        purl: pkg.purl ?? null,
+        status: finding.status,
+        ...(finding.justification ? { justification: finding.justification } : {}),
+        ...(finding.impactStatement ? { impactStatement: finding.impactStatement } : {}),
+        ...(finding.actionStatement ? { actionStatement: finding.actionStatement } : {}),
+        document: finding.sourceFile,
+        foundIn: pkg.places.map((p) => ({
+          cvId: p.cvId,
+          artifact: p.kind === 'artifact' && p.ref ? (resourceAt(bundle, p.ref)?.name ?? null) : null,
+          binding: p.strength,
+        })),
+      })),
+      unmatchedStatements: v.unmatched.length,
+    })),
+    unmatched: vex.unmatched.map((u) => ({
+      vulnerability: u.vulnerability,
+      status: u.status,
+      products: u.products,
+      document: u.document,
+      origin: origin(u.origin),
+    })),
   };
 }
 
@@ -501,9 +666,9 @@ function evidenceSection(
     out.push('', '| Component version | Artifact | Type | SBOM | Binding |', '| --- | --- | --- | --- | --- |');
     for (const row of rows) {
       const artifact = resourceAt(bundle, row.artifact);
-      const sboms = row.sboms.map((ref) => resourceAt(bundle, ref)?.name ?? '?').join(', ') || '-';
+      const sboms = inline(row.sboms.map((ref) => resourceAt(bundle, ref)?.name ?? '?').join(', ') || '-');
       out.push(
-        `| ${row.artifact.cvId} | ${artifact?.name ?? '?'} | ${artifact?.type ?? '-'}${row.expected ? '' : ' (optional)'} | ${sboms} | ${coverageLabel(row)} |`,
+        `| ${inline(row.artifact.cvId)} | ${inline(artifact?.name ?? '?')} | ${inline(artifact?.type ?? '-')}${row.expected ? '' : ' (optional)'} | ${sboms} | ${inline(coverageLabel(row))} |`,
       );
     }
   }
@@ -520,14 +685,14 @@ function evidenceSection(
     const analysis = occurrence.sha1 ? analyses[occurrence.sha1] : undefined;
     if (analysis?.state !== 'analyzed') {
       const why = occurrence.presence === 'external' ? 'external, not analysed' : occurrence.presence === 'deferred' ? 'deferred (size budget)' : 'unreadable';
-      out.push(`| ${occurrence.at.cvId} | ${occurrence.name} | ${why} | - | - | - | - | - | - |`);
+      out.push(`| ${inline(occurrence.at.cvId)} | ${inline(occurrence.name)} | ${why} | - | - | - | - | - | - |`);
       continue;
     }
     const s = analysis.summary;
     const subject = [s.subject.name, s.subject.version && shortDigest(s.subject.version)].filter(Boolean).join(' ') || '-';
     const bsi = formatGateFailed(s.profiles.bsi.results) ? 'format not accepted' : gated(s.profiles.bsi);
     out.push(
-      `| ${occurrence.at.cvId} | ${occurrence.name} | ${s.spec} | ${generators(s.creators)} | ${s.packages} | ${subject} | ${bindingLabel(occurrence.binding)} | ${ntiaLabel(ntiaSummary(s.profiles.ntia))} | ${bsi} |`,
+      `| ${inline(occurrence.at.cvId)} | ${inline(occurrence.name)} | ${inline(s.spec)} | ${inline(generators(s.creators))} | ${s.packages} | ${inline(subject)} | ${bindingLabel(occurrence.binding)} | ${ntiaLabel(ntiaSummary(s.profiles.ntia))} | ${bsi} |`,
     );
   }
   out.push(
