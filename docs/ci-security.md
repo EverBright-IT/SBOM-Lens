@@ -63,6 +63,7 @@ reason and an exit condition:
 |---|---|---|
 | `fast-uri: ^3.1.4` | GHSA-v2hh-gcrm-f6hx (7.5); the declared ranges (`^3.0.1`) allowed the fix but npm would not re-resolve on its own | once every consumer (ajv, via vite-plugin-pwa and @vscode/vsce) requires 3.1.4 or newer on its own |
 | `brace-expansion: ^5.0.8` | GHSA-mh99-v99m-4gvg (7.5); the fix is a major version and the deep `minimatch@5` chain declares `^2.0.1` | once the chain (vite-plugin-pwa → workbox-build → … → minimatch) ships a minimatch that depends on 5.x |
+| `@azure/msal-node: ^7.1.0` | GHSA-xcx6-jx8p-x3h5 (7.5); the fix is a major version and `@azure/identity` (under `@vscode/vsce`) declares `^6.0.0`. The only breaking change in msal-node 7 is in the interactive browser flow; `@azure/identity` loads and constructs credentials with 7.x, and both extensions package with it | once `@azure/identity`, and with it `@vscode/vsce`, depends on msal-node 7 |
 
 Two practical notes, both learned the hard way:
 

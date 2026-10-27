@@ -1,8 +1,0 @@
-# Ignores for the osv-scan gate (docs/ci-security.md, "Suppressing findings").
-# Every entry says why the finding does not reach anything we ship and when
-# it must be looked at again; the scan fails on its own once the date passes.
-
-[[IgnoredVulns]]
-id = "GHSA-xcx6-jx8p-x3h5"
-ignoreUntil = 2026-12-31
-reason = "@azure/msal-node 6.0.1 comes in through @vscode/vsce 4.0.0 and @azure/identity 4.14.0, which still requires msal-node 6; no upstream release moves it to the fixed 7.1.0 yet. The flaw sits in the interactive authorization-code login flow. Our pipelines publish with a personal access token and never run that flow, and vsce is a publishing tool only: nothing of it is part of the web app or the extensions. Drop this entry as soon as @azure/identity or vsce depends on msal-node 7."
