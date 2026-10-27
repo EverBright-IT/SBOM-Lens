@@ -446,8 +446,21 @@ host anything. It is the reading half of the SBOM workflow.
   [Open VSX](https://open-vsx.org/extension/everbright-it/sbomlens)).
   Architecture:
   [docs/extension-architecture.md](docs/extension-architecture.md).
-- Workspace persistence (File System Access API), shareable deep links
-  (deep links require addressable sources: catalog or URL-loaded documents)
+- **Provenance**: open an SBOM that arrives signed or wrapped, which today
+  does not load at all: in-toto attestations in a DSSE envelope (what
+  cosign, GitHub artifact attestations and `docker buildx --sbom` produce),
+  Sigstore bundles, and CycloneDX's own JSF and XML-DSig signatures. The
+  envelope becomes facts next to the document (signer identity from the
+  certificate, timestamp, transparency log entry), and a signature verifies
+  against a key you paste or pin, as OCM Lens does for component
+  descriptors, with RSA, ECDSA and Ed25519 through WebCrypto. Deliberately
+  not: keyless verification through certificate chains and transparency
+  log proofs; that is a trust policy, and `cosign verify-attestation` has
+  it. The regulatory pull is soft (BSI TR-03183-2 8.1.15 says SBOMs should
+  "ideally" be signed), the practical pull is the acceptance question:
+  is this the supplier's SBOM, unchanged? Planned, not scheduled.
+- Workspace persistence (File System Access API). Deep links shipped in
+  v0.26.0 (see [Loading documents](#loading-documents)).
 
 ## Repository & mirrors
 
