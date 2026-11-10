@@ -16,6 +16,12 @@ follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   component creator via the originator with a contact, the concluded
   licence, the filename and the SHA-512 hash as the TR's appendix 8.2 maps
   them, and its format gate rejects SPDX 3.0.0.
+- **CSAF 2.1 advisories in a delivery are read (SBOM Lens 0.29.11).** The
+  shared reader takes the 2.1 metrics for the CVSS row, the disclosure date
+  as the statement date and the first_affected, last_affected, first_fixed
+  and recommended buckets (affected or fixed); a product with status
+  unknown yields no statement and a note; the unreadable reason no longer
+  says CSAF 2.0.
 
 ## [2.3.0] - pre-release
 

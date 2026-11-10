@@ -7,7 +7,8 @@
 > statement, the viewer shows nothing, and says so.
 
 Load an [OpenVEX](https://github.com/openvex/spec) or
-[CSAF 2.0](https://docs.oasis-open.org/csaf/csaf/v2.0/csaf-v2.0.html)
+[CSAF 2.0](https://docs.oasis-open.org/csaf/csaf/v2.0/csaf-v2.0.html) or
+[CSAF 2.1](https://docs.oasis-open.org/csaf/csaf/v2.1/csaf-v2.1.html)
 document next to your SBOMs — drop it, pick it, or fetch it from a URL,
 exactly like any other file; the content sniff recognizes both — and every
 statement is matched against the loaded inventory by package URL. The two
@@ -33,7 +34,7 @@ Statuses render exactly as OpenVEX defines them: `affected` (red),
 `under_investigation` (amber), `fixed` (emerald), `not_affected` (slate).
 Each loaded document is tagged **OpenVEX** or **CSAF** in the overview.
 
-## CSAF 2.0: product-tree resolution
+## CSAF 2.0 and 2.1: product-tree resolution
 
 CSAF separates identity from assertion. A `product_tree` names products —
 through `full_product_names`, a recursive `branches` tree, and
@@ -41,9 +42,17 @@ through `full_product_names`, a recursive `branches` tree, and
 `vulnerabilities[].product_status` buckets then reference those products by
 id. SBOM Lens resolves that indirection before matching:
 
-- The four buckets map onto the VEX statuses: `known_affected` →
-  *affected*, `known_not_affected` → *not affected*, `fixed` → *fixed*,
-  `under_investigation` → *under investigation*.
+- The status buckets map onto the VEX statuses the way mandatory test
+  6.1.6 groups them: `known_affected`, `first_affected` and
+  `last_affected` → *affected*, `known_not_affected` → *not affected*,
+  `fixed`, `first_fixed` and `recommended` → *fixed*,
+  `under_investigation` → *under investigation*. CSAF 2.1's `unknown`
+  ("not known whether affected", no investigation promised) yields no
+  statement; the document notes the count (`CSAF_STATUS_UNKNOWN`) and the
+  package shows no statement, which is never an all-clear.
+- A statement's date is the vulnerability's `disclosure_date` (2.1) or
+  `release_date` (2.0); without one, the document's
+  `tracking.current_release_date` stands in for the time rule.
 - A **relationship** product (e.g. *openssl as a component of api-server*)
   resolves to the **component** it installs (`product_reference`) — that is
   the package that appears in an SBOM — unless it carries its own
@@ -55,6 +64,14 @@ id. SBOM Lens resolves that indirection before matching:
   description/summary note the description. `document.tracking` supplies
   the id, timestamp, version and status; `document.category` (the profile),
   `title` and the TLP label are shown next to the document.
+- CSAF 2.1 (Committee Specification Draft 04, 21 October 2026) is read
+  alongside 2.0: `metrics[]` replaces `scores[]` (the TR-03191 CVSS row
+  reads either), the remediation categories `fix_planned` and
+  `optional_patch` are shown as stated and count as neither a fix nor a
+  no-fix for the TR-03191 fixing-versions row, and the `csaf_withdrawn`,
+  `csaf_superseded` and `csaf_deprecated_security_advisory` profiles are
+  placed in the TR-03191 profile row. The overview tags each document with
+  the version it read.
 - Annotations aimed at a `group_ids` entry resolve through `product_groups`
   to the members; an annotation without any product or group applies to
   every product of that vulnerability, one aimed at an unknown group to
@@ -89,11 +106,16 @@ windows and the 48-hour reaction to BSI warnings cannot be read off a file
 and are not measured.
 
 A handful of CSAF schema facts this reader relies on are reported as spec
-findings (`CSAF_SCHEMA_*`): the 2.x version, the mandatory tracking and
-publisher fields, the CVE id pattern, product ids referenced anywhere but
-never defined in the product tree (mandatory test 6.1.1), and remediations
-or flags that name no product (6.1.29, 6.1.32). This is not a schema
-validator; the OASIS csaf-validator owns that.
+findings (`CSAF_SCHEMA_*`, nine codes): the version (2.0 or 2.1), the
+mandatory tracking and publisher fields, the CVE id pattern, product ids
+referenced anywhere (status buckets, remediations, flags, threats, 2.0
+scores, 2.1 metrics and first known exploitation dates) but never defined
+in the product tree (mandatory test 6.1.1), remediations or flags that name
+no product (6.1.29, 6.1.32), a TLP label outside the vocabulary of the
+version read (2.0: AMBER, GREEN, RED, WHITE; 2.1: AMBER, AMBER+STRICT,
+CLEAR, GREEN, RED), and a 2.1 document without the mandatory
+`distribution`. This is not a schema validator; the OASIS csaf-validator
+owns that.
 
 ## Matching rules (deliberately conservative)
 
@@ -155,6 +177,10 @@ covered).
 
 ## Limits (deliberate)
 
+- **A product with status `unknown` (CSAF 2.1) shows no statement.** The
+  specification defines it as not investigated and possibly never
+  determined; mapping it to *under investigation* would promise a result
+  the document withholds. The document lists the count instead.
 - **Matching is by purl, CPE and file hash.** CPE matching is name-exact:
   no NIST-style wildcard evaluation, no version ranges, no update/edition
   comparison; a CPE the normalisation cannot pin to a concrete

@@ -25,8 +25,25 @@ import type { CsafRequirementFinding } from './vex';
  * `_SCHEMA_` infix.
  */
 
-const ADVISORY_PROFILES = new Set(['csaf_security_advisory', 'csaf_vex', 'csaf_security_incident_response']);
-const NO_VULNERABILITY_PROFILES = new Set(['csaf_informational_advisory', 'csaf_security_incident_response']);
+// CSAF 2.1 adds csaf_deprecated_security_advisory (still an advisory; its
+// deprecation is CSAF's concern, not the TR's), and csaf_withdrawn and
+// csaf_superseded, which carry no product tree and no vulnerabilities.
+// csaf_vulnerability_report is a report to a vendor or CNA, not the
+// user-facing advisory the TR's 4.2 names, and stays out.
+const ADVISORY_PROFILES = new Set([
+  'csaf_security_advisory',
+  'csaf_vex',
+  'csaf_security_incident_response',
+  'csaf_deprecated_security_advisory',
+]);
+const NO_VULNERABILITY_PROFILES = new Set([
+  'csaf_informational_advisory',
+  'csaf_security_incident_response',
+  'csaf_withdrawn',
+  'csaf_superseded',
+]);
+// fix_planned (2.1) is neither a fix nor a statement that none will come:
+// a vulnerability with only that remediation keeps failing the row.
 const NO_FIX_CATEGORIES = new Set(['no_fix_planned', 'none_available']);
 const AFFECTED_BUCKETS = ['known_affected', 'first_affected', 'last_affected'];
 const FIXED_BUCKETS = ['fixed', 'first_fixed', 'recommended'];
@@ -39,6 +56,7 @@ const STATUS_BUCKETS = [
   'first_fixed',
   'under_investigation',
   'recommended',
+  'unknown', // CSAF 2.1: referenced, so it counts for the hashes row
 ];
 /** Product trees deeper than this are not walked further; a hostile document must not exhaust the stack. */
 const MAX_BRANCH_DEPTH = 64;

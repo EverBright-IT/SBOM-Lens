@@ -159,3 +159,24 @@ describe('CSAF through the ingest funnel', () => {
     expect(findings.map((f) => f.vulnerability).sort()).toEqual(['CVE-2026-40711', 'CVE-2026-99999']);
   });
 });
+
+describe('CSAF 2.1 through the ingest funnel', () => {
+  beforeEach(() => {
+    setHost(fakeHost);
+    useAppStore.getState().actions.clearAll();
+  });
+
+  it('consumes a 2.1 advisory with the same prescreen and tags its version', async () => {
+    const csaf21 = CSAF.replace('"csaf_version":"2.0"', '"csaf_version":"2.1"').replace(
+      '"category":"csaf_vex"',
+      '"category":"csaf_vex","distribution":{"tlp":{"label":"CLEAR"}}',
+    );
+    expect(csaf21).not.toBe(CSAF);
+    const added = await ingestBuffers([{ fileName: 'acme21.csaf.json', buffer: buf(csaf21) }]);
+    expect(added).toEqual([]);
+    const doc = useAppStore.getState().vex.documents[0]!;
+    expect(doc).toMatchObject({ format: 'csaf', specVersion: '2.1', tlp: 'CLEAR' });
+    await ingestBuffers([{ fileName: 'app.spdx', buffer: buf(SBOM) }]);
+    expect(useAppStore.getState().vex.findings.size).toBe(1);
+  });
+});

@@ -6,15 +6,18 @@ import { lintCsafTr03191 } from './csaf-tr03191';
 import type { VexDocument, VexProductHash, VexProductRef, VexRemediation, VexStatement, VexStatus } from './vex';
 
 /**
- * CSAF 2.0 → the neutral VexDocument the rest of the app already consumes.
- * CSAF is the BSI exchange format and, unlike OpenVEX, separates identity
- * from assertion: a `product_tree` names products (branches, full product
- * names, relationships) and hangs an identifier on each, while the
+ * CSAF 2.0 and 2.1 → the neutral VexDocument the rest of the app already
+ * consumes. CSAF is the BSI exchange format and, unlike OpenVEX, separates
+ * identity from assertion: a `product_tree` names products (branches, full
+ * product names, relationships) and hangs an identifier on each, while the
  * `vulnerabilities[].product_status` buckets reference those products by id.
  * The work here is resolving that indirection to purls (or CPEs — BSI-CERT
- * advisories often carry only a CPE) and mapping the four status buckets
- * onto VexStatus; once a VexDocument comes out, matchVex, the time rule,
- * the overlay UI and coverage are all shared with OpenVEX.
+ * advisories often carry only a CPE) and mapping the status buckets onto
+ * VexStatus; once a VexDocument comes out, matchVex, the time rule, the
+ * overlay UI and coverage are all shared with OpenVEX. CSAF 2.1 (csd04,
+ * 2026-10-21) renames release_date to disclosure_date, replaces scores with
+ * metrics, adds the `unknown` bucket and makes distribution mandatory; the
+ * reader takes both versions and says which one it read.
  *
  * This handles the CSAF VEX profile and the security-advisory profile alike
  * (both carry product_status), and accepts the profiles without a
@@ -37,13 +40,33 @@ import type { VexDocument, VexProductHash, VexProductRef, VexRemediation, VexSta
  */
 export const MAX_CSAF_BYTES = 8 * 1024 * 1024;
 
-/** product_status bucket → the VexStatus it means. Order is display-neutral. */
+/**
+ * product_status bucket → the VexStatus it means. The affected and fixed
+ * groups are the sets mandatory test 6.1.6 treats as one (first_affected,
+ * known_affected, last_affected; first_fixed, fixed, recommended), the same
+ * sets the TR-03191 fixing-versions row in csaf-tr03191.ts reads, so parser
+ * and measurement agree. CSAF 2.1's `unknown` is handled apart: it yields
+ * no statement (see parseCsaf). Order is display-neutral.
+ */
 const STATUS_BUCKETS: ReadonlyArray<readonly [string, VexStatus]> = [
   ['known_affected', 'affected'],
+  ['first_affected', 'affected'], // "first versions ... known to be affected"
+  ['last_affected', 'affected'], // "last versions in a release train known to be affected"
   ['known_not_affected', 'not_affected'],
   ['fixed', 'fixed'],
+  ['first_fixed', 'fixed'], // "contain the first fix", not necessarily the recommended versions
+  ['recommended', 'fixed'], // "have a fix ... and are the vendor-recommended versions for fixing it"
   ['under_investigation', 'under_investigation'],
 ];
+
+/**
+ * TLP labels per CSAF version: 2.1 retires WHITE for CLEAR, adds AMBER+STRICT
+ * and makes document.distribution with its tlp.label mandatory.
+ */
+const TLP_LABELS: Record<string, readonly string[]> = {
+  '2.0': ['AMBER', 'GREEN', 'RED', 'WHITE'],
+  '2.1': ['AMBER', 'AMBER+STRICT', 'CLEAR', 'GREEN', 'RED'],
+};
 
 /** One product's resolved identifiers, gathered from the product tree. */
 interface ProductIdent {
@@ -108,12 +131,17 @@ export function parseCsaf(fileName: string, raw: unknown): VexDocument {
     const productStatus = isRecord(vuln.product_status) ? vuln.product_status : {};
     const aliases = vulnAliases(vuln, vulnerability);
     const description = notesText(vuln.notes);
-    const timestamp = asString(vuln.release_date);
+    // CSAF 2.1 renamed release_date to disclosure_date; both are the date the
+    // vulnerability was disclosed, not the date of this statement, and the
+    // time rule falls back to the document's tracking date without one.
+    // flags[].date is deliberately not used: it dates one product's
+    // justification and would split the grouping below by product.
+    const timestamp = asString(vuln.disclosure_date) ?? asString(vuln.release_date);
     // Flags and remediations name their products (CSAF 2.0 sections 3.2.3.5
-    // and 3.2.3.12: product_ids or group_ids MUST be present), so an entry
-    // without either applies to nobody and is reported as a schema finding
-    // below. A threat may omit both, and then describes the vulnerability
-    // for every product.
+    // and 3.2.3.12, kept in 2.1: product_ids or group_ids MUST be present),
+    // so an entry without either applies to nobody and is reported as a
+    // schema finding below. A threat may omit both, and then describes the
+    // vulnerability for every product.
     const flags = annotationsByProduct(vuln.flags, 'label', groupMembers, false);
     const remediationTexts = annotationsByProduct(vuln.remediations, 'details', groupMembers, false);
     const remediationLists = remediationsByProduct(vuln.remediations, groupMembers);
@@ -182,6 +210,23 @@ export function parseCsaf(fileName: string, raw: unknown): VexDocument {
         });
       }
     }
+
+    // CSAF 2.1 product_status.unknown: "it is not known whether these
+    // versions are or are not affected", and no investigation is promised.
+    // No statement is derived: OpenVEX has no such status, and
+    // under_investigation would promise a result the document withholds.
+    // The package then shows no statement, which docs/vex.md defines as
+    // never an all-clear; the count is said here.
+    const unknown = asStringArray(productStatus.unknown).length;
+    if (unknown > 0) {
+      diagnostics.push(
+        diag(
+          'info',
+          'CSAF_STATUS_UNKNOWN',
+          `${vulnerability}: ${unknown} product(s) have status unknown (CSAF 2.1: not investigated, may never be determined); no statement is derived.`,
+        ),
+      );
+    }
   });
 
   // Beyond the depth cap the tree is not read; saying so beats reporting the
@@ -216,6 +261,7 @@ export function parseCsaf(fileName: string, raw: unknown): VexDocument {
     id,
     fileName,
     format: 'csaf',
+    ...(asString(docNode.csaf_version) !== undefined ? { specVersion: asString(docNode.csaf_version)! } : {}),
     ...(trackingId !== undefined ? { trackingId } : {}),
     ...(publisher && asString(publisher.name) !== undefined ? { author: asString(publisher.name)! } : {}),
     ...(asString(tracking.current_release_date) !== undefined
@@ -248,8 +294,8 @@ function csafSchemaFindings(root: Record<string, unknown>, defined: ReadonlySet<
   const tracking = isRecord(docNode.tracking) ? docNode.tracking : {};
 
   const version = asString(docNode.csaf_version);
-  if (version !== undefined && !/^2\.\d+$/.test(version)) {
-    lint.warn('CSAF_SCHEMA_BAD_VERSION', `document.csaf_version "${version}" is not a CSAF 2.x version.`);
+  if (version !== undefined && !/^2\.[01]$/.test(version)) {
+    lint.warn('CSAF_SCHEMA_BAD_VERSION', `document.csaf_version "${version}" is not a CSAF version this reader knows (2.0, 2.1).`);
   }
 
   const missingTracking = ['id', 'version', 'status', 'initial_release_date', 'current_release_date'].filter(
@@ -263,6 +309,20 @@ function csafSchemaFindings(root: Record<string, unknown>, defined: ReadonlySet<
   const missingPublisher = ['category', 'name', 'namespace'].filter((field) => asString(publisher[field]) === undefined);
   if (missingPublisher.length > 0) {
     lint.warn('CSAF_SCHEMA_MISSING_PUBLISHER', `document.publisher lacks the mandatory ${missingPublisher.join(', ')}.`);
+  }
+
+  // The TLP vocabulary is the schema's, exact spelling (the chip normalises
+  // a "TLP:" prefix for display only); 2.1 makes distribution mandatory.
+  const distribution = isRecord(docNode.distribution) ? docNode.distribution : undefined;
+  const tlpLabel = distribution && isRecord(distribution.tlp) ? asString(distribution.tlp.label) : undefined;
+  const labels = version !== undefined ? TLP_LABELS[version] : undefined;
+  if (version === '2.1' && tlpLabel === undefined) {
+    lint.warn('CSAF_SCHEMA_MISSING_DISTRIBUTION', 'document.distribution.tlp.label is mandatory in CSAF 2.1.');
+  } else if (tlpLabel !== undefined && labels !== undefined && !labels.includes(tlpLabel)) {
+    lint.warn(
+      'CSAF_SCHEMA_BAD_TLP_LABEL',
+      `distribution.tlp.label "${tlpLabel}" is not a label CSAF ${version} defines (${labels.join(', ')}).`,
+    );
   }
 
   const badCve = createTally({ unique: true });
@@ -290,7 +350,9 @@ function csafSchemaFindings(root: Record<string, unknown>, defined: ReadonlySet<
     for (const ids of Object.values(status)) {
       for (const pid of asStringArray(ids)) if (!defined.has(pid)) undefinedProduct.add(pid);
     }
-    for (const list of [vuln.remediations, vuln.flags, vuln.threats, vuln.scores]) {
+    // 2.0 scores and 2.1 metrics name their products as `products`; 2.1's
+    // first_known_exploitation_dates do too.
+    for (const list of [vuln.remediations, vuln.flags, vuln.threats, vuln.scores, vuln.metrics, vuln.first_known_exploitation_dates]) {
       for (const entry of asRecordArray(list)) {
         for (const pid of [...asStringArray(entry.product_ids), ...asStringArray(entry.products)]) {
           if (!defined.has(pid)) undefinedProduct.add(pid);

@@ -35,7 +35,7 @@ Findings carry a stable code with a `_SCHEMA_` infix, prefixed by the format:
 | `SPDX2_SCHEMA_*` | SPDX 2.x (JSON, YAML, tag-value) | 14 |
 | `SPDX3_SCHEMA_*` | SPDX 3.0.x (JSON-LD) | 8 |
 | `CDX_SCHEMA_*` | CycloneDX 1.x (JSON, XML) | 14 |
-| `CSAF_SCHEMA_*` | CSAF 2.x advisories (the overlay, not the SBOM) | 5 |
+| `CSAF_SCHEMA_*` | CSAF 2.0 and 2.1 advisories (the overlay, not the SBOM) | 9 |
 | `OCM_SCHEMA_*` | OCM component descriptors | 9 |
 
 **SPDX 2.x**: the version literal, `dataLicense` (the spec mandates CC0-1.0),

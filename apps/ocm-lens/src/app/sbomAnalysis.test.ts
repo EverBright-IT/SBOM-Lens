@@ -486,7 +486,7 @@ describe('VEX documents', () => {
             item.key,
             item.localReference
               ? { document: VEX_DOCUMENT }
-              : { reason: 'neither an OpenVEX nor a CSAF 2.0 document' },
+              : { reason: 'neither an OpenVEX nor a CSAF document' },
           ]),
         );
         worker.onmessage?.({ data: { kind: 'vex-read', id: message.id, results } } as MessageEvent);
@@ -525,7 +525,7 @@ describe('VEX documents', () => {
     expect(added).toMatchObject({
       name: 'notes.json',
       state: 'unreadable',
-      reason: 'neither an OpenVEX nor a CSAF 2.0 document',
+      reason: 'neither an OpenVEX nor a CSAF document',
     });
     useAppStore.getState().actions.removeVexEntry(added.key);
     expect(useAppStore.getState().delivery!.vexSources.map((s) => s.origin.kind)).toEqual([
@@ -550,7 +550,7 @@ describe('VEX documents', () => {
     expect(outcome.ok).toBe(true);
     if (!outcome.ok) return;
     expect(outcome.report.markdown).toContain(
-      '| notes.json | - | added file notes.json | - | unreadable: neither an OpenVEX nor a CSAF 2.0 document |',
+      '| notes.json | - | added file notes.json | - | unreadable: neither an OpenVEX nor a CSAF document |',
     );
   });
 
@@ -637,7 +637,7 @@ describe('a blob only a content marker pointed at', () => {
           (message.items ?? []).map((item) => [
             item.key,
             item.localReference === 'sha256:notes'
-              ? { reason: 'neither an OpenVEX nor a CSAF 2.0 document' }
+              ? { reason: 'neither an OpenVEX nor a CSAF document' }
               : { document: VEX_DOCUMENT },
           ]),
         );

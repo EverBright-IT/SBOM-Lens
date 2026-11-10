@@ -187,7 +187,7 @@ the SBOM evidence. Both are pure and shared by the view and the report.
 
 The Vulnerabilities tab of the Packages view shows what the supplier
 states about known vulnerabilities in the delivered packages. The sources
-are OpenVEX and CSAF 2.0 documents, offline only:
+are OpenVEX and CSAF 2.0 or 2.1 documents, offline only:
 
 - **in the delivery**: a resource whose type or media type names VEX, CSAF
   or an advisory, or a JSON or text blob whose content preview carries the

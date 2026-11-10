@@ -311,7 +311,7 @@ export async function analyzeDeliverySboms(
 }
 
 /**
- * Read one VEX or CSAF document (OpenVEX JSON or CSAF 2.0 JSON, possibly
+ * Read one VEX or CSAF document (OpenVEX JSON or CSAF 2.0 or 2.1 JSON, possibly
  * gzip-stored). Never throws: anything else comes back with the reason.
  */
 export async function readVexDocument(input: {
@@ -329,7 +329,7 @@ export async function readVexDocument(input: {
     if (vex.isVex) return { document: parseOpenVex(input.fileName, vex.raw) };
     const csaf = sniffCsaf(text);
     if (csaf.isCsaf) return { document: parseCsaf(input.fileName, csaf.raw) };
-    return { reason: 'neither an OpenVEX nor a CSAF 2.0 document' };
+    return { reason: 'neither an OpenVEX nor a CSAF document' };
   } catch (e) {
     return { reason: e instanceof Error ? e.message : String(e) };
   }

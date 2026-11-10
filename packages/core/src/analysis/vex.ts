@@ -47,7 +47,7 @@ export interface VexProductRef {
 
 /** A CSAF remediation, kept structured so the reader sees kind, link and date. */
 export interface VexRemediation {
-  /** vendor_fix, mitigation, workaround, none_available, no_fix_planned, ... */
+  /** vendor_fix, mitigation, workaround, none_available, no_fix_planned, and CSAF 2.1's fix_planned, optional_patch, ... */
   category: string;
   details?: string;
   url?: string;
@@ -94,6 +94,8 @@ export interface VexDocument {
   fileName: string;
   /** Source exchange format; drives a UI label, never the matching. */
   format?: 'openvex' | 'csaf';
+  /** CSAF document.csaf_version as written (2.0, 2.1), for the overview label. */
+  specVersion?: string;
   author?: string;
   timestamp?: string;
   version?: number;

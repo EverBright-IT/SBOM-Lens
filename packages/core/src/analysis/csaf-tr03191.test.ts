@@ -184,3 +184,31 @@ describe('lintCsafTr03191 with the parser-resolved products', () => {
     expect(doc.tr03191!.find((f) => f.id === 'tr03191-product-hashes')).toMatchObject({ pass: true, actual: '2 of 2 referenced products' });
   });
 });
+
+describe('lintCsafTr03191 on CSAF 2.1 profiles and remediations', () => {
+  it('places the withdrawn and superseded profiles with the ones that carry no vulnerabilities', () => {
+    for (const category of ['csaf_withdrawn', 'csaf_superseded']) {
+      const r = byId(advisory({ vulnerabilities: [] }, { category, csaf_version: '2.1', distribution: { tlp: { label: 'CLEAR' } } }));
+      expect(r['tr03191-profile'], category).toMatchObject({ pass: true });
+      expect(r['tr03191-profile']!.applicable).toBeUndefined();
+      for (const id of ['tr03191-cve', 'tr03191-cvss', 'tr03191-fixed-versions', 'tr03191-product-hashes']) {
+        expect(r[id]!.applicable, id).toBe(false);
+      }
+    }
+  });
+
+  it('accepts the deprecated security advisory profile as an advisory, not the vulnerability report', () => {
+    expect(byId(advisory({}, { category: 'csaf_deprecated_security_advisory', csaf_version: '2.1' }))['tr03191-profile']!.pass).toBe(true);
+    expect(byId(advisory({}, { category: 'csaf_vulnerability_report', csaf_version: '2.1' }))['tr03191-profile']!.pass).toBe(false);
+  });
+
+  it('treats fix_planned as neither a fix nor a no-fix statement (4.2)', () => {
+    const planned = {
+      cve: 'CVE-2026-6001',
+      metrics: [{ content: { cvss_v3: { baseScore: 5 } }, products: ['GW-2.1.0'] }],
+      product_status: { known_affected: ['GW-2.1.0'] },
+      remediations: [{ category: 'fix_planned', details: 'Next release.', product_ids: ['GW-2.1.0'] }],
+    };
+    expect(byId(advisory({ vulnerabilities: [planned] }, { csaf_version: '2.1' }))['tr03191-fixed-versions']!.pass).toBe(false);
+  });
+});

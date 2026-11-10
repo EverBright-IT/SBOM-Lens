@@ -4,6 +4,37 @@ All notable changes to SBOM Lens. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [SemVer](https://semver.org) (0.x: the API surface is the app itself).
 
+## [0.29.11] - 2026-11-10
+
+### Added
+- **CSAF 2.1 advisories are read as the specification defines them.**
+  Checked against CSAF 2.1 Committee Specification Draft 04 (21 October
+  2026): the product ids in `metrics[].products` and
+  `first_known_exploitation_dates[].products` count for mandatory test
+  6.1.1, the vulnerability's `disclosure_date` is the statement date (2.0
+  `release_date` as before), the TLP labels are CLEAR, GREEN, AMBER,
+  AMBER+STRICT and RED and `distribution` is mandatory (new findings
+  `CSAF_SCHEMA_BAD_TLP_LABEL` and `CSAF_SCHEMA_MISSING_DISTRIBUTION`; a 2.0
+  document keeps WHITE and may omit distribution), the `fix_planned` and
+  `optional_patch` remediations are shown as stated and count as neither a
+  fix nor a no-fix for the TR-03191 fixing-versions row, and the withdrawn,
+  superseded and deprecated security advisory profiles are placed in the
+  TR-03191 profile row. A product with status `unknown` yields no
+  statement, because 2.1 defines it as not investigated and possibly never
+  determined; the document lists the count (`CSAF_STATUS_UNKNOWN`) and the
+  package shows no statement, never an all-clear. `CSAF_SCHEMA_BAD_VERSION`
+  names the versions it knows, 2.0 and 2.1, and the overview tags each CSAF
+  document with its version.
+
+### Fixed
+- **Four CSAF 2.0 product status buckets produced no statement.**
+  `first_affected` and `last_affected` are "known to be affected" and now
+  read as affected; `first_fixed` and `recommended` "have a fix" and read
+  as fixed, the same groups mandatory test 6.1.6 and the TR-03191
+  fixing-versions row use.
+- `docs/spec-findings.md` counted five CSAF schema findings; there were
+  seven, now nine.
+
 ## [0.29.10] - 2026-11-10
 
 ### Security

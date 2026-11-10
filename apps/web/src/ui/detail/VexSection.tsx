@@ -187,7 +187,7 @@ export function VexDocumentRow({ doc, onRemove }: { doc: VexDocument; onRemove?:
       <div className="flex items-baseline gap-2">
         {doc.format && (
           <span className="shrink-0 rounded bg-slate-100 px-1 text-[9px] font-medium tracking-wide text-slate-500 uppercase dark:bg-slate-800 dark:text-slate-400">
-            {doc.format === 'csaf' ? 'CSAF' : 'OpenVEX'}
+            {doc.format === 'csaf' ? `CSAF${doc.specVersion ? ` ${doc.specVersion}` : ''}` : 'OpenVEX'}
           </span>
         )}
         {tlp && tlpKnown && (

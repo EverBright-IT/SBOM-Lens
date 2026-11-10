@@ -104,7 +104,7 @@ describe('VEX and CSAF documents of a delivery', () => {
     expect(
       await readVexDocument({ fileName: 'x.json', bytes: new TextEncoder().encode('{"a":1}') }),
     ).toEqual({
-      reason: 'neither an OpenVEX nor a CSAF 2.0 document',
+      reason: 'neither an OpenVEX nor a CSAF document',
     });
   });
 });

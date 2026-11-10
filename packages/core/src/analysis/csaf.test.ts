@@ -555,3 +555,142 @@ describe('CSAF targeting, identity and hostile shapes', () => {
     expect(doc.tr03191).toHaveLength(9);
   });
 });
+
+describe('CSAF 2.1', () => {
+  /** The shared fixture as a clean document of the given version: mandatory distribution, publisher namespace, tracking status. */
+  function cleanDoc(version: '2.0' | '2.1', extra: Record<string, unknown> = {}): Record<string, unknown> {
+    const base = csafDoc(extra);
+    const document = base.document as Record<string, unknown>;
+    base.document = {
+      ...document,
+      csaf_version: version,
+      distribution: { tlp: { label: version === '2.1' ? 'CLEAR' : 'WHITE' } },
+      publisher: { ...(document.publisher as Record<string, unknown>), namespace: 'https://acme.example' },
+      tracking: { ...(document.tracking as Record<string, unknown>), status: 'final' },
+    };
+    return base;
+  }
+  const schemaCodes = (doc: ReturnType<typeof parseCsaf>) =>
+    doc.diagnostics.filter((d) => d.code.includes('_SCHEMA_')).map((d) => d.code);
+
+  it('reads a clean 2.1 document without schema findings and says which version it read', () => {
+    const doc = parseCsaf('clean21.json', cleanDoc('2.1'));
+    expect(doc.specVersion).toBe('2.1');
+    expect(doc.tlp).toBe('CLEAR');
+    expect(schemaCodes(doc)).toEqual([]);
+    expect(parseCsaf('clean20.json', cleanDoc('2.0')).specVersion).toBe('2.0');
+  });
+
+  it('counts metrics[].products and first_known_exploitation_dates[].products for mandatory test 6.1.1', () => {
+    const doc = parseCsaf(
+      'metrics.json',
+      cleanDoc('2.1', {
+        vulnerabilities: [
+          {
+            cve: 'CVE-2026-7001',
+            product_status: { known_affected: ['CSAFPID-openssl'] },
+            metrics: [{ content: { cvss_v4: { version: '4.0', baseScore: 8.7 } }, products: ['CSAFPID-ghost'] }],
+            first_known_exploitation_dates: [
+              { date: '2026-06-02T00:00:00Z', exploitation_date: '2026-06-01T00:00:00Z', products: ['CSAFPID-ghost2'] },
+            ],
+          },
+        ],
+      }),
+    );
+    const finding = doc.diagnostics.find((d) => d.code === 'CSAF_SCHEMA_UNDEFINED_PRODUCT_ID')!;
+    expect(finding.message).toContain('CSAFPID-ghost');
+    expect(finding.message).toContain('CSAFPID-ghost2');
+  });
+
+  it('takes disclosure_date as the statement date; release_date in 2.0 as before', () => {
+    const v21 = parseCsaf(
+      'd.json',
+      cleanDoc('2.1', {
+        vulnerabilities: [{ cve: 'CVE-2026-7002', disclosure_date: '2026-05-05T00:00:00Z', product_status: { known_affected: ['CSAFPID-openssl'] } }],
+      }),
+    );
+    expect(v21.statements[0]!.timestamp).toBe('2026-05-05T00:00:00Z');
+    const v20 = parseCsaf(
+      'r.json',
+      cleanDoc('2.0', {
+        vulnerabilities: [{ cve: 'CVE-2026-7002', release_date: '2026-05-06T00:00:00Z', product_status: { known_affected: ['CSAFPID-openssl'] } }],
+      }),
+    );
+    expect(v20.statements[0]!.timestamp).toBe('2026-05-06T00:00:00Z');
+  });
+
+  it('maps first_affected and last_affected to affected, first_fixed and recommended to fixed', () => {
+    const doc = parseCsaf(
+      'buckets.json',
+      cleanDoc('2.0', {
+        vulnerabilities: [
+          {
+            cve: 'CVE-2026-7003',
+            product_status: { first_affected: ['CSAFPID-openssl'], last_affected: ['CSAFPID-cpeonly'], first_fixed: ['CSAFPID-apiserver'] },
+          },
+          { cve: 'CVE-2026-7004', product_status: { recommended: ['CSAFPID-apiserver'] } },
+        ],
+      }),
+    );
+    const byVuln = (v: string) => doc.statements.filter((s) => s.vulnerability === v);
+    expect(byVuln('CVE-2026-7003').map((s) => [s.status, s.products.map((p) => p.id)])).toEqual([
+      ['affected', [OPENSSL]],
+      ['affected', ['cpe:2.3:a:acme:thing:1.0:*:*:*:*:*:*:*']],
+      ['fixed', [API_SERVER]],
+    ]);
+    expect(byVuln('CVE-2026-7004')).toMatchObject([{ status: 'fixed' }]);
+  });
+
+  it('derives no statement from the unknown bucket and says so', () => {
+    const doc = parseCsaf(
+      'unknown.json',
+      cleanDoc('2.1', {
+        vulnerabilities: [
+          { cve: 'CVE-2026-7005', product_status: { unknown: ['CSAFPID-openssl', 'CSAFPID-apiserver'], known_affected: ['CSAFPID-cpeonly'] } },
+        ],
+      }),
+    );
+    expect(doc.statements).toHaveLength(1);
+    expect(doc.statements[0]!.status).toBe('affected');
+    const note = doc.diagnostics.find((d) => d.code === 'CSAF_STATUS_UNKNOWN')!;
+    expect(note.severity).toBe('info');
+    expect(note.message).toContain('2 product(s)');
+    expect(schemaCodes(doc)).toEqual([]);
+  });
+
+  it('checks the TLP label against the vocabulary of the version it reads', () => {
+    const tlp = (version: '2.0' | '2.1', label?: string) => {
+      const base = cleanDoc(version);
+      const document = base.document as Record<string, unknown>;
+      if (label === undefined) delete document.distribution;
+      else document.distribution = { tlp: { label } };
+      return schemaCodes(parseCsaf('tlp.json', base));
+    };
+    expect(tlp('2.0', 'WHITE')).toEqual([]);
+    expect(tlp('2.0', 'CLEAR')).toEqual(['CSAF_SCHEMA_BAD_TLP_LABEL']);
+    expect(tlp('2.1', 'WHITE')).toEqual(['CSAF_SCHEMA_BAD_TLP_LABEL']);
+    expect(tlp('2.1', 'AMBER+STRICT')).toEqual([]);
+    expect(tlp('2.1')).toEqual(['CSAF_SCHEMA_MISSING_DISTRIBUTION']);
+    expect(tlp('2.0')).toEqual([]);
+  });
+
+  it('accepts 2.1 as a known version and passes its remediation categories through', () => {
+    const doc = parseCsaf(
+      'fix.json',
+      cleanDoc('2.1', {
+        vulnerabilities: [
+          {
+            cve: 'CVE-2026-7006',
+            product_status: { known_affected: ['CSAFPID-openssl'] },
+            remediations: [
+              { category: 'fix_planned', details: 'Fix scheduled for 3.0.11.', product_ids: ['CSAFPID-openssl'] },
+              { category: 'optional_patch', details: 'Hotfix available on request.', product_ids: ['CSAFPID-openssl'] },
+            ],
+          },
+        ],
+      }),
+    );
+    expect(schemaCodes(doc)).toEqual([]);
+    expect(doc.statements[0]!.remediations!.map((r) => r.category)).toEqual(['fix_planned', 'optional_patch']);
+  });
+});
