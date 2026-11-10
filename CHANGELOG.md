@@ -4,6 +4,86 @@ All notable changes to SBOM Lens. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [SemVer](https://semver.org) (0.x: the API surface is the app itself).
 
+## [0.29.10] - 2026-11-10
+
+### Security
+- **Development dependencies move off 13 advisories, and @azure/msal-node is
+  overridden to 7.x.** The osv-scanner gate had gone red on advisories
+  against vite, vitest, zod, fast-uri and serialize-javascript, all
+  development dependencies that ship in neither the web app nor the
+  extensions. A targeted `npm update` moved exactly those (vite 8.3.5,
+  vitest 4.1.12, zod 4.6.7, fast-uri 3.1.9, serialize-javascript 7.1.4) with
+  unchanged manifest ranges. The fourteenth finding, GHSA-xcx6-jx8p-x3h5 in
+  @azure/msal-node under @vscode/vsce, sits one major above what
+  @azure/identity declares, so the root package.json carries an `overrides`
+  entry to 7.x, documented with its exit condition in docs/ci-security.md;
+  the temporary osv-scanner ignore is gone. Nothing shipped changes.
+- **Four further development-only advisories from the end of October are
+  cleared.** qs moves to 6.16.1 (GHSA-6pq8-jhm2-2vcw, inside its declared
+  range). glob 14.0.2 (GHSA-3g3m-2fjr-6pw4) and minimatch 11.0.1
+  (GHSA-g3hv-75wg-m249) sit above what workbox-build (`^11.0.1`) and eslint,
+  @typescript-eslint/typescript-estree and @vscode/vsce (`^10.x`) declare,
+  so the root package.json carries `overrides` entries scoped to exactly
+  those packages, each exercised by its consumer (the PWA build, the lint
+  run, the vsix packaging) and documented with its exit condition in
+  docs/ci-security.md. deepmerge 4.3.1 (GHSA-gcqx-w48m-w2h4,
+  prototype poisoning in mergeObject) has no fixed release; it reaches the
+  tree only through @rollup/plugin-node-resolve under workbox-build, where
+  the merged objects are the build's own plugin configuration, so
+  osv-scanner.toml ignores it until 2026-12-31 with that reason. Nothing
+  shipped changes.
+
+### Fixed
+- **The BSI TR-03183-2 preset reads the fields the way the TR's appendix
+  8.2 maps them, and every check names its clause.** Checked against
+  TR-03183-2 v2.1.0 (2025-08-20): the component creator is the SPDX 3
+  `originatedBy` agent or the CycloneDX `manufacturer` (the model's
+  originator), not the supplier, and must carry an email or URL (5.2.2,
+  8.1.8); the distribution licence is the concluded licence only (5.2.2),
+  as the licence preset already read it; the filename is measured (5.2.2:
+  CycloneDX property `bsi:component:filename`, SPDX 3 distribution artifact
+  file name); the SHA-512 hash and the filename are meters now, because the
+  TR exempts logical components and what an assembly cannot provide (3.2.1,
+  3.2.2); new meters for the executable, archive and structured properties
+  and for the SBOM-URI (5.2.3); unique identifiers cite 5.2.4. The preset
+  moves to profile schema v4; its name and its builtin id do not change.
+- **The SBOM creator check can pass on CycloneDX and SPDX 3.** The parsers
+  dropped the contact the TR asks for: CycloneDX creators now carry
+  `metadata.manufacturer` with its contact email or url, and authors with
+  their email; SPDX 3 agents carry their `email`, `urlScheme` or http(s)
+  external identifier, for the SBOM creator and the component originator.
+  `metadata.supplier` is not a creator. Supplier strings do not change.
+- **"Dependencies enumerated" and the NTIA dependency relationships check
+  count dependency statements only.** A lone DESCRIBES, or the containment
+  the parser derives from a flat CycloneDX `components[]` list, no longer
+  counts; CycloneDX `dependencies[]` and nested components, and SPDX
+  DEPENDS_ON, CONTAINS and their variants do. A CycloneDX BOM without a
+  dependency graph now fails these checks in every preset, as the TR's own
+  mapping says it should; the result shows how many of the document's
+  relationships are dependency statements.
+- **Unique identifiers are identifiers.** The `uniqueId` field counted any
+  external reference, so a website or vcs link passed as a unique ID. It now
+  counts purl, CPE, SWID, SWHID and gitoid references, and any
+  PACKAGE-MANAGER or PERSISTENT-ID reference; the NTIA, CISA 2026, FDA,
+  Automotive, G7 and BSI meters follow, and an imported profile that gates
+  on `uniqueId` can start failing on documents whose packages carry only
+  links.
+- **The format baseline rejects SPDX 3.0.0.** It was labelled "SPDX 3.0.1 or
+  later" but accepted any SPDX 3 document; a document without a readable
+  specVersion fails it too.
+- The BSI licence preset reads the effective-licence property under both
+  spellings, `bsi:component:effectiveLicense` (TR table 12) and
+  `bsi:component:effectiveLicence` (BSI CycloneDX property taxonomy
+  v0.1.2).
+- `docs/compliance-profiles.md` says what `uniqueId`, `relationships` and
+  `fileName` measure, and its supplier example accepts the CycloneDX form
+  without the `Organization:` prefix.
+
+### Changed
+- The VS Code webview build names Rolldown's `codeSplitting: false` instead
+  of the deprecated `inlineDynamicImports` option; the worker stays a single
+  file.
+
 ## [0.29.9] - 2026-10-16
 
 ### Security

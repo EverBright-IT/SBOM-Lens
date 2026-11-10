@@ -38,7 +38,8 @@ describe('CycloneDX XML', () => {
       copyright: '(c) 2026 Left Pad Authors',
     });
     expect(lib.checksums).toEqual([{ algorithm: 'SHA256', value: 'ab'.repeat(32) }]);
-    expect(xml.creators).toEqual(['Tool: acme-gen-2.0', 'Person: ACME Security']);
+    // The manufacturer rides with its contact (TR-03183-2 appendix 8.2 form of the creator).
+    expect(xml.creators).toEqual(['Tool: acme-gen-2.0', 'Organization: ACME Corp (security@acme.example)', 'Person: ACME Security']);
     expect(xml.externalDocumentRefs.map((r) => r.uri)).toEqual(['urn:cdx:aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee/1']);
     expect(xml.relationships).toContainEqual({
       from: { kind: 'local', spdxId: 'root' },

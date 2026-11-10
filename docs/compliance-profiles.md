@@ -23,7 +23,7 @@ field-level (presence, patterns): SBOM Lens does not do legal interpretation.
     { "type": "created-recency", "maxAgeDays": 180 },
     { "type": "relationships", "minCount": 1 },
     { "type": "package-coverage", "field": "version", "threshold": 100 },
-    { "type": "package-coverage", "field": "supplier", "threshold": 95, "pattern": "^Organization: ACME" },
+    { "type": "package-coverage", "field": "supplier", "threshold": 95, "pattern": "^(Organization: )?ACME" },
     { "type": "package-coverage", "field": "purpose", "threshold": 100, "values": ["APPLICATION", "CONTAINER"] },
     { "type": "package-coverage", "field": "checksum", "threshold": 100 },
     { "type": "package-coverage", "field": "downloadLocation" }
@@ -36,7 +36,7 @@ field-level (presence, patterns): SBOM Lens does not do legal interpretation.
 | Type | Checks | Fields |
 | --- | --- | --- |
 | `document-field` | the field is present (and matches the modifiers) | `name`, `namespace`, `created`, `creators`, `dataLicense`, `comment`; v4: `sbomType`, `describes`, `externalDocumentRefs` |
-| `relationships` | the document has at least `minCount` (default 1) relationships | - |
+| `relationships` | the document states at least `minCount` (default 1) dependency relationships (`DEPENDS_ON`, `CONTAINS` and their variants; a lone `DESCRIBES`, or the containment derived from a flat CycloneDX list, does not count) | - |
 | `created-recency` | `created` parses and is at most `maxAgeDays` old (boundary inclusive) | - |
 | `package-coverage` | the share of packages satisfying the field (and modifiers) reaches `threshold` % | `version`, `supplier`, `purl`, `uniqueId`, `checksum`, `license`, `downloadLocation`, `purpose`, `copyright`, `originator`; v4: `fileName`, `supportLevel`, `validUntil`, `licenseDeclared`, `licenseConcluded`, `properties`; v5: `description` |
 | `crypto-coverage` | v5: the share of cryptographic assets in scope (CycloneDX `cryptoProperties`, filtered by `assetTypes`, `primitives`, `families`) satisfying the field (and modifiers) reaches `threshold` % | `name`, `assetType`, `primitive`, `family`, `parameterSet`, `curve`, `mode`, `padding`, `executionEnvironment`, `securityLevel`, `certificateSubject`, `certificateIssuer`, `certificateValidity`, `certificateState`, `certificateSignature`, `materialState`, `materialExpiration`, `materialSecuredBy`, `protocolVersion`, `cipherSuites`, `related`, `oid` |
@@ -55,8 +55,23 @@ field-level (presence, patterns): SBOM Lens does not do legal interpretation.
   the true ratio is 94.9%.
 - `supplier`, `downloadLocation`, `copyright`, `originator` treat
   `NOASSERTION`/`NONE` as absent. `license` uses the concluded license,
-  falling back to declared. `uniqueId` means purl **or** any external ref;
+  falling back to declared. `uniqueId` means purl, or an external reference
+  that identifies the package: CPE, SWID, SWHID, gitoid, or any
+  `PACKAGE-MANAGER` or `PERSISTENT-ID` reference; references that point
+  somewhere (website, vcs, advisory, bom, url) do not count.
   `pattern`/`values` do not apply to `uniqueId`/`checksum`.
+- `relationships` counts dependency statements: `DEPENDS_ON`, `CONTAINS`
+  and their variants, which CycloneDX `dependencies[]` and nested
+  components map onto. A lone `DESCRIBES`, and the containment the parser
+  derives from a flat CycloneDX `components[]` list, enumerate no
+  dependency.
+- Entity strings differ by format: SPDX 2 and 3 supplier and originator
+  values carry the `Person:`/`Organization:` prefix SPDX defines, CycloneDX
+  carries the bare entity name (the Inventory strips the prefix for display
+  only). Creators and originators read from CycloneDX and SPDX 3 carry the
+  stated contact in parentheses, as in `Organization: ACME Corp
+  (security@acme.example)`. A pattern meant for both formats makes the
+  prefix optional, as the example above does.
 - Documents without packages pass coverage checks vacuously (and the Quality
   section stays hidden, as before).
 
@@ -103,7 +118,10 @@ schema id. v3 includes everything from v2.
 `sbomlens-profile/v4` adds what the 2026 requirement sources ask for and
 the earlier fields could not express:
 
-- **Package fields** `fileName` (SPDX packageFileName), `supportLevel`
+- **Package fields** `fileName` (SPDX 2 packageFileName, the SPDX 3
+  distribution artifact's file name reached through
+  `hasDistributionArtifact`, or the CycloneDX property
+  `bsi:component:filename`), `supportLevel`
   (SPDX 3 supportLevel, or a CycloneDX property named `support-level` or
   `support_level`, optionally prefixed `fda:lifecycle:` or either prefix
   alone), `validUntil` (SPDX 2.3 ValidUntilDate, SPDX 3 validUntilTime, or
@@ -266,7 +284,9 @@ component essentials for component descriptors), the dropdown offers:
   acknowledgement `declared`, model field `licenseDeclared`) is a meter
   under the same identifier rule; the effective licence (5.2.5, optional)
   is a meter on the presence of the CycloneDX property
-  `bsi:component:effectiveLicense`, with NOASSERTION and NONE as absent and
+  `bsi:component:effectiveLicense` (or `bsi:component:effectiveLicence`,
+  the spelling of the BSI CycloneDX property taxonomy), with NOASSERTION
+  and NONE as absent and
   no identifier check, because a property value is free text (its SPDX 3
   form, a relationship of type `other` with the comment
   `hasEffectiveLicense`, is not read). A CycloneDX
@@ -302,8 +322,9 @@ component essentials for component descriptors), the dropdown offers:
   so package fields are meters and nothing gates. **SBOM type** and
   **external document references** are informational document facts: SPDX
   2.x has no dedicated field for the type, and a leaf SBOM references
-  nothing. File name is SPDX `packageFileName` (CycloneDX has no dedicated
-  field), concluded
+  nothing. File name is SPDX 2 `packageFileName`, the SPDX 3 distribution
+  artifact, or the CycloneDX property `bsi:component:filename` (CycloneDX
+  has no dedicated field), concluded
   licence is `licenseConcluded`, copyright is read where the formats carry
   it, hashes are optional in the specification and shown as a meter, and
   component name is satisfied by construction and not checked. The n-tier
@@ -351,25 +372,38 @@ component essentials for component descriptors), the dropdown offers:
   table and nothing more is said about it, and nothing gates except the
   format baseline.
 - **[BSI TR-03183-2 field coverage (approximation)](https://www.bsi.bund.de/dok/TR-03183)**: the machine-checkable
-  field requirements of BSI TR-03183 part 2 v2.1.0, gated at 100%: SBOM
-  creator with contact (email or URL, on a Person/Organization creator),
-  timestamp, per-component version, creator (via supplier), licence, and a
-  **SHA-512** hash (the algorithm is enforced via the v2 `algorithms`
-  modifier), plus dependency enumeration; unique IDs (purl/CPE) are reported
-  informationally. The TR accepts only SPDX 3.0.1+ or CycloneDX 1.6+ as
-  formats, and the profile enforces that baseline as a leading **gated
-  check** (via the v3 `requires` precondition, which accepts a list of
-  baselines): an SPDX 2.x or CycloneDX 1.5 document visibly fails the
-  format-baseline check instead of looking conformant, while its field
-  checks still show what data is present. SPDX 3.0.x and CycloneDX 1.6+
-  documents pass the baseline.
+  field requirements of BSI TR-03183 part 2 v2.1.0 (2025-08-20), mapped the
+  way its appendix 8.2 maps them onto SPDX 3.0.1 and CycloneDX 1.6, every
+  check labelled with the clause it reads. Gated, because the TR states them
+  without condition: the SBOM creator with contact (5.2.1, 8.1.8: email or
+  URL on a Person or Organization creator; SPDX 3 `createdBy` agent with an
+  `email` or `urlScheme` external identifier, CycloneDX
+  `metadata.manufacturer` contact), the timestamp, dependencies enumerated
+  (5.2.2: `contains` or `dependsOn` relationships, CycloneDX
+  `dependencies[]` or nested components), and per component the version,
+  the creator with contact (5.2.2: SPDX 3 `originatedBy`, CycloneDX
+  `manufacturer`, read from the `originator` field, not the supplier) and
+  the distribution licence (5.2.2: the concluded licence). Meters, because
+  3.2.1 omits what a component's assembly cannot provide and 3.2.2 exempts
+  logical components: the filename (SPDX 3 `hasDistributionArtifact` file
+  name, CycloneDX property `bsi:component:filename`), the **SHA-512** hash
+  (the algorithm is enforced via the v2 `algorithms` modifier), the
+  executable, archive and structured properties (CycloneDX taxonomy form
+  only), unique identifiers where they exist (5.2.4) and the SBOM-URI
+  (5.2.3). The TR accepts only SPDX 3.0.1 or later or CycloneDX 1.6 or
+  later as formats, and the profile enforces that baseline as a leading
+  **gated check** (via the v3 `requires` precondition, which accepts a list
+  of baselines): an SPDX 2.x, SPDX 3.0.0 or CycloneDX 1.5 document visibly
+  fails the format-baseline check instead of looking conformant, while its
+  field checks still show what data is present.
   It stays labelled an *approximation*: the profile verifies field
   coverage, not the full TR.
-  What the engine cannot check (component filenames, the
-  executable/archive/structured properties, source URIs, the completeness
-  indication) is listed in the profile's own description, which the report
-  shows under *What this profile checks* and the Markdown export carries as
-  a blockquote, together with a link to the requirement source.
+  What the engine cannot check (the completeness indication for
+  dependencies, source and deployable URIs, the SPDX 3 form of the three
+  properties, hashes stated on the distribution artifact, security.txt) is
+  listed in the profile's own description, which the report shows under
+  *What this profile checks* and the Markdown export carries as a
+  blockquote, together with a link to the requirement source.
 
 Builtin presets are code, not stored data: they cannot be removed, and the
 selection persists per product.

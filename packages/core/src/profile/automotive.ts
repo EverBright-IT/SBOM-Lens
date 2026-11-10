@@ -40,7 +40,8 @@ export const AUTOMOTIVE_SBOM_PROFILE: ComplianceProfile = {
     'leaf SBOM; both are informational. Component name is satisfied by ' +
     'construction and not checked. The concluded licence is the SPDX ' +
     'licenseConcluded field or a CycloneDX licence acknowledged as concluded; ' +
-    'the file name is SPDX packageFileName, which CycloneDX has no dedicated field for. ' +
+    'the file name is SPDX packageFileName, the SPDX 3 distribution artifact, or the CycloneDX property ' +
+    'bsi:component:filename (CycloneDX has no dedicated field). ' +
     'Hashes are optional in the specification and shown as a meter.',
   checks: [
     // --- SBOM level ----------------------------------------------------------
@@ -71,8 +72,13 @@ export const AUTOMOTIVE_SBOM_PROFILE: ComplianceProfile = {
     // --- component level -----------------------------------------------------
     { id: 'component-version', type: 'package-coverage', field: 'version', label: 'Version' },
     { id: 'component-supplier', type: 'package-coverage', field: 'supplier', label: 'Supplier' },
-    { id: 'component-unique-id', type: 'package-coverage', field: 'uniqueId', label: 'Unique ID (purl, CPE or other reference)' },
-    { id: 'component-file-name', type: 'package-coverage', field: 'fileName', label: 'File name (SPDX packageFileName; no dedicated CycloneDX field)' },
+    { id: 'component-unique-id', type: 'package-coverage', field: 'uniqueId', label: 'Unique ID (purl, CPE, SWID or another identifier reference)' },
+    {
+      id: 'component-file-name',
+      type: 'package-coverage',
+      field: 'fileName',
+      label: 'File name (SPDX packageFileName, the SPDX 3 distribution artifact, or the CycloneDX property bsi:component:filename)',
+    },
     { id: 'component-concluded-license', type: 'package-coverage', field: 'licenseConcluded', label: 'Concluded license' },
     { id: 'component-copyright', type: 'package-coverage', field: 'copyright', label: 'Copyright' },
     { id: 'component-hash', type: 'package-coverage', field: 'checksum', label: 'Hash (optional in the specification)' },

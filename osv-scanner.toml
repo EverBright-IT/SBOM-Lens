@@ -1,0 +1,8 @@
+# Ignores for the osv-scan gate (docs/ci-security.md, "Suppressing findings").
+# Every entry says why the finding does not reach anything we ship and when
+# it must be looked at again; the scan fails on its own once the date passes.
+
+[[IgnoredVulns]]
+id = "GHSA-gcqx-w48m-w2h4"
+ignoreUntil = 2026-12-31
+reason = "deepmerge 4.3.1 (prototype poisoning in mergeObject) has no fixed release; 4.3.1 is the newest version. It reaches the tree only through @rollup/plugin-node-resolve under workbox-build, where the objects merged are the PWA build's own plugin configuration, never input from outside: nothing of it is part of the web app or the extensions. Drop this entry as soon as deepmerge ships a fix or @rollup/plugin-node-resolve stops depending on it."

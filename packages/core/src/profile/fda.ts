@@ -61,7 +61,7 @@ export const FDA_524B_PROFILE: ComplianceProfile = {
     { id: 'relationships', type: 'relationships', label: 'Dependency relationships' },
     { id: 'pkg-version', type: 'package-coverage', field: 'version', label: 'Version' },
     { id: 'pkg-supplier', type: 'package-coverage', field: 'supplier', label: 'Supplier' },
-    { id: 'pkg-unique-id', type: 'package-coverage', field: 'uniqueId', label: 'Unique IDs (purl/refs)' },
+    { id: 'pkg-unique-id', type: 'package-coverage', field: 'uniqueId', label: 'Unique IDs (purl, CPE, SWID or another identifier reference)' },
     // --- 524B additions ------------------------------------------------------
     {
       id: 'pkg-support-level',

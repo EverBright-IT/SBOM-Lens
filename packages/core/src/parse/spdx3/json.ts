@@ -52,7 +52,15 @@ export function parseSpdx3Json(input: SourceInput, root: Record<string, unknown>
   }
   const nodeType = (node: Record<string, unknown>): string => asString(node.type) ?? asString(node['@type']) ?? '';
 
-  const agentName = (ref: unknown): string | undefined => {
+  /**
+   * An agent in the SPDX 2 spelling ("Organization: name"). With `contact`,
+   * the agent's email, urlScheme or http(s) `other` external identifier
+   * rides along as "(contact)": TR-03183-2 appendix 8.2 maps the SBOM
+   * creator's and the component creator's contact onto exactly those
+   * identifiers. Suppliers keep the bare name, so the Inventory and CSV
+   * columns do not move.
+   */
+  const agentName = (ref: unknown, opts?: { contact?: boolean }): string | undefined => {
     const node = typeof ref === 'string' ? byId.get(ref) : isRecord(ref) ? ref : undefined;
     if (!node) return undefined;
     const name = asString(node.name);
@@ -65,7 +73,8 @@ export function parseSpdx3Json(input: SourceInput, root: Record<string, unknown>
         : type.includes('Agent') || type.includes('Tool')
           ? 'Tool'
           : 'Organization';
-    return `${prefix}: ${name}`;
+    const contact = opts?.contact ? agentContact(node) : undefined;
+    return `${prefix}: ${name}${contact ? ` (${contact})` : ''}`;
   };
 
   /**
@@ -118,7 +127,7 @@ export function parseSpdx3Json(input: SourceInput, root: Record<string, unknown>
     graph.find((n) => nodeType(n) === 'CreationInfo');
   const creators: string[] = [];
   for (const ref of [...asStringArray(creationNode?.createdBy), ...asStringArray(creationNode?.createdUsing)]) {
-    const name = agentName(ref);
+    const name = agentName(ref, { contact: true });
     if (name) creators.push(name);
   }
 
@@ -192,7 +201,9 @@ export function parseSpdx3Json(input: SourceInput, root: Record<string, unknown>
         version: asString(node.software_packageVersion),
         purl,
         supplier: agentName(node.suppliedBy),
-        originator: asStringArray(node.originatedBy).map(agentName).find(Boolean),
+        originator: asStringArray(node.originatedBy)
+          .map((ref) => agentName(ref, { contact: true }))
+          .find(Boolean),
         downloadLocation: noAssertion(asString(node.software_downloadLocation)),
         copyright: noAssertion(asString(node.software_copyrightText)),
         // The AI and dataset profiles say what the package is even when
@@ -202,6 +213,9 @@ export function parseSpdx3Json(input: SourceInput, root: Record<string, unknown>
         comment: asString(node.comment),
         checksums: readHashes(node.verifiedUsing),
         externalRefs,
+        // 3.0.1 has no packageFileName: the filename is the name of the File
+        // reached through hasDistributionArtifact, filled in below. The
+        // property is still read when a generator writes it.
         fileName: asString(node.software_packageFileName),
         // Core/Artifact: supportLevel is a list of SupportType; the first
         // entry is what a coverage meter can act on. validUntilTime means
@@ -244,6 +258,7 @@ export function parseSpdx3Json(input: SourceInput, root: Record<string, unknown>
   const relationships: Relationship[] = [];
   const describes = new Set<string>();
   const licenseByElement = new Map<string, { declared?: string; concluded?: string }>();
+  const distributionArtifacts = new Map<string, string>();
   let malformedRels = 0;
 
   for (const node of graph) {
@@ -265,6 +280,7 @@ export function parseSpdx3Json(input: SourceInput, root: Record<string, unknown>
       licenseByElement.set(from, entry);
       continue;
     }
+    if (relType === 'hasDistributionArtifact') distributionArtifacts.set(from, targets[0]!);
     for (const to of targets) {
       if (relType === 'describes' && !importedElements.has(to)) describes.add(to);
       relationships.push({
@@ -286,6 +302,14 @@ export function parseSpdx3Json(input: SourceInput, root: Record<string, unknown>
     if (!element) continue;
     if (licenses.declared) element.licenseDeclared = licenses.declared;
     if (licenses.concluded) element.licenseConcluded = licenses.concluded;
+  }
+
+  // TR-03183-2 appendix 8.2: a package's filename is the name of the File it
+  // reaches through hasDistributionArtifact. The edge stays in the tree.
+  for (const [spdxId, target] of distributionArtifacts) {
+    const element = elements.find((e) => e.spdxId === spdxId);
+    const file = elements.find((e) => e.spdxId === target && e.kind === 'file');
+    if (element && file && element.fileName === undefined) element.fileName = file.name;
   }
 
   for (const rootRef of [...asStringArray(docNode?.rootElement), ...asStringArray(sbomNode?.rootElement)]) {
@@ -355,6 +379,20 @@ function readExternalIdentifiers(value: unknown): ExternalRef[] | undefined {
     else refs.push({ category: 'OTHER', type, locator: identifier });
   }
   return refs.length > 0 ? refs : undefined;
+}
+
+/** The contact an agent states: an email, else a urlScheme, else an http(s) identifier of type other. */
+function agentContact(node: Record<string, unknown>): string | undefined {
+  const identifiers = asRecordArray(node.externalIdentifier).flatMap((entry) => {
+    const type = asString(entry.externalIdentifierType);
+    const identifier = asString(entry.identifier);
+    return type && identifier ? [{ type, identifier }] : [];
+  });
+  return (
+    identifiers.find((i) => i.type === 'email')?.identifier ??
+    identifiers.find((i) => i.type === 'urlScheme')?.identifier ??
+    identifiers.find((i) => i.type === 'other' && /^https?:\/\//.test(i.identifier))?.identifier
+  );
 }
 
 /** 'dependsOn' → 'DEPENDS_ON', 'contains' → 'CONTAINS' (matches the 2.x vocab). */

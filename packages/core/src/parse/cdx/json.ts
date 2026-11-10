@@ -119,7 +119,7 @@ export function parseCdxJson(
 
   let nestingCapped = false;
   let assetsWithoutProperties = 0;
-  const addComponent = (node: Record<string, unknown>, parentSpdxId?: string, depth = 0): void => {
+  const addComponent = (node: Record<string, unknown>, parentSpdxId?: string, depth = 0, derived = false): void => {
     if (depth > MAX_NESTING) {
       nestingCapped = true;
       return; // a malformed or hostile BOM must not overflow the worker stack
@@ -151,10 +151,12 @@ export function parseCdxJson(
       version: asString(node.version),
       purl: asString(node.purl),
       supplier: supplierName(node.supplier) ?? asString(node.publisher),
-      // The entity that created the component: 1.6 manufacturer, else the
-      // authors list (1.6), else the single author string (1.5 and earlier).
-      // This is the "producer" the CISA 2026 and G7 elements ask for.
-      originator: supplierName(node.manufacturer) ?? entityNames(node.authors) ?? asString(node.author),
+      // The entity that created the component: 1.6 manufacturer (with its
+      // contact email or url, the TR-03183-2 8.2 form of the component
+      // creator), else the authors list (1.6, each with an email when
+      // stated), else the single author string (1.5 and earlier). This is
+      // the "producer" the CISA 2026 and G7 elements ask for.
+      originator: entityWithContact(node.manufacturer) ?? entityNames(node.authors) ?? asString(node.author),
       copyright: asString(node.copyright),
       licenseDeclared: licenseParts(node.licenses, 'declared'),
       licenseConcluded: licenseParts(node.licenses, 'concluded'),
@@ -172,6 +174,7 @@ export function parseCdxJson(
         from: { kind: 'local', spdxId: parentSpdxId },
         type: 'CONTAINS',
         to: { kind: 'local', spdxId },
+        ...(derived ? { derived: true as const } : {}),
       });
     }
     collectBomLinks(node.externalReferences, spdxId);
@@ -197,9 +200,10 @@ export function parseCdxJson(
   const rootSpdxId = describes[0];
   // The components list is the subject's inventory; rendering it as CONTAINS
   // under the described root mirrors how syft-style SPDX nests packages. An
-  // interpretation for the tree, not a spec claim - dependencies[] carries
-  // the actual graph.
-  for (const component of asRecordArray(root.components)) addComponent(component, rootSpdxId);
+  // interpretation for the tree, not a spec claim: the edge is marked derived
+  // so dependency checks do not count it; dependencies[] and nested
+  // components carry the graph the BOM actually states.
+  for (const component of asRecordArray(root.components)) addComponent(component, rootSpdxId, 0, true);
   collectBomLinks(root.externalReferences, rootSpdxId);
 
   // dependencies[]: { ref, dependsOn[] } in bom-ref space; a dependsOn entry
@@ -350,11 +354,33 @@ function supplierName(value: unknown): string | undefined {
   return isRecord(value) ? asString(value.name) : undefined;
 }
 
-/** The names of an organizationalContact/organizationalEntity list, joined; undefined when none. */
+/**
+ * An organizationalEntity as "name (contact)": the first contact email,
+ * else the first url. TR-03183-2 appendix 8.2 maps the creator's email or
+ * URL onto exactly these fields, and a creator-with-contact check reads the
+ * suffix. Nothing is invented: no contact, no suffix.
+ */
+function entityWithContact(value: unknown): string | undefined {
+  if (!isRecord(value)) return undefined;
+  const name = asString(value.name);
+  if (!name) return undefined;
+  const email = asRecordArray(value.contact)
+    .map((c) => asString(c.email))
+    .find((e): e is string => e !== undefined && e !== '');
+  const contact = email ?? asStringArray(value.url).find((u) => u !== '');
+  return contact ? `${name} (${contact})` : name;
+}
+
+/** The names of an organizationalContact list, each with its email when stated, joined; undefined when none. */
 function entityNames(value: unknown): string | undefined {
   const names = asRecordArray(value)
-    .map((entry) => asString(entry.name))
-    .filter((name): name is string => name !== undefined && name !== '');
+    .map((entry) => {
+      const name = asString(entry.name);
+      if (!name) return undefined;
+      const email = asString(entry.email);
+      return email ? `${name} (${email})` : name;
+    })
+    .filter((name): name is string => name !== undefined);
   return names.length > 0 ? names.join(', ') : undefined;
 }
 
@@ -402,6 +428,14 @@ function licenseParts(value: unknown, which: 'declared' | 'concluded'): string |
   return parts.length > 0 ? parts.join(' AND ') : undefined;
 }
 
+/**
+ * The BOM's creators in the SPDX spelling: tools, then the manufacturer of
+ * the BOM (1.6 `manufacturer`, `manufacture` before that) as an Organization
+ * with its contact email or url, then the authors as Persons with their
+ * email. `metadata.supplier` is NOT a creator: CycloneDX defines it as the
+ * supplier of the component the BOM describes, and TR-03183-2 3.2.9 keeps
+ * the supplier apart from the creator as well.
+ */
 function readCreators(metadata: Record<string, unknown>): string[] {
   const out: string[] = [];
   const tools = isRecord(metadata.tools)
@@ -411,9 +445,13 @@ function readCreators(metadata: Record<string, unknown>): string[] {
     const name = asString(t.name);
     if (name) out.push(`Tool: ${name}${asString(t.version) ? `-${asString(t.version)}` : ''}`);
   }
+  const manufacturer = entityWithContact(metadata.manufacturer) ?? entityWithContact(metadata.manufacture);
+  if (manufacturer) out.push(`Organization: ${manufacturer}`);
   for (const a of asRecordArray(metadata.authors)) {
     const name = asString(a.name);
-    if (name) out.push(`Person: ${name}`);
+    if (!name) continue;
+    const email = asString(a.email);
+    out.push(`Person: ${name}${email ? ` (${email})` : ''}`);
   }
   return out;
 }

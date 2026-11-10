@@ -23,6 +23,14 @@
       <name>acme-web</name>
       <version>1.0.0</version>
     </component>
+    <manufacturer>
+      <name>ACME Corp</name>
+      <url>https://acme.example</url>
+      <contact>
+        <name>ACME Security</name>
+        <email>security@acme.example</email>
+      </contact>
+    </manufacturer>
   </metadata>
   <components>
     <component type="library" bom-ref="lib-a">

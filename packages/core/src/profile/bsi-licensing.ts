@@ -14,7 +14,8 @@ import { PROFILE_SCHEMA_V4 } from './model';
  *     hasDeclaredLicense, CycloneDX acknowledgement "declared". Model field
  *     licenseDeclared. A meter, because "if they exist" cannot gate.
  *   - "Effective licence" (5.2.5, optional): CycloneDX property
- *     bsi:component:effectiveLicense, read as a properties pattern; in
+ *     bsi:component:effectiveLicense (the TR's table 12; the BSI taxonomy
+ *     spells it effectiveLicence), read as a properties pattern; in
  *     SPDX 3 a Relationship of type other with the comment
  *     hasEffectiveLicense, which this engine does not read. A meter.
  * The TR argues the requirement from security as well as compliance: a
@@ -50,7 +51,7 @@ export const BSI_LICENSING_PROFILE: ComplianceProfile = {
     'original licence (5.2.4, required where it exists; hasDeclaredLicense, ' +
     'acknowledgement declared) is a meter, and the effective licence (5.2.5, ' +
     'optional) is a meter on the presence of the CycloneDX property ' +
-    'bsi:component:effectiveLicense (NOASSERTION and NONE count as absent; ' +
+    'bsi:component:effectiveLicense, also in the BSI taxonomy spelling effectiveLicence (NOASSERTION and NONE count as absent; ' +
     'a property value is not checked against the License List); its SPDX 3 ' +
     'form, a relationship of type other with the comment hasEffectiveLicense, ' +
     'is not read. A ' +
@@ -90,9 +91,11 @@ export const BSI_LICENSING_PROFILE: ComplianceProfile = {
       id: 'effective-licence',
       type: 'package-coverage',
       field: 'properties',
-      pattern: '(^|\\n)bsi:component:effectiveLicense=(?!(NOASSERTION|NONE)(\\n|$))\\S',
+      // Both spellings: the TR's table 12 writes effectiveLicense, the BSI
+      // CycloneDX property taxonomy (v0.1.2) effectiveLicence.
+      pattern: '(^|\\n)bsi:component:effectiveLicen[cs]e=(?!(NOASSERTION|NONE)(\\n|$))\\S',
       label:
-        'Effective licence property present (5.2.5: CycloneDX property bsi:component:effectiveLicense, presence only; the SPDX 3 form is not read)',
+        'Effective licence property present (5.2.5: CycloneDX property bsi:component:effectiveLicense or effectiveLicence, presence only; the SPDX 3 form is not read)',
     },
   ],
 };

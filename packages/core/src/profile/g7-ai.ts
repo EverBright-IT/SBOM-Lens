@@ -95,7 +95,7 @@ export const G7_AI_SBOM_PROFILE: ComplianceProfile = {
       type: 'package-coverage',
       field: 'uniqueId',
       purposes: ['MODEL'],
-      label: 'Model identifier (purl, CPE or other reference)',
+      label: 'Model identifier (purl, CPE, SWID or another identifier reference; a URL is not one)',
     },
     { id: 'model-version', type: 'package-coverage', field: 'version', purposes: ['MODEL'], label: 'Model version' },
     {
@@ -133,7 +133,7 @@ export const G7_AI_SBOM_PROFILE: ComplianceProfile = {
       type: 'package-coverage',
       field: 'uniqueId',
       purposes: ['DATA'],
-      label: 'Dataset identifier',
+      label: 'Dataset identifier (purl, CPE, SWID or another identifier reference; a URL is not one)',
     },
     { id: 'dataset-hash', type: 'package-coverage', field: 'checksum', purposes: ['DATA'], label: 'Dataset hash' },
     { id: 'dataset-license', type: 'package-coverage', field: 'license', purposes: ['DATA'], label: 'Dataset license' },

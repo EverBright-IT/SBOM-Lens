@@ -1,4 +1,4 @@
-import { effectiveLicense } from '../model/document';
+import { effectiveLicense, hasUniqueIdentifier, isDependencyRelationship } from '../model/document';
 import { refKey } from '../workspace/resolve';
 import type { LoadedDocument, WorkspaceState } from '../workspace/workspace';
 
@@ -18,7 +18,7 @@ export interface QualityReport {
     total: number;
     withVersion: number;
     withSupplier: number;
-    /** purl (or other cross-referenceable id from externalRefs). */
+    /** purl, or an identifier reference (CPE, SWID, SWHID, gitoid); links do not count. */
     withUniqueId: number;
     withChecksum: number;
     withLicense: number;
@@ -49,7 +49,7 @@ export function documentQuality(ws: WorkspaceState, loaded: LoadedDocument): Qua
     // NONE is as empty as NOASSERTION here; the profile engine's supplier
     // extractor treats both the same, and the parity test pins the two.
     if (element.supplier && element.supplier !== 'NOASSERTION' && element.supplier !== 'NONE') packages.withSupplier++;
-    if (element.purl || (element.externalRefs?.length ?? 0) > 0) packages.withUniqueId++;
+    if (hasUniqueIdentifier(element)) packages.withUniqueId++;
     if ((element.checksums?.length ?? 0) > 0) packages.withChecksum++;
     if (effectiveLicense(element)) packages.withLicense++;
   }
@@ -59,7 +59,9 @@ export function documentQuality(ws: WorkspaceState, loaded: LoadedDocument): Qua
       hasNamespace: doc.namespace !== null,
       hasCreated: Boolean(doc.created),
       hasCreators: doc.creators.length > 0,
-      hasRelationships: doc.relationships.length > 0,
+      // A dependency statement, not any edge: a lone DESCRIBES or an edge the
+      // parser derived from a flat CycloneDX list enumerates no dependencies.
+      hasRelationships: doc.relationships.some(isDependencyRelationship),
     },
     packages,
     issues: documentIssues(ws, loaded),

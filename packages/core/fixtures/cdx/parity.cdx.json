@@ -13,6 +13,11 @@
     "authors": [
       { "name": "ACME Security" }
     ],
+    "manufacturer": {
+      "name": "ACME Corp",
+      "url": ["https://acme.example"],
+      "contact": [{ "name": "ACME Security", "email": "security@acme.example" }]
+    },
     "component": {
       "type": "application",
       "bom-ref": "root",

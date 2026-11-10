@@ -60,8 +60,9 @@ export default defineConfig(({ mode }) => {
     worker: {
       format: 'es' as const,
       // The webview instantiates the worker from a Blob (vscode-resource URLs
-      // are cross-origin for workers), so the worker must be a single file.
-      rollupOptions: { output: { inlineDynamicImports: true } },
+      // are cross-origin for workers), so the worker must be a single file
+      // (Rolldown's codeSplitting: false; inlineDynamicImports is deprecated).
+      rollupOptions: { output: { codeSplitting: false } },
     },
     optimizeDeps: {
       // Source-linked workspace package — let Vite transform its TS directly.

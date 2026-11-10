@@ -43,6 +43,12 @@ export interface Relationship {
   type: string;
   to: ElementRef;
   comment?: string;
+  /**
+   * Set by a parser on an edge it derived for the tree, not one the document
+   * states: the CycloneDX flat `components[]` list rendered as CONTAINS under
+   * the BOM subject. Dependency checks skip derived edges.
+   */
+  derived?: true;
 }
 
 /**
@@ -82,7 +88,12 @@ export interface SbomElement {
   comment?: string;
   checksums?: Checksum[];
   externalRefs?: ExternalRef[];
-  /** SPDX packageFileName / SPDX 3 software_packageFileName: the artifact as delivered. */
+  /**
+   * The artifact as delivered: SPDX 2 packageFileName; SPDX 3 the name of the
+   * File reached through hasDistributionArtifact (3.0.1 has no
+   * packageFileName). CycloneDX has no field; the profile engine reads the
+   * BSI property bsi:component:filename from `properties` instead.
+   */
   fileName?: string;
   /**
    * Support status as the producer states it. SPDX 3.0.1 `supportLevel`
@@ -115,6 +126,42 @@ export function effectiveLicense(element: SbomElement): string | undefined {
     if (value && value !== 'NOASSERTION' && value !== 'NONE') return value;
   }
   return undefined;
+}
+
+/**
+ * Relationship types that state a dependency or containment between
+ * components: SPDX 2 and 3 DEPENDS_ON, CONTAINS and their variants, which
+ * CycloneDX dependencies[] and nested components map onto. DESCRIBES,
+ * licence, lineage and documentation relationships are not dependencies,
+ * and neither is an edge a parser derived for the tree (Relationship.derived).
+ * Shared by analysis/quality.ts and the profile engine, which the NTIA
+ * parity test pins against each other.
+ */
+const DEPENDENCY_RELATIONSHIP =
+  /^(DEPENDS_ON|DEPENDENCY_OF|(DEV|BUILD|RUNTIME|OPTIONAL|PROVIDED|TEST)_DEPENDENCY_OF|HAS_(OPTIONAL|PROVIDED)_DEPENDENCY|CONTAINS|CONTAINED_BY|HAS_PREREQUISITE|PREREQUISITE_FOR|STATIC_LINK|DYNAMIC_LINK|HAS_(STATIC|DYNAMIC)_LINK|HAS_OPTIONAL_COMPONENT|OPTIONAL_COMPONENT_OF|DEV_TOOL_OF|BUILD_TOOL_OF)$/;
+
+export function isDependencyRelationship(rel: Relationship): boolean {
+  return rel.derived !== true && DEPENDENCY_RELATIONSHIP.test(rel.type);
+}
+
+/**
+ * Identifier references, as opposed to references that point somewhere:
+ * purl, CPE, SWID, SWHID and gitoid (TR-03183-2 5.2.4 names CPE, purl and
+ * SWID; NTIA and CISA 2026 add SWHID and gitoid), plus anything an SPDX
+ * document files under PACKAGE-MANAGER or PERSISTENT-ID. A website, vcs,
+ * advisory, bom or url reference identifies nothing. Shared for the same
+ * parity reason as isDependencyRelationship.
+ */
+const IDENTIFIER_CATEGORIES = new Set(['PACKAGE-MANAGER', 'PERSISTENT-ID']);
+const IDENTIFIER_TYPES = /^(cpe22Type|cpe23Type|cpe22|cpe23|cpe|purl|swid|swhid|gitoid|omniborId)$/i;
+
+export function hasUniqueIdentifier(element: SbomElement): boolean {
+  if (element.purl) return true;
+  return (element.externalRefs ?? []).some(
+    (ref) =>
+      (ref.category !== undefined && IDENTIFIER_CATEGORIES.has(ref.category.toUpperCase().replace(/_/g, '-'))) ||
+      IDENTIFIER_TYPES.test(ref.type),
+  );
 }
 
 export interface SbomDocument {

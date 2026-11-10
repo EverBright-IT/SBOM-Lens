@@ -29,6 +29,8 @@ function docFrom(opts: {
     purpose?: string;
     purl?: string;
     license?: string;
+    /** Raw `ExternalRef:` values, e.g. 'SECURITY cpe23Type cpe:2.3:...'. */
+    refs?: string[];
   }[];
 }): { ws: WorkspaceState; loaded: LoadedDocument } {
   const lines = ['SPDXVersion: SPDX-2.3', 'SPDXID: SPDXRef-DOCUMENT', 'DocumentName: t'];
@@ -42,6 +44,7 @@ function docFrom(opts: {
     if (pkg.purpose) lines.push(`PrimaryPackagePurpose: ${pkg.purpose}`);
     if (pkg.license) lines.push(`PackageLicenseConcluded: ${pkg.license}`);
     if (pkg.purl) lines.push(`ExternalRef: PACKAGE-MANAGER purl ${pkg.purl}`);
+    for (const ref of pkg.refs ?? []) lines.push(`ExternalRef: ${ref}`);
   });
   const loaded = loadedFromText('t.spdx', lines.join('\n') + '\n');
   return { ws: addDocument(emptyWorkspace, loaded).workspace, loaded };
@@ -204,6 +207,45 @@ describe('NTIA profile parity with documentQuality', () => {
     expect(resultById(report, 'pkg-unique-id').coverage?.satisfied).toBe(quality.packages.withUniqueId);
     expect(resultById(report, 'pkg-checksum').coverage?.satisfied).toBe(quality.packages.withChecksum);
     expect(resultById(report, 'pkg-license').coverage?.satisfied).toBe(quality.packages.withLicense);
+  });
+
+  it('counts identifier references as unique ids on both sides, links never', () => {
+    const { ws, loaded } = docFrom({
+      packages: [
+        { refs: ['SECURITY advisory https://example.org/advisory/1', 'OTHER website https://example.org'] },
+        { refs: ['SECURITY cpe23Type cpe:2.3:a:acme:widget:1.0:*:*:*:*:*:*:*'] },
+        { refs: ['PERSISTENT-ID swh swh:1:cnt:94a9ed024d3859793618152ea559a168bbcbb5e2'] },
+        { purl: 'pkg:npm/left-pad@1.3.0' },
+        {},
+      ],
+    });
+    const quality = documentQuality(ws, loaded);
+    const report = evaluateProfile(ws, loaded, NTIA_PROFILE);
+    expect(quality.packages.withUniqueId).toBe(3);
+    expect(resultById(report, 'pkg-unique-id').coverage?.satisfied).toBe(3);
+  });
+
+  it('counts dependency statements only: a flat CycloneDX list enumerates none', () => {
+    const bom = (dependencies?: unknown[]) =>
+      JSON.stringify({
+        bomFormat: 'CycloneDX',
+        specVersion: '1.6',
+        version: 1,
+        metadata: { component: { type: 'application', 'bom-ref': 'root', name: 'app' } },
+        components: [{ type: 'library', 'bom-ref': 'lib', name: 'lib', version: '1.0' }],
+        ...(dependencies ? { dependencies } : {}),
+      });
+    const flat = loadedFromText('flat.cdx.json', bom());
+    const graph = loadedFromText('graph.cdx.json', bom([{ ref: 'root', dependsOn: ['lib'] }]));
+    const wsFlat = addDocument(emptyWorkspace, flat).workspace;
+    const wsGraph = addDocument(emptyWorkspace, graph).workspace;
+    expect(resultById(evaluateProfile(wsFlat, flat, NTIA_PROFILE), 'relationships').pass).toBe(false);
+    expect(documentQuality(wsFlat, flat).document.hasRelationships).toBe(false);
+    expect(resultById(evaluateProfile(wsGraph, graph, NTIA_PROFILE), 'relationships')).toMatchObject({
+      pass: true,
+      actual: '1 dependency relationship(s) of 3',
+    });
+    expect(documentQuality(wsGraph, graph).document.hasRelationships).toBe(true);
   });
 
   it('treats NONE and NOASSERTION suppliers as absent on both sides', () => {

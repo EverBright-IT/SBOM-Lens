@@ -170,7 +170,15 @@ describe('G7 SBOM for AI profile', () => {
       'PackageDownloadLocation: NOASSERTION',
       'PrimaryPackagePurpose: LIBRARY',
       '',
+      'PackageName: runtime',
+      'SPDXID: SPDXRef-runtime',
+      'PackageVersion: 2.0.0',
+      'PackageDownloadLocation: NOASSERTION',
+      'PrimaryPackagePurpose: LIBRARY',
+      '',
       'Relationship: SPDXRef-DOCUMENT DESCRIBES SPDXRef-widget',
+      // The dependency relationship check counts statements, not DESCRIBES.
+      'Relationship: SPDXRef-widget DEPENDS_ON SPDXRef-runtime',
       '',
     ].join('\n');
     const report = load('classic.spdx', text);

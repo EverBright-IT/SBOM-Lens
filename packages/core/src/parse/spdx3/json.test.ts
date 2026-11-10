@@ -357,3 +357,57 @@ describe('SPDX 3 cascade fixtures', () => {
     expect(auth.indexes.elementBySpdxId.has('https://acme.example/doc/auth3-1.4.2#pkg-auth-service')).toBe(true);
   });
 });
+
+describe('SPDX 3 contacts and distribution artifacts (TR-03183-2 appendix 8.2)', () => {
+  const ci = '_:ci';
+  const graph = JSON.stringify({
+    '@context': 'https://spdx.org/rdf/3.0.1/spdx-context.jsonld',
+    '@graph': [
+      { type: 'CreationInfo', '@id': ci, specVersion: '3.0.1', created: '2026-06-01T10:00:00Z', createdBy: ['https://acme.example/agent/acme'] },
+      {
+        type: 'Organization',
+        spdxId: 'https://acme.example/agent/acme',
+        creationInfo: ci,
+        name: 'ACME Corp',
+        externalIdentifier: [{ type: 'ExternalIdentifier', externalIdentifierType: 'email', identifier: 'security@acme.example' }],
+      },
+      {
+        type: 'Organization',
+        spdxId: 'https://acme.example/agent/widgets',
+        creationInfo: ci,
+        name: 'Widget Works',
+        externalIdentifier: [{ type: 'ExternalIdentifier', externalIdentifierType: 'other', identifier: 'https://widgets.example' }],
+      },
+      { type: 'SpdxDocument', spdxId: 'https://acme.example/doc/contacts', creationInfo: ci, name: 'contacts', rootElement: ['https://acme.example/pkg/widget'] },
+      {
+        type: 'software_Package',
+        spdxId: 'https://acme.example/pkg/widget',
+        creationInfo: ci,
+        name: 'widget',
+        software_packageVersion: '1.0.0',
+        suppliedBy: 'https://acme.example/agent/widgets',
+        originatedBy: ['https://acme.example/agent/widgets'],
+      },
+      { type: 'software_File', spdxId: 'https://acme.example/file/widget-jar', creationInfo: ci, name: 'widget-1.0.0.jar' },
+      {
+        type: 'Relationship',
+        spdxId: 'https://acme.example/rel/dist',
+        creationInfo: ci,
+        from: 'https://acme.example/pkg/widget',
+        relationshipType: 'hasDistributionArtifact',
+        to: ['https://acme.example/file/widget-jar'],
+      },
+    ],
+  });
+
+  it('carries the creator and originator contacts, keeps the supplier bare, and names the distribution artifact', () => {
+    const { document } = parseDocument({ fileName: 'contacts.spdx3.json', text: graph, sha1: 'd'.repeat(40), byteSize: graph.length });
+    expect(document!.creators).toEqual(['Organization: ACME Corp (security@acme.example)']);
+    const widget = document!.elements.find((e) => e.name === 'widget')!;
+    expect(widget.originator).toBe('Organization: Widget Works (https://widgets.example)');
+    expect(widget.supplier).toBe('Organization: Widget Works');
+    expect(widget.fileName).toBe('widget-1.0.0.jar');
+    // The relationship stays an edge of the tree as well.
+    expect(document!.relationships).toContainEqual(expect.objectContaining({ type: 'HAS_DISTRIBUTION_ARTIFACT' }));
+  });
+});

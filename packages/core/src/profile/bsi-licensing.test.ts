@@ -88,6 +88,9 @@ describe('BSI_LICENSING_PROFILE', () => {
       ],
     });
     expect(byId(stated, 'effective-licence').coverage?.satisfied).toBe(1);
+    // The BSI taxonomy spells the property effectiveLicence; the TR's table 12 effectiveLicense.
+    const british = cdx([concluded({ license: { id: 'MIT' } })], { properties: [{ name: 'bsi:component:effectiveLicence', value: 'MIT' }] });
+    expect(byId(british, 'effective-licence').coverage?.satisfied).toBe(1);
     const empty = cdx([concluded({ license: { id: 'MIT' } })], { properties: [{ name: 'bsi:component:effectiveLicense', value: '' }] });
     expect(byId(empty, 'effective-licence').coverage?.satisfied).toBe(0);
     const noassertion = cdx([concluded({ license: { id: 'MIT' } })], { properties: [{ name: 'bsi:component:effectiveLicense', value: 'NOASSERTION' }] });

@@ -110,3 +110,22 @@ describe('AUTOMOTIVE_SBOM_PROFILE', () => {
     }
   });
 });
+
+describe('AUTOMOTIVE_SBOM_PROFILE on CycloneDX', () => {
+  it('reads the file name from the BSI property, which is the only place CycloneDX carries it', () => {
+    const doc = loadedFromText(
+      'ecu.cdx.json',
+      JSON.stringify({
+        bomFormat: 'CycloneDX',
+        specVersion: '1.6',
+        version: 1,
+        metadata: { component: { type: 'firmware', 'bom-ref': 'ecu', name: 'ecu-firmware', version: '4.2.0' } },
+        components: [
+          { type: 'library', 'bom-ref': 'a', name: 'libcan', version: '1.0', properties: [{ name: 'bsi:component:filename', value: 'libcan.so.1' }] },
+          { type: 'library', 'bom-ref': 'b', name: 'libdiag', version: '2.0' },
+        ],
+      }),
+    );
+    expect(byId(doc, 'component-file-name').coverage).toMatchObject({ satisfied: 1, total: 3 });
+  });
+});

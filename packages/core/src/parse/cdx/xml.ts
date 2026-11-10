@@ -89,7 +89,7 @@ function readMetadata(el: XmlElement): Record<string, unknown> {
       case 'supplier':
       case 'manufacturer':
       case 'manufacture':
-        out[child.name] = readNamed(child, ['name']);
+        out[child.name] = readEntity(child);
         break;
       case 'lifecycles':
         out.lifecycles = ownChildren(child)
@@ -114,7 +114,7 @@ function readComponent(el: XmlElement): Record<string, unknown> {
     switch (child.name) {
       case 'supplier':
       case 'manufacturer':
-        out[child.name] = readNamed(child, ['name']);
+        out[child.name] = readEntity(child);
         break;
       case 'authors':
         // <authors><author><name>..</name></author></authors>, the 1.6 list
@@ -211,6 +211,27 @@ function readProperties(el: XmlElement): Record<string, unknown>[] {
   return ownChildren(el)
     .filter((c) => c.name === 'property')
     .map((p) => ({ name: p.attrs.name, value: p.text }));
+}
+
+/**
+ * An organizationalEntity (supplier, manufacturer): `<name>`, repeated
+ * `<url>` elements and `<contact>` children with name/email/phone, in the
+ * JSON shape, so the mapper reads the contact the TR-03183-2 mapping names.
+ */
+function readEntity(el: XmlElement): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  setIf(out, 'bom-ref', el.attrs['bom-ref']);
+  const urls: string[] = [];
+  const contacts: Record<string, unknown>[] = [];
+  for (const child of ownChildren(el)) {
+    if (child.name === 'name') setIf(out, 'name', child.text);
+    else if (child.name === 'url') {
+      if (child.text) urls.push(child.text);
+    } else if (child.name === 'contact') contacts.push(readNamed(child, ['name', 'email', 'phone']));
+  }
+  if (urls.length > 0) out.url = urls;
+  if (contacts.length > 0) out.contact = contacts;
+  return out;
 }
 
 /** `<dependency ref="a"><dependency ref="b"/></dependency>` → { ref: a, dependsOn: [b] }. */

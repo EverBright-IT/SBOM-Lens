@@ -1,6 +1,6 @@
 import type { CryptoElementExt } from '../model/crypto';
 import type { SbomDocument, SbomElement } from '../model/document';
-import { effectiveLicense } from '../model/document';
+import { effectiveLicense, hasUniqueIdentifier, isDependencyRelationship } from '../model/document';
 import type { LicenseExpressionOptions } from '../parse/spec-lint';
 import { licenseIdsInExpression } from '../parse/spec-lint';
 import { isDeprecatedLicenseId, isKnownLicenseId } from '../spec/spdx-license-ids';
@@ -11,6 +11,8 @@ import type { ComplianceProfile, CryptoField, DocumentField, PackageField, Profi
  * Profile evaluation. Field semantics live in the two extractors below and
  * mirror analysis/quality.ts EXACTLY — the NTIA parity test pins them
  * against each other, so a predicate change must touch both or CI fails.
+ * The two predicates both sides share (dependency relationships, unique
+ * identifiers) live in model/document.ts for that reason.
  */
 
 export interface CoverageStat {
@@ -106,13 +108,16 @@ export function evaluateProfile(
         return { id, label, kind: 'boolean', pass, actual: renderActual(value), ...meter };
       }
       case 'relationships': {
-        const count = doc.relationships.length;
+        // Dependency statements only: a lone DESCRIBES, or the containment a
+        // parser derives from a flat CycloneDX components[] list, enumerates
+        // no dependencies (TR-03183-2 5.2.2, NTIA "dependency relationship").
+        const count = doc.relationships.filter(isDependencyRelationship).length;
         return {
           id,
           label,
           kind: 'boolean',
           pass: count >= (check.minCount ?? 1),
-          actual: String(count),
+          actual: `${count} dependency relationship(s) of ${doc.relationships.length}`,
           ...meter,
         };
       }
@@ -329,6 +334,11 @@ const EMPTYISH = new Set(['NOASSERTION', 'NONE']);
  */
 const SUPPORT_LEVEL_PROPERTY = /^(?:fda:)?(?:lifecycle:)?support[-_]?level$/i;
 const END_OF_SUPPORT_PROPERTY = /^(?:fda:)?(?:lifecycle:)?(?:end[-_]?of[-_]?(?:support|life)|eos|eol|valid[-_]?until)$/i;
+/**
+ * The BSI CycloneDX property taxonomy (TR-03183-2 appendix 8.2, footnote 22)
+ * carries the component filename, which CycloneDX itself has no field for.
+ */
+const FILE_NAME_PROPERTY = /^bsi:component:filename$/i;
 
 function propertyValue(element: SbomElement, name: RegExp): string | undefined {
   return element.properties?.find((p) => name.test(p.name) && p.value.trim() !== '')?.value;
@@ -382,7 +392,7 @@ function extractPackageField(
     case 'purl':
       return element.purl;
     case 'uniqueId':
-      return Boolean(element.purl) || (element.externalRefs?.length ?? 0) > 0;
+      return hasUniqueIdentifier(element);
     case 'checksum':
       return (element.checksums?.length ?? 0) > 0;
     case 'license':
@@ -401,7 +411,9 @@ function extractPackageField(
         : undefined;
     // v4
     case 'fileName':
-      return element.fileName;
+      // The model field (SPDX 2 packageFileName, the SPDX 3 distribution
+      // artifact) first; CycloneDX carries it only as the BSI property.
+      return element.fileName ?? propertyValue(element, FILE_NAME_PROPERTY);
     case 'supportLevel': {
       // The model field (SPDX 3 supportLevel) first; CycloneDX has no
       // normative field, so the documented property names are read as the
@@ -486,9 +498,23 @@ const BASELINE_LABEL: Record<ProfileSpecBaseline, string> = {
   'cdx-1.6': 'CycloneDX 1.6 or later',
 };
 
-/** cdx-1.6 means CycloneDX with specVersion >= 1.6 (major.minor compare). */
+/**
+ * spdx-3 means SPDX with specVersion >= 3.0.1, cdx-1.6 CycloneDX with
+ * specVersion >= 1.6 (numeric compare of the version parts; a pre-release
+ * suffix is ignored). An SPDX 3 document whose version could not be read
+ * ("SPDX-3.x") cannot confirm the floor and fails closed; the spec lint
+ * already reports the missing specVersion.
+ */
 function baselineSatisfied(token: ProfileSpecBaseline, doc: SbomDocument): boolean {
-  if (token === 'spdx-3') return doc.spec.model === 'spdx-3';
+  if (token === 'spdx-3') {
+    if (doc.spec.model !== 'spdx-3') return false;
+    const match = /^SPDX-(\d+)\.(\d+)(?:\.(\d+))?/.exec(doc.spec.version);
+    if (!match) return false;
+    const major = Number(match[1]);
+    const minor = Number(match[2]);
+    const patch = Number(match[3] ?? 0);
+    return major > 3 || (major === 3 && (minor > 0 || patch >= 1));
+  }
   if (doc.spec.model !== 'cyclonedx') return false;
   const match = /^CycloneDX-(\d+)\.(\d+)/.exec(doc.spec.version);
   if (!match) return false;

@@ -104,7 +104,7 @@ export const CISA_2026_PROFILE: ComplianceProfile = {
       id: 'component-identifiers',
       type: 'package-coverage',
       field: 'uniqueId',
-      label: 'Component identifiers (purl, CPE or other external refs)',
+      label: 'Component identifiers (purl, CPE, SWID or another identifier reference)',
     },
     {
       id: 'component-hash',

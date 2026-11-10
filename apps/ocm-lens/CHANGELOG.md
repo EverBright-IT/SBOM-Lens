@@ -3,6 +3,20 @@
 OCM Lens 2.0 versions independently of the monorepo's 0.x line. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Changed
+- **SBOM fact sheets follow the corrected core checks of SBOM Lens 0.29.10.**
+  The NTIA dependency relationships row and the BSI "dependencies
+  enumerated" row count dependency statements only (CycloneDX
+  `dependencies[]` or nested components, SPDX DEPENDS_ON and CONTAINS), so
+  a CycloneDX image SBOM without a dependency graph reads one document row
+  fewer; "purl or other ID" counts purl, CPE, SWID, SWHID and gitoid, not
+  website or vcs links; the BSI TR-03183-2 approximation measures the
+  component creator via the originator with a contact, the concluded
+  licence, the filename and the SHA-512 hash as the TR's appendix 8.2 maps
+  them, and its format gate rejects SPDX 3.0.0.
+
 ## [2.3.0] - pre-release
 
 ### Added
