@@ -40,4 +40,20 @@ describe('collectFetchCandidates', () => {
     const excluded = collectFetchCandidates(full, new Set(candidates.map((c) => c.url)));
     expect(excluded).toEqual([]);
   });
+
+  it('asks the caller about each reference, with the document that makes it', () => {
+    const ws = loadAll('cascade/mid.spdx');
+    const asked: string[] = [];
+    const candidates = collectFetchCandidates(ws, new Set(), (url, owningDocId) => {
+      asked.push(`${owningDocId} ${url}`);
+      return url.startsWith('https://example.org/');
+    });
+    // AUTH-2.0 lives on artifacts.example.org: the caller said no, so it is out.
+    expect(candidates.map((c) => c.docRef)).toEqual(['DocumentRef-RUNTIME']);
+    const midId = ws.order[0]!;
+    expect(asked).toEqual([
+      `${midId} https://example.org/spdxdocs/acme-runtime-image`,
+      `${midId} https://artifacts.example.org/auth/2.0/auth.spdx`,
+    ]);
+  });
 });

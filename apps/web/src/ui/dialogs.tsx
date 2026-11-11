@@ -61,7 +61,8 @@ export function UrlDialog() {
     setBusy(true);
     setError(null);
     await rememberToken(url, scheme === 'none' || !token ? null : { scheme, value: token });
-    const result = await ingestUrl(url.trim());
+    // Submitting this dialog is the user's own act, so a profile may be imported.
+    const result = await ingestUrl(url.trim(), { importProfiles: true });
     setBusy(false);
     if (result.ok) actions.closeUrlDialog();
     else setError(result.message ?? 'Failed.');

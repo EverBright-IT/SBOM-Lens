@@ -124,7 +124,7 @@ describe('readOcmDeliveryFrom — component archive with oversized blobs', () =>
     expect(mismatch).toBeDefined();
   });
 
-  it('a gzip-stored oversized blob that does not match stays unchecked (either-or rule)', async () => {
+  it('a gzip-stored oversized blob that does not match is a real mismatch too (stored bytes decide)', async () => {
     // Incompressible payload: constant bytes would gzip BELOW the cap and
     // take the materialized path instead of the indexed one under test.
     const noise = new Uint8Array(8192);
@@ -136,7 +136,7 @@ describe('readOcmDeliveryFrom — component archive with oversized blobs', () =>
     const payload = await compress(noise);
     expect(payload.byteLength).toBeGreaterThan(TINY.materializeEntryMax); // premise
     const result = await archiveWith(declaredSha256('9'.repeat(64)), payload, 'application/gzip');
-    expect(result.documents[0]!.document.elements.find((e) => e.name === 'big-artifact')!.ocm!.blob!.digestCheck).toBe('unchecked');
+    expect(result.documents[0]!.document.elements.find((e) => e.name === 'big-artifact')!.ocm!.blob!.digestCheck).toBe('mismatch');
   });
 
   it('a sha512-declared oversized blob stays unchecked (incremental hash is sha256-only)', async () => {

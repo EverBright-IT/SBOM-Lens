@@ -626,25 +626,19 @@ async function collectCd(
         });
       } else {
         if (isRecord(declared) && asString(declared.value)) {
-          // Budget is an upper bound on load-time reads; gzip short-circuits
-          // under-spend it, which only errs toward checking more.
+          // Budget is an upper bound on load-time reads; declarations that
+          // are not computable under-spend it, which only errs toward
+          // checking more.
           walk.hashBudgetRemaining -= blob.size;
         }
-        const digestCheck = await checkDeclaredDigestIndexed(
-          declared,
-          () => {
-            let hash = indexedHashes.get(localReference);
-            if (!hash) {
-              hash = sha256SourceHex(blobs.source, blob.offset, blob.size);
-              indexedHashes.set(localReference, hash);
-            }
-            return hash;
-          },
-          async () => {
-            const head = await blobs.source.read(blob.offset, 2);
-            return head.byteLength === 2 && head[0] === 0x1f && head[1] === 0x8b;
-          },
-        );
+        const digestCheck = await checkDeclaredDigestIndexed(declared, () => {
+          let hash = indexedHashes.get(localReference);
+          if (!hash) {
+            hash = sha256SourceHex(blobs.source, blob.offset, blob.size);
+            indexedHashes.set(localReference, hash);
+          }
+          return hash;
+        });
         blobInfos.set(artifact, {
           size: blob.size,
           mediaType: asString(access.mediaType),

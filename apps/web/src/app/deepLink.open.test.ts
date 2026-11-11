@@ -1,4 +1,4 @@
-import { parseDocument, sha1Hex } from '@sbomlens/core';
+import { PROFILE_SCHEMA_V1, parseDocument, sha1Hex } from '@sbomlens/core';
 import { loadFixture } from '@sbomlens/core/test-fixtures';
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { FetchDocumentResult, HostAdapter } from '../host/adapter';
@@ -10,7 +10,7 @@ import { useAppStore } from './store';
 /**
  * The behaviour a deep link promises, through the real ingest path: documents
  * open, failures are said out loud, and a link someone else sent never spends
- * the recipient's stored credentials.
+ * the recipient's stored credentials nor writes to what the recipient stored.
  */
 
 /** Stands in for the parse worker: same protocol, real core parser. */
@@ -50,6 +50,7 @@ const fetched: { urls: string[]; headers: (Record<string, string> | undefined)[]
   urls: [],
   headers: [],
 };
+const prefs = new Map<string, string>();
 
 const fakeHost: HostAdapter = {
   kind: 'web',
@@ -60,7 +61,7 @@ const fakeHost: HostAdapter = {
     return fetchResult;
   },
   readPref: () => null,
-  persistPref: () => {},
+  persistPref: (key, value) => void prefs.set(key, value),
   secretGet: async () => 'stored-secret-token',
   secretSet: async () => {},
   exportFile: () => {},
@@ -79,6 +80,9 @@ describe('openDeepLinks', () => {
     setHost(fakeHost);
     useAppStore.getState().actions.clearAll();
     useAppStore.setState({ toasts: [] }); // clearAll keeps them; each case starts quiet
+    useAppStore.getState().actions.setProfiles([]);
+    useAppStore.getState().actions.setActiveProfileId(null);
+    prefs.clear();
     fetched.urls = [];
     fetched.headers = [];
   });
@@ -102,6 +106,36 @@ describe('openDeepLinks', () => {
     await openDeepLinks('?url=https://registry.example.org/private.spdx.json');
     // secretGet would hand out a token here; the deep link must not ask for one.
     expect(Object.keys(fetched.headers[0] ?? {})).toEqual([]);
+  });
+
+  it('never imports a compliance profile, whatever the address answers', async () => {
+    // An import persists the profile and makes it the active one. A link
+    // someone sent must not decide what the recipient's SBOMs are checked against.
+    const profile = {
+      schema: PROFILE_SCHEMA_V1,
+      name: 'NTIA Minimum Elements',
+      checks: [{ id: 'doc-name', type: 'document-field', field: 'name', label: 'Sender gate' }],
+    };
+    fetchResult = {
+      ok: true,
+      bytes: new TextEncoder().encode(JSON.stringify(profile)).buffer as ArrayBuffer,
+    };
+    await openDeepLinks('?url=https://acme.example/p.json');
+    const state = useAppStore.getState();
+    expect(fetched.urls).toEqual(['https://acme.example/p.json']);
+    expect(state.profiles).toEqual([]);
+    expect(state.activeProfileId).toBeNull();
+    expect([...prefs.keys()]).toEqual([]); // neither sbomlens.profiles nor sbomlens.activeProfile
+    const toast = state.toasts.at(-1);
+    expect(toast?.kind).toBe('error');
+    expect(toast?.message).toContain('compliance profile');
+  });
+
+  it('never resolves a link against the app itself', async () => {
+    // `https:host/x` passes as absolute; the page's fetch would read a relative path.
+    fetchResult = ok('minimal.spdx.json');
+    await openDeepLinks('?url=https:acme.example/minimal.spdx.json');
+    expect(new URL(fetched.urls[0]!, 'https://lens.example/app/').host).toBe('acme.example');
   });
 
   it('fetches nothing at all for a rejected scheme', async () => {

@@ -48,6 +48,13 @@ export interface HostAdapter {
    * Fetch a document's bytes. `ok: false` without a status means the request
    * never reached a server (network error, CORS); with a status it is the
    * HTTP error. Message texts are the caller's job.
+   *
+   * `headers` may carry a token stored for the host of `url`, and the answer
+   * of that host must not decide where else the token goes. The browser host
+   * therefore refuses redirects altogether (fetch cannot follow them by hand
+   * there): a redirect is an `ok: false` without a status. The extension
+   * host follows https redirects itself and sends `headers` only to the
+   * origin of `url`.
    */
   fetchDocument(url: string, headers?: Record<string, string>): Promise<FetchDocumentResult>;
 

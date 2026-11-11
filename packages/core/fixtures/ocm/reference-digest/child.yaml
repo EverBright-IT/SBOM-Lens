@@ -1,0 +1,23 @@
+component:
+  componentReferences: []
+  creationTime: "2026-11-11T03:57:35Z"
+  name: example.org/child
+  provider: acme
+  repositoryContexts: []
+  resources:
+  - access:
+      localReference: sha256:a1ebe9cdb0b5134d5ac5c21e573cd563adb98873bef77ff7542f91c0960b366b
+      mediaType: application/octet-stream
+      type: localBlob
+    digest:
+      hashAlgorithm: SHA-256
+      normalisationAlgorithm: genericBlobDigest/v1
+      value: a1ebe9cdb0b5134d5ac5c21e573cd563adb98873bef77ff7542f91c0960b366b
+    name: data
+    relation: local
+    type: plainText
+    version: 1.0.0
+  sources: []
+  version: 1.0.0
+meta:
+  schemaVersion: v2

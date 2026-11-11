@@ -1,5 +1,6 @@
 import type { SbomDocument } from '../model/document';
-import { isRecord } from '../util/narrow';
+import { ocmCvId } from '../model/ocm-bundle';
+import { asArray, asString, isRecord } from '../util/narrow';
 import { hashHex } from '../util/sha1';
 import { NormalizationError, normalizeDescriptor, SUPPORTED_NORMALISATIONS } from './normalize';
 import { KeyImportError, spkiFromPem } from './pem';
@@ -180,6 +181,9 @@ function hexToBytes(hex: string): Uint8Array | null {
  * Verify every signature on a raw descriptor root against one public key.
  * The OCM Lens 2.0 bundle model keeps the parsed root verbatim (`OcmCv.raw`),
  * so this is the direct path: no document model in between.
+ *
+ * A verdict covers this descriptor alone. What it references is covered only
+ * through the reference digests it records: see `referenceDigestChecker`.
  */
 export async function verifyRawSignatures(
   rootDescriptor: Record<string, unknown>,
@@ -230,5 +234,138 @@ export async function verifyDocumentSignatures(
         publicKeyPem,
       ),
     ),
+  );
+}
+
+/**
+ * What a descriptor's reference digests say about the component versions
+ * delivered below it. A signature covers those digests, not the referenced
+ * descriptors, so it vouches for the closure only where they hold:
+ * - `match`: every referenced component version, transitively, is the one
+ *   whose digest its referrer records.
+ * - `mismatch`: a delivered component version is not the referenced one.
+ * - `unchecked`: a reference could not be compared (not delivered, no
+ *   digest recorded, unsupported algorithm).
+ * `reason` names the first reference that is not a match.
+ */
+export interface ReferenceCheck {
+  verdict: 'match' | 'mismatch' | 'unchecked';
+  reason?: string;
+}
+
+/**
+ * Every descriptor root a delivery carries for one component version. More
+ * than one means the delivery is ambiguous there: all of them have to match.
+ */
+export type ReferenceResolver = (
+  componentName: string,
+  version: string,
+) => Record<string, unknown>[];
+
+/**
+ * Check reference digests against the component versions a delivery really
+ * carries: recompute the normalised digest of each referenced descriptor,
+ * compare it with the one its referrer records, and follow the references of
+ * every component version that matched. Without this a signed root says
+ * nothing about a referenced component version that was swapped afterwards.
+ *
+ * The returned check keeps what it computed per descriptor, so one checker
+ * serves a whole verification run. Same honesty rule as for signatures: a
+ * gap is `unchecked`, never a false `match` or a false `mismatch`.
+ */
+export function referenceDigestChecker(
+  resolve: ReferenceResolver,
+): (rootDescriptor: Record<string, unknown>) => Promise<ReferenceCheck> {
+  type Descriptor = Record<string, unknown>;
+  const digests = new Map<Descriptor, Map<string, Promise<string>>>();
+  const done = new Map<Descriptor, ReferenceCheck>();
+
+  // Normalising is the expensive step: once per descriptor and algorithm pair.
+  const digestOf = (target: Descriptor, normalisation: string, hash: HashName): Promise<string> => {
+    const perTarget = digests.get(target) ?? new Map<string, Promise<string>>();
+    digests.set(target, perTarget);
+    const key = `${normalisation} ${hash}`;
+    const digest =
+      perTarget.get(key) ?? (async () => hashHex(hash, normalizeDescriptor(target, normalisation)))();
+    perTarget.set(key, digest);
+    return digest;
+  };
+
+  /** One reference against what the delivery carries for it: the target on a match. */
+  const compare = async (reference: unknown): Promise<ReferenceCheck | { target: Descriptor }> => {
+    const node = isRecord(reference) ? reference : {};
+    const componentName = asString(node.componentName);
+    const version = asString(node.version);
+    if (!componentName || !version) return uncheckedReference('a component reference is malformed');
+    const id = ocmCvId(componentName, version);
+    const digest = isRecord(node.digest) ? node.digest : {};
+    const normalisation = asString(digest.normalisationAlgorithm) ?? '';
+    const hash = hashName(asString(digest.hashAlgorithm));
+    const recorded = asString(digest.value)?.toLowerCase();
+    if (!recorded) return uncheckedReference(`no digest is recorded for the referenced ${id}`);
+    if (!hash || !SUPPORTED_NORMALISATIONS.includes(normalisation)) {
+      return uncheckedReference(`the digest recorded for the referenced ${id} uses an unsupported algorithm`);
+    }
+    const targets = resolve(componentName, version);
+    if (targets.length === 0) return uncheckedReference(`the referenced ${id} is not in this delivery`);
+    for (const target of targets) {
+      let actual: string;
+      try {
+        actual = await digestOf(target, normalisation, hash);
+      } catch (error) {
+        const detail = error instanceof NormalizationError ? `: ${error.message}` : '';
+        return uncheckedReference(`the referenced ${id} cannot be normalised${detail}`);
+      }
+      if (actual === stripPrefix(recorded)) continue;
+      // A descriptor stored without its artifact digests cannot reproduce the
+      // form that was signed: that is a gap, not proof of a swap.
+      if (!carriesDigests(target)) {
+        return uncheckedReference(`the referenced ${id} records no digests for its own artifacts`);
+      }
+      return {
+        verdict: 'mismatch',
+        reason: `the referenced ${id} in this delivery does not match its recorded digest`,
+      };
+    }
+    // Equal digests mean equal references below: following one target is enough.
+    return { target: targets[0]! };
+  };
+
+  const walk = async (descriptor: Descriptor, path: Set<Descriptor>): Promise<ReferenceCheck> => {
+    const known = done.get(descriptor);
+    if (known) return known;
+    const component = isRecord(descriptor.component) ? descriptor.component : {};
+    let result: ReferenceCheck = { verdict: 'match' };
+    path.add(descriptor);
+    for (const reference of asArray(component.componentReferences)) {
+      const outcome = await compare(reference);
+      // Only a component version that IS the referenced one extends the
+      // closure. A chain of matching digests cannot loop; the guard keeps a
+      // delivery that claims otherwise from running forever.
+      const check = !('target' in outcome)
+        ? outcome
+        : path.has(outcome.target)
+          ? uncheckedReference('component references form a cycle')
+          : await walk(outcome.target, path);
+      if (check.verdict === 'mismatch' || result.verdict === 'match') result = check;
+      if (result.verdict === 'mismatch') break;
+    }
+    path.delete(descriptor);
+    done.set(descriptor, result);
+    return result;
+  };
+
+  return (rootDescriptor) => walk(rootDescriptor, new Set());
+}
+
+function uncheckedReference(reason: string): ReferenceCheck {
+  return { verdict: 'unchecked', reason };
+}
+
+/** Whether a descriptor records a digest for each of its resources and references. */
+function carriesDigests(rootDescriptor: Record<string, unknown>): boolean {
+  const component = isRecord(rootDescriptor.component) ? rootDescriptor.component : {};
+  return [...asArray(component.resources), ...asArray(component.componentReferences)].every(
+    (entry) => isRecord(entry) && isRecord(entry.digest),
   );
 }

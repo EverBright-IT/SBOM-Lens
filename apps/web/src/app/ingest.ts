@@ -483,18 +483,44 @@ export interface UrlIngestOptions {
    * themselves, keeps the default.
    */
   useStoredToken?: boolean;
+  /**
+   * Whether a fetched compliance profile may be imported. An import persists
+   * the profile and makes it the active one, so it has to be the user's own
+   * act: only the From-URL dialog, where they submit the address themselves,
+   * passes true. Deep links, catalog sources and reference fetches open
+   * documents; a profile answered there is refused and nothing is stored.
+   */
+  importProfiles?: boolean;
+}
+
+/**
+ * The address a request for `url` goes to: an absolute URL in its parsed form,
+ * anything else as written (catalog entries are relative to the page). The
+ * page's fetch resolves against the page, where `https:host/x` (its own
+ * scheme, no `//`) is a relative path, while the token lookup and the
+ * deep-link check parse without a base and read `host`. Sending the parsed
+ * form keeps the request on the host the token was looked up for.
+ */
+function requestTarget(url: string): string {
+  try {
+    return new URL(url).href;
+  } catch {
+    return url;
+  }
 }
 
 export async function ingestUrl(url: string, options: UrlIngestOptions = {}): Promise<UrlIngestResult> {
   const { actions } = useAppStore.getState();
-  const token = options.useStoredToken === false ? undefined : await tokenForUrl(url);
-  const result = await host().fetchDocument(url, authHeaders(token));
+  const target = requestTarget(url);
+  const token = options.useStoredToken === false ? undefined : await tokenForUrl(target);
+  const result = await host().fetchDocument(target, authHeaders(token));
   if (!result.ok) {
     if (result.status === undefined) {
       return {
         ok: false,
         message:
-          'Could not fetch: the server likely blocks cross-origin requests (CORS) or is unreachable. ' +
+          'Could not fetch: the server likely blocks cross-origin requests (CORS), redirects to ' +
+          'another address, or is unreachable. ' +
           'Download the file and drop it here instead.',
       };
     }
@@ -514,6 +540,14 @@ export async function ingestUrl(url: string, options: UrlIngestOptions = {}): Pr
     if (withinProfileSizeCap(buffer.byteLength)) {
       const sniff = sniffProfile(text);
       if (sniff.isProfile) {
+        if (options.importProfiles !== true) {
+          return {
+            ok: false,
+            message:
+              'The fetched file is a compliance profile and was not imported. ' +
+              'To import it yourself, use “From URL” in the Open menu or drop the file here.',
+          };
+        }
         const imported = importProfileText(url, text, 'imported');
         return imported.ok
           ? { ok: true }

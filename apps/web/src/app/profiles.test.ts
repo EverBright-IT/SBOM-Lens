@@ -4,6 +4,8 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import type { HostAdapter } from '../host/adapter';
 import { setHost } from '../host/adapter';
 import type { ParseJobRequest, ParseJobResponse } from '../worker/protocol';
+import { fetchAllReferences } from './autofetch';
+import { loadCatalogSource } from './catalog';
 import { ingestBuffers, ingestUrl } from './ingest';
 import { initProfiles, removeProfile } from './profiles';
 import { useAppStore } from './store';
@@ -71,10 +73,19 @@ const bytes = (value: unknown): ArrayBuffer =>
   new TextEncoder().encode(typeof value === 'string' ? value : JSON.stringify(value))
     .buffer as ArrayBuffer;
 
+/** No profile in the store, none active, and no pref written at all. */
+function expectNoProfile(): void {
+  const state = useAppStore.getState();
+  expect(state.profiles).toEqual([]);
+  expect(state.activeProfileId).toBeNull();
+  expect([...prefs.keys()]).toEqual([]);
+}
+
 describe('profile import through ingest', () => {
   beforeEach(() => {
     setHost(fakeHost);
     prefs.clear();
+    fetchBytes = null;
     FakeWorker.jobs = 0;
     useAppStore.getState().actions.clearAll();
     useAppStore.getState().actions.setProfiles([]);
@@ -115,11 +126,37 @@ describe('profile import through ingest', () => {
     expect(useAppStore.getState().profiles).toHaveLength(0);
   });
 
-  it('imports a profile fetched by URL', async () => {
+  it('imports a profile fetched by URL when the caller says the user asked for it', async () => {
+    // The From-URL dialog: the user submits the address themselves.
     fetchBytes = bytes(PROFILE);
-    const result = await ingestUrl('https://example.org/profile.json');
+    const result = await ingestUrl('https://example.org/profile.json', { importProfiles: true });
     expect(result).toEqual({ ok: true });
     expect(useAppStore.getState().profiles).toHaveLength(1);
+  });
+
+  it('refuses a fetched profile otherwise: nothing stored, nothing activated', async () => {
+    fetchBytes = bytes(PROFILE);
+    const result = await ingestUrl('https://example.org/profile.json');
+    expect(result.ok).toBe(false);
+    expect(result.message).toContain('compliance profile');
+    expectNoProfile();
+  });
+
+  it('refuses a profile answered for a catalog source', async () => {
+    fetchBytes = bytes(PROFILE);
+    await loadCatalogSource({ label: 'Third party', urls: ['https://example.org/sbom.spdx.json'] });
+    expectNoProfile();
+  });
+
+  it('refuses a profile answered for a referenced document', async () => {
+    // root.spdx references https://artifacts.example.org/webstack/webstack.spdx.
+    const root = bytes(loadFixture('cascade/root.spdx'));
+    await ingestBuffers([{ fileName: 'root.spdx', buffer: root }]);
+    fetchBytes = bytes(PROFILE);
+    const summary = await fetchAllReferences();
+    expect(summary?.fetched).toBe(0);
+    expect(summary?.failed).toHaveLength(1);
+    expectNoProfile();
   });
 
   it('persists imports, restores them, and falls back to NTIA on removal', async () => {

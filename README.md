@@ -78,11 +78,14 @@ Click **Load example** for a bundled four-document demo cascade, or drop your ow
 | Open ▸ From URL | Fetches a document over HTTP(S), e.g. from a GitLab generic package registry |
 | `?url=` deep link | `https://sbom-lens.everbright-it.de/app/?url=<sbom-url>` opens a document straight from the address bar. Repeatable, so a cascade travels in one link |
 | Placeholder ▸ Fetch | Each unresolved reference offers a one-click fetch of its recorded URL |
-| **Fetch all** (status bar) | Downloads every referenced document **recursively** until the cascade is complete. One click for the full tree instead of one per placeholder |
+| **Fetch all** (status bar) | Downloads every referenced document **recursively** until the cascade is complete. One click for the full tree instead of one per placeholder. A fetched document only pulls in references on its own host; a reference to another host stays a placeholder until the next click |
 
 **Access tokens:** for private registries, add a per-host token in the URL dialog
 (GitLab `PRIVATE-TOKEN` or `Authorization: Bearer`). Tokens live in
-`sessionStorage` only: they die with the tab and are never persisted.
+`sessionStorage` only: they die with the tab and are never persisted. A token
+goes to the host it was stored for and nowhere else: in the browser a fetch ends
+at a redirect, and the VS Code extension follows redirects only to https and
+without the token.
 
 **Deep links** make an SBOM linkable: a README, a release note or a registry
 page can point at "this document, rendered" instead of "download this file,
@@ -92,7 +95,7 @@ then find a viewer". Repeat the parameter for a whole cascade:
 https://sbom-lens.everbright-it.de/app/?url=<release.spdx.json>&url=<component.spdx.json>
 ```
 
-A deep link is input from whoever sent it, so three rules apply, and they are
+A deep link is input from whoever sent it, so five rules apply, and they are
 pinned by tests rather than left to review:
 
 - **http(s) only, absolute.** `javascript:`, `data:`, `file:` and relative URLs
@@ -103,6 +106,12 @@ pinned by tests rather than left to review:
 - **Stored tokens are never attached.** A link someone sent must not spend the
   recipient's credentials. If the source answers 401/403, the URL dialog opens
   prefilled instead, so attaching a token stays a deliberate act.
+- **No redirects.** The fetch ends where the host named in the link answers
+  with a redirect, so a link cannot send the browser on to an address it does
+  not show.
+- **No profile import.** A link that answers with a compliance profile says so
+  and imports nothing; importing a profile from a URL stays an act in the URL
+  dialog.
 
 What a deep link deliberately does *not* do is filter by target address.
 `http://localhost:8080/sbom.json` is a legitimate link during development, so
@@ -336,7 +345,10 @@ next to `index.html`:
 Entries appear on the start screen and in the **Open** menu; `loadOnStart`
 sources load automatically. With `resolveRefs: true` you only list the root
 document. After it loads, every referenced SBOM is fetched recursively, so one
-click gives users the complete tree for analysis. The catalog is only ever read
+click gives users the complete tree for analysis. A document only pulls in
+references on the origin it was loaded from: what a server answers never
+decides which other hosts the browser contacts, so a reference to a different
+host stays a placeholder for the user to fetch. The catalog is only ever read
 from this fixed same-origin path (never from a URL parameter), and only
 http(s)/relative URLs are accepted.
 

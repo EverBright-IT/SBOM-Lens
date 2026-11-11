@@ -48,7 +48,12 @@ signature verification work exactly as for a local file.
 - **Credentials**: public registries work anonymously (standard bearer-token
   flow). For private ones, run *OCM Lens: Set registry credential...* and
   store a `user:token` value for the host; it is kept in VS Code secret
-  storage and sent only to that registry's token endpoint.
+  storage and sent only to that registry's token endpoint. The token
+  endpoint has to be on the registry's own host, over https (Docker Hub and
+  gitlab.com use their known token hosts); a registry that names any other
+  realm does not get the credential and answers 401. Redirects are followed
+  only to https, and neither the credential nor the bearer token travels to
+  another origin.
 - **Caps**: layers over **50 MB** (or past a **256 MB** total per fetch) are
   not downloaded; their resources show without content, and OCM Lens says how
   many were skipped. The component descriptor itself is always fetched.
@@ -135,7 +140,9 @@ reproduces the CLI's recorded digest byte-for-byte.
 **Out of scope**: signing; certificate-chain and trust-policy validation (a
 certificate is used only for its public key, stated in the dialog);
 timestamping; and `jsonNormalisation/v1` (deprecated), which stays
-*unverifiable*.
+*unverifiable*. The verdict is about the one descriptor: the digests it
+records for its component references are not compared with other loaded
+descriptors here. OCM Lens 2 does that in its Verify view.
 
 ## Limits (deliberate)
 

@@ -1,3 +1,4 @@
+import type { DocumentId } from '@sbomlens/core';
 import { MAX_PROFILE_BYTES } from '@sbomlens/core';
 import { BRAND } from './brand';
 import { host } from '../host/adapter';
@@ -25,7 +26,10 @@ export interface CatalogSource {
   description?: string;
   urls: string[];
   loadOnStart?: boolean;
-  /** After loading, recursively fetch every referenced document. */
+  /**
+   * After loading, recursively fetch the referenced documents that live on
+   * the origin of the document referencing them (see fetchAllReferences).
+   */
   resolveRefs?: boolean;
   /**
    * Delivered files to check against the loaded SBOM's file checksums after
@@ -97,13 +101,18 @@ async function loadCatalogProfiles(catalog: Catalog): Promise<void> {
 
 export async function loadCatalogSource(source: CatalogSource): Promise<void> {
   const { actions } = useAppStore.getState();
+  const loaded = new Map<DocumentId, string>();
   for (const url of source.urls) {
     const result = await ingestUrl(url);
     if (!result.ok) {
       actions.toast(`${source.label}: ${result.message ?? 'failed to load'}`, 'error');
+    } else if (result.documentId) {
+      loaded.set(result.documentId, url);
     }
   }
-  if (source.resolveRefs) await fetchAllReferences();
+  // Only what this source loaded is followed, and only on its own origin:
+  // a loadOnStart source runs with nobody having asked for anything.
+  if (source.resolveRefs) await fetchAllReferences(loaded);
   if (source.delivery && source.delivery.length > 0) await runDeliveryCheck(source.delivery);
 }
 

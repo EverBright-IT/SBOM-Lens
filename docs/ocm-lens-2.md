@@ -75,10 +75,15 @@ opened.
   ships in; search by name, purl or CPE; license identifiers; versions that
   differ between artifacts; CSV/JSON export (see below). Since 2.3 also
   what the supplier states about known vulnerabilities (VEX and CSAF).
-- **Verify**: digests aggregated (checked at load time, mismatches linked),
-  signature verification against pinned keys (pref key shared with 1.x) or
-  a pasted PEM key/certificate (chain NOT validated - the certificate is
-  used only for its key), and the acceptance-report export.
+- **Verify**: digests aggregated (checked at load time, mismatches linked;
+  "all match" only when every declared digest was checked, otherwise the
+  number not checked), signature verification against pinned keys (pref key
+  shared with 1.x) or a pasted PEM key/certificate (chain NOT validated -
+  the certificate is used only for its key), and the acceptance-report
+  export. A signature reads *valid* only when the component versions the
+  signed descriptor references are part of the delivery and match the
+  digests it records; a differing one makes it *invalid*, a missing one
+  *unverifiable*.
 
 ## SBOM evidence (2.1)
 
@@ -341,6 +346,11 @@ the last pre-release.
 
 - Read-only; no signing, no registry writes. Registry browsing returns with
   the extension move (stage H).
+- Registry access (VS Code extension): the token service has to live on the
+  registry's own host or be one of the known token hosts (Docker Hub,
+  gitlab.com); a self-managed GitLab with a separate registry domain does
+  not authenticate. Redirects are followed only to https and never carry
+  the credential or the token.
 - Signature verification: RSASSA-PSS and PKCS#1 v1.5 over
   `jsonNormalisation/v2|v3|v4alpha1`; certificate chains and trust policies
   are not validated (key pinning is the honest alternative).

@@ -3,6 +3,7 @@ import type {
   WebviewToHostMessage,
 } from './protocol';
 import { PREFS_GLOBAL } from './protocol';
+import { fetchFollowing } from './redirects';
 
 /**
  * The extension-host side of the webview bridge, dependency-injected so the
@@ -71,13 +72,20 @@ export function createBridgeHandler(
   };
 }
 
-/** Node-side fetch: no CORS in the extension host — the webview's escape hatch. */
+/**
+ * Node-side fetch: no CORS in the extension host — the webview's escape hatch.
+ * Redirects are followed by hand (see fetchFollowing): only to https, and the
+ * caller's headers, a stored token among them, stay with the origin of `url`.
+ * A download a server hands on to its object store still arrives; the token
+ * does not travel along.
+ */
 export async function nodeFetchBytes(
   url: string,
   headers: Record<string, string>,
+  fetchFn: typeof fetch = fetch,
 ): Promise<{ ok: boolean; status?: number; statusText?: string; bytes?: Uint8Array }> {
   try {
-    const response = await fetch(url, { headers });
+    const { response } = await fetchFollowing(fetchFn, url, headers);
     if (!response.ok) {
       return { ok: false, status: response.status, statusText: response.statusText };
     }

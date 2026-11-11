@@ -30,10 +30,16 @@ function isFetchableUrl(url: string): boolean {
  * Informational references (scan reports, attestations) are only fetched when
  * their URL looks like an SPDX document; tarballs and PDFs would just fail.
  * URLs in `exclude` (already attempted) and duplicates are skipped.
+ *
+ * `allow` is the caller's say over each remaining reference, asked with the
+ * document that makes it: where a document came from decides what it may pull
+ * in, and only the caller knows that. A URL refused for one document stays
+ * open to another document that references it too.
  */
 export function collectFetchCandidates(
   ws: WorkspaceState,
   exclude: ReadonlySet<string> = new Set(),
+  allow: (url: string, owningDocId: DocumentId) => boolean = () => true,
 ): FetchCandidate[] {
   const seen = new Set<string>();
   const candidates: FetchCandidate[] = [];
@@ -46,6 +52,7 @@ export function collectFetchCandidates(
       const url = ref.uri.trim();
       if (!url || !isFetchableUrl(url) || exclude.has(url) || seen.has(url)) continue;
       if (!resolution.structural && !SBOM_LIKE_URL.test(url)) continue;
+      if (!allow(url, docId)) continue;
       seen.add(url);
       candidates.push({ url, docRef: ref.docRef, owningDocId: docId, structural: resolution.structural });
     }

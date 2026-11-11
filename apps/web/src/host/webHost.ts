@@ -11,7 +11,10 @@ export const webHost: HostAdapter = {
   async fetchDocument(url, headers = {}) {
     let response: Response;
     try {
-      response = await fetch(url, { headers });
+      // Never follow a redirect: the browser would repeat the request against
+      // whatever address the answer names, custom headers such as
+      // PRIVATE-TOKEN included (only Authorization is dropped cross-origin).
+      response = await fetch(url, { headers, redirect: 'error' });
     } catch {
       return { ok: false };
     }

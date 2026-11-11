@@ -58,11 +58,25 @@ export interface DigestSummary {
   checked: number;
   match: number;
   mismatch: { cvId: string; artifact: string }[];
-  /** Declared but not checkable (unsupported algorithm, compressed form). */
+  /** Declared but not checkable (unsupported algorithm or normalisation). */
   unchecked: number;
   /** Deferred at load time (eager-hash budget); checkable on demand. */
   pending: number;
   pendingBytes: number;
+}
+
+/**
+ * The one answer a digest summary supports. 'match' only when every declared
+ * digest was checked and matched: a digest that is declared but not
+ * checkable, or deferred, has not been confirmed and must never read as a
+ * match. "No mismatch found" is 'incomplete' then, not 'match'.
+ */
+export type DigestVerdict = 'none' | 'match' | 'mismatch' | 'incomplete';
+
+export function digestVerdict(summary: DigestSummary): DigestVerdict {
+  if (summary.mismatch.length > 0) return 'mismatch';
+  if (summary.unchecked > 0 || summary.pending > 0) return 'incomplete';
+  return summary.checked === 0 ? 'none' : 'match';
 }
 
 export function digestSummary(bundle: OcmBundle): DigestSummary {
@@ -245,10 +259,13 @@ export function acceptanceReport(input: AcceptanceReportInput): AcceptanceReport
     push(`${digests.pending} declared digest(s) (${formatBytes(digests.pendingBytes)}) were deferred at load and NOT checked in this run.`);
     push();
   }
-  if (digests.checked === 0 && digests.unchecked === 0 && digests.pending === 0) {
+  const verdict = digestVerdict(digests);
+  if (verdict === 'none') {
     push('No resources with bytes in the bundle.');
-  } else if (digests.mismatch.length === 0) {
-    push(`All ${digests.match} declared digest(s) match the delivered bytes.${digests.unchecked > 0 ? ` ${digests.unchecked} digest(s) are declared but not checkable (unsupported algorithm or compressed form).` : ''}`);
+  } else if (verdict === 'match') {
+    push(`All ${digests.match} declared digest(s) match the delivered bytes.`);
+  } else if (verdict === 'incomplete') {
+    push(`**NOT ALL CHECKED** — ${digests.match} of ${digests.match + digests.unchecked + digests.pending} declared digest(s) match the delivered bytes; the rest is not confirmed.${digests.unchecked > 0 ? ` ${digests.unchecked} digest(s) are declared but not checkable (unsupported algorithm or normalisation).` : ''}`);
   } else {
     push(`**${digests.mismatch.length} MISMATCH(ES)** — the delivered bytes do not match the descriptor:`);
     push();

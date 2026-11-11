@@ -3,7 +3,47 @@
 OCM Lens 2.0 versions independently of the monorepo's 0.x line. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [Unreleased]
+## [2.3.1] - pre-release
+
+### Security
+- **A valid signature requires the referenced component versions to match
+  their recorded digests.** The signature check covered the signed
+  descriptor only. The digests a signed root records for its component
+  references were never compared with the component versions actually in
+  the delivery, so whoever supplied the file could replace a referenced
+  component version, descriptor and blobs, under a signed root: Verify
+  still read *valid* where `ocm verify` rejects the delivery. Verify now
+  recomputes the normalised digest of every referenced component version
+  in the delivery, follows matching references on, and calls a
+  cryptographically valid signature *valid* only when that closure holds.
+  It reads *invalid* when a digest differs and *unverifiable*, with the
+  reason, when a referenced version is not part of the delivery, carries
+  no digest, or uses a normalisation or hash OCM Lens does not compute. A
+  delivery that ships its references elsewhere therefore reads
+  *unverifiable* where it read *valid*.
+- **"All match" means every declared digest was checked and matches.** For
+  blobs that are indexed instead of loaded (over 64 MB, or past the 512 MB
+  budget), a differing sha256 read as *unchecked* whenever the stored bytes
+  began with the gzip magic, and Verify showed "all match" as soon as no
+  mismatch was counted, even when nothing had been checked. A changed large
+  blob could pass as intact. A differing digest is now always a *mismatch*,
+  and the summary reads "N not checked" (the acceptance report: "NOT ALL
+  CHECKED") while a declared digest is unchecked or pending.
+- **The registry client keeps a stored credential with its registry (VS
+  Code extension).** On a 401 the client sent the credential stored for a
+  registry, as Basic auth, to whatever realm the answer named: any host,
+  also over http. The realm now only counts over https on the registry's
+  own host (any port) or on the token host known for it (Docker Hub,
+  gitlab.com), and the token request follows no redirect. A registry whose
+  token service lives on another host outside that list, such as a
+  self-managed GitLab with a separate registry domain, no longer
+  authenticates and answers HTTP 401.
+- **Registry requests no longer follow a redirect to any address (VS Code
+  extension).** Redirects are followed by hand: only to https, and the
+  bearer token stays with the registry's origin. A 401 of a redirect target
+  is no longer taken for the registry's challenge, which had sent the
+  stored credential to a realm the target named. Blob downloads a registry
+  hands on to its store keep working.
 
 ### Changed
 - **SBOM fact sheets follow the corrected core checks of SBOM Lens 0.29.10.**

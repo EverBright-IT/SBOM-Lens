@@ -11,13 +11,16 @@ import { useAppStore } from './store';
  *
  * The query survives a reload, which is the point of a shareable link.
  *
- * A deep link is untrusted input: anyone can send one. Two rules follow, and
+ * A deep link is untrusted input: anyone can send one. Three rules follow, and
  * they are the reason this module exists instead of a one-liner in the app:
  *
  *   1. Only http(s). `javascript:`, `data:` and `file:` never reach a fetch.
  *   2. Stored access tokens are NOT attached (see `openDeepLinks`). A link
  *      someone sent you must not spend your credentials; if the source needs
  *      auth, the user opens the dialog and confirms that themselves.
+ *   3. Nothing is stored. A link opens documents; a compliance profile at the
+ *      address is refused (`importProfiles` stays off, see `ingestUrl`), since
+ *      an import persists and decides what every later SBOM is checked against.
  */
 
 /**

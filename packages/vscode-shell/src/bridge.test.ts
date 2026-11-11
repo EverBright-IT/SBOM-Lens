@@ -1,7 +1,10 @@
-import { describe, expect, it } from 'vitest';
+import { createServer } from 'node:http';
+import type { IncomingHttpHeaders, RequestListener, Server } from 'node:http';
+import type { AddressInfo } from 'node:net';
+import { afterEach, describe, expect, it } from 'vitest';
 import type { HostToWebviewMessage } from './protocol';
 import type { BridgeContext } from './bridge';
-import { buildWebviewHtml, createBridgeHandler, prefsSnapshot } from './bridge';
+import { buildWebviewHtml, createBridgeHandler, nodeFetchBytes, prefsSnapshot } from './bridge';
 
 function makeContext(overrides: Partial<BridgeContext> = {}): {
   ctx: BridgeContext;
@@ -71,6 +74,124 @@ describe('bridge handlers', () => {
     const handle = createBridgeHandler(() => {}, ctx);
     await handle({ type: 'exportBytes', fileName: 'chart.tar', bytes: new Uint8Array([0, 255, 7]) });
     expect(calls).toEqual(['bytes:chart.tar:3']);
+  });
+});
+
+describe('nodeFetchBytes', () => {
+  const servers: Server[] = [];
+
+  function listen(handler: RequestListener): Promise<string> {
+    return new Promise((resolve) => {
+      const server = createServer(handler);
+      servers.push(server);
+      server.listen(0, '127.0.0.1', () => {
+        resolve(`http://127.0.0.1:${(server.address() as AddressInfo).port}`);
+      });
+    });
+  }
+
+  afterEach(() => {
+    for (const server of servers.splice(0)) {
+      server.closeAllConnections();
+      server.close();
+    }
+  });
+
+  // Node's fetch repeats custom headers such as PRIVATE-TOKEN against
+  // whatever address a redirect names; only Authorization is dropped.
+  it.each([301, 302, 303, 307, 308])(
+    'does not follow a %i to an http address, so the token never reaches the host it names',
+    async (status) => {
+      const foreign: IncomingHttpHeaders[] = [];
+      const foreignHost = await listen((req, res) => {
+        foreign.push(req.headers);
+        res.end('collected');
+      });
+      const tokenHost = await listen((_req, res) => {
+        res.writeHead(status, { location: `${foreignHost}/collect` }).end();
+      });
+
+      const result = await nodeFetchBytes(`${tokenHost}/weiter`, { 'PRIVATE-TOKEN': 'secret' });
+
+      expect(foreign).toEqual([]);
+      expect(result).toMatchObject({ ok: false, status });
+    },
+  );
+
+  /** A fetch that answers per URL and records what each address was sent. */
+  function scripted(answers: Record<string, () => Response>) {
+    const seen: { url: string; token: string | null }[] = [];
+    const fetchFn = ((input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+      const url = String(input);
+      seen.push({ url, token: new Headers(init?.headers).get('private-token') });
+      const answer = answers[url];
+      return Promise.resolve(answer ? answer() : new Response('not found', { status: 404 }));
+    }) as typeof fetch;
+    return { fetchFn, seen };
+  }
+
+  const redirect = (location: string, status = 302) => new Response(null, { status, headers: { location } });
+
+  it('follows an https redirect to another host, and the token stays behind', async () => {
+    const { fetchFn, seen } = scripted({
+      'https://git.example/pkg/a.spdx': () => redirect('https://store.example/objects/a'),
+      'https://store.example/objects/a': () => new Response('SPDX'),
+    });
+
+    const result = await nodeFetchBytes('https://git.example/pkg/a.spdx', { 'PRIVATE-TOKEN': 'secret' }, fetchFn);
+
+    expect(seen).toEqual([
+      { url: 'https://git.example/pkg/a.spdx', token: 'secret' },
+      { url: 'https://store.example/objects/a', token: null },
+    ]);
+    expect(result.ok && new TextDecoder().decode(result.bytes)).toBe('SPDX');
+  });
+
+  it('keeps the token on a redirect within the same origin', async () => {
+    const { fetchFn, seen } = scripted({
+      'https://git.example/old': () => redirect('/new', 301),
+      'https://git.example/new': () => new Response('SPDX'),
+    });
+
+    const result = await nodeFetchBytes('https://git.example/old', { 'PRIVATE-TOKEN': 'secret' }, fetchFn);
+
+    expect(seen.map((call) => call.token)).toEqual(['secret', 'secret']);
+    expect(result.ok).toBe(true);
+  });
+
+  it('treats another port or scheme of the same host as another origin', async () => {
+    const { fetchFn, seen } = scripted({
+      'http://git.example/a': () => redirect('https://git.example/a'),
+      'https://git.example/a': () => redirect('https://git.example:8443/a'),
+      'https://git.example:8443/a': () => new Response('SPDX'),
+    });
+
+    const result = await nodeFetchBytes('http://git.example/a', { 'PRIVATE-TOKEN': 'secret' }, fetchFn);
+
+    expect(seen.map((call) => call.token)).toEqual(['secret', null, null]);
+    expect(result.ok).toBe(true);
+  });
+
+  it('gives up on a redirect loop', async () => {
+    const { fetchFn, seen } = scripted({ 'https://git.example/a': () => redirect('/a') });
+
+    const result = await nodeFetchBytes('https://git.example/a', {}, fetchFn);
+
+    expect(seen).toHaveLength(6);
+    expect(result).toMatchObject({ ok: false, status: 302 });
+  });
+
+  it('still sends the token to the address the caller named', async () => {
+    const seen: IncomingHttpHeaders[] = [];
+    const tokenHost = await listen((req, res) => {
+      seen.push(req.headers);
+      res.end('SPDX');
+    });
+
+    const result = await nodeFetchBytes(`${tokenHost}/a.spdx`, { 'PRIVATE-TOKEN': 'secret' });
+
+    expect(seen.map((headers) => headers['private-token'])).toEqual(['secret']);
+    expect(result.ok && new TextDecoder().decode(result.bytes)).toBe('SPDX');
   });
 });
 

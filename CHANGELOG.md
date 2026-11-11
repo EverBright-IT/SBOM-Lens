@@ -4,6 +4,64 @@ All notable changes to SBOM Lens. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [SemVer](https://semver.org) (0.x: the API surface is the app itself).
 
+## [0.29.12] - 2026-11-11
+
+### Security
+- **A stored access token no longer follows a redirect to another host.** A
+  token saved for a host in the `PRIVATE-TOKEN` scheme travels as a request
+  header, and `fetch` repeats custom headers against whatever address a
+  redirect names; only `Authorization` is dropped on the way to another
+  origin. A host that answered Fetch, Fetch all, a catalog source or the URL
+  dialog with a redirect could therefore hand the token to a second host. In
+  the browser a fetch now ends at a redirect (a page cannot follow one by
+  hand), and the message names a redirect as a possible cause. In the VS
+  Code extension the host follows redirects itself: only to https, and what
+  the caller sent stays with the origin the request started from, so a
+  download a server hands on to its object store still arrives, without the
+  token.
+- **A deep link no longer reaches hosts it does not name.** A `?url=` fetch
+  carried no token but followed redirects, so the host named in a link could
+  send the recipient's browser on to another address when the page opened.
+  The same change closes it: the browser host refuses redirects.
+- **A link or a fetched answer no longer imports a compliance profile.** Any
+  fetched answer that read as a compliance profile was imported, made the
+  active profile and persisted, also when it arrived through a `?url=` deep
+  link, a catalog source or a reference fetch, where nobody had chosen to
+  import one. A link could thereby decide what the recipient's SBOMs are
+  checked against, across reloads. Now only the URL dialog imports a
+  profile; the other paths say that the file is a profile and was not
+  imported. A shared link to a profile therefore no longer imports it.
+- **A fetched document only pulls in references on its own origin.** Fetch
+  all followed every http(s) reference of a loaded document, so the answer
+  of one server decided which further hosts the browser contacted; with a
+  catalog source that sets both `loadOnStart` and `resolveRefs`, without a
+  click. The cascade now remembers where each document came from and follows
+  a reference only on the same scheme, host and port. The first round of a
+  Fetch all, the placeholders the user can see, is exempt. References held
+  back stay placeholders and are counted in the closing message.
+- **A token is only sent to the host it was looked up for.** For an address
+  like `https:host/path` (the page's scheme without `//`) the token lookup
+  read `host`, while the browser resolved the same string as a path on the
+  origin that serves the app. After a click on Fetch the token stored for
+  `host` went to that origin. The address is now parsed once, without a
+  base, and that one result serves both the lookup and the request.
+- **Name suggestions for unresolved references work within a budget.** Two
+  crafted documents below 5 MB could block the UI for more than 20 seconds:
+  the search for a matching document name grew with references, tokens and
+  name length, on the UI thread. One pass now spends at most 100 million
+  character comparisons; past that, the remaining references get no
+  suggestion and can still be bound by hand. The search text per document is
+  built once per pass.
+- **OCM deliveries: a digest that does not match is a mismatch, also for
+  large gzip blobs.** For blobs that are indexed instead of loaded (over
+  64 MB, or past the 512 MB budget), a differing sha256 of the stored bytes
+  read as *unchecked* whenever those bytes began with the gzip magic. It is
+  now always *mismatch*, as the `ocm` CLI judges it.
+
+The shared packages also carry the fixes of OCM Lens 2.3.1 (signature
+closure over component references, the digest verdict, the registry client);
+see [apps/ocm-lens/CHANGELOG.md](apps/ocm-lens/CHANGELOG.md).
+
 ## [0.29.11] - 2026-11-10
 
 ### Added

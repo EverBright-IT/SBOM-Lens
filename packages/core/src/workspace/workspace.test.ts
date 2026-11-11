@@ -2,7 +2,14 @@ import { describe, expect, it } from 'vitest';
 import { loadFixture, loadFixtureDocument, loadedFromText } from '../test-fixtures';
 import { refKey } from './resolve';
 import type { WorkspaceState } from './workspace';
-import { addDocument, bindRef, emptyWorkspace, removeDocument, workspaceRoots } from './workspace';
+import {
+  addDocument,
+  addDocuments,
+  bindRef,
+  emptyWorkspace,
+  removeDocument,
+  workspaceRoots,
+} from './workspace';
 
 const LEAF = 'cascade/leaf.spdx.json';
 const MID = 'cascade/mid.spdx';
@@ -88,6 +95,86 @@ describe('cascade resolution', () => {
     expect(removed.documents.size).toBe(3);
     // leaf loses its parent and becomes a root again
     expect(workspaceRoots(removed)).toContain(docId(ws, LEAF));
+  });
+});
+
+/**
+ * Name suggestions run on the UI thread for every unresolved reference, on
+ * every workspace change. What they cost (references × tokens × name length)
+ * is chosen by whoever wrote the files: two files of 3 MB together kept the
+ * app busy for minutes. So a pass gives up instead of finishing. The hostile
+ * cases below are scaled down to a few hundred KB, where matching without a
+ * bound still finishes, and then with the suggestion that the bound withholds.
+ */
+describe('name suggestions spend bounded work', () => {
+  const LONG = 200_000;
+
+  const spdxJson = (id: string, name: string, docRefs: readonly string[] = []) =>
+    JSON.stringify({
+      spdxVersion: 'SPDX-2.3',
+      SPDXID: 'SPDXRef-DOCUMENT',
+      name,
+      documentNamespace: `https://example.test/${id}`,
+      creationInfo: { created: '2024-01-01T00:00:00Z', creators: ['Tool: test'] },
+      externalDocumentRefs: docRefs.map((externalDocumentId) => ({
+        externalDocumentId,
+        spdxDocument: 'https://example.test/not-loaded',
+      })),
+    });
+
+  /** Loads one document carrying `docRefs` and one per name; the suggestion per reference. */
+  function suggest(docRefs: readonly string[], names: readonly string[]) {
+    const carrier = loadedFromText('carrier.spdx.json', spdxJson('carrier', 'carrier', docRefs));
+    const candidates = names.map((name, i) =>
+      loadedFromText(`doc-${i}.spdx.json`, spdxJson(`doc-${i}`, name)),
+    );
+    const { workspace } = addDocuments(emptyWorkspace, [carrier, ...candidates]);
+    const suggested = docRefs.map((docRef) => {
+      const resolution = workspace.resolutions.get(refKey(carrier.document.id, docRef));
+      expect(resolution?.status).toBe('unresolved');
+      return resolution?.status === 'unresolved' ? resolution.suggestion?.docId : undefined;
+    });
+    return { suggested, candidateIds: candidates.map((c) => c.document.id) };
+  }
+
+  it('leaves an ordinary cascade alone: every drifted reference finds its document', () => {
+    const parts = Array.from({ length: 60 }, (_, i) => `part${String(i).padStart(3, '0')}`);
+    const { suggested, candidateIds } = suggest(
+      parts.map((part) => `DocumentRef-${part}-2.0.0`),
+      parts.map((part) => `${part}-1.0.0`),
+    );
+    expect(suggested).toEqual(candidateIds);
+  });
+
+  // The reported shape: every token is found, but only at the very end of the name.
+  it('gives up on an id made of thousands of repeated tokens', () => {
+    const docRef = `DocumentRef-${Array<string>(2_000).fill('ab').join('.')}`;
+    const { suggested } = suggest([docRef], [`${'a'.repeat(LONG)}b`]);
+    expect(suggested).toEqual([undefined]);
+  });
+
+  // Not a matter of deduplicating: these tokens all differ.
+  it('gives up on an id made of thousands of distinct tokens', () => {
+    const tokens = Array.from({ length: 2_000 }, (_, i) => `a${i.toString(36)}`);
+    const { suggested } = suggest(
+      [`DocumentRef-${tokens.join('.')}`],
+      [`${'a'.repeat(LONG)} ${tokens.join(' ')}`],
+    );
+    expect(suggested).toEqual([undefined]);
+  });
+
+  // A single search can cost name × token: every start position matches all but one character.
+  it('gives up on one very long token', () => {
+    const token = `ab${'a'.repeat(5_000)}`;
+    const { suggested } = suggest([`DocumentRef-${token}`], [`${'a'.repeat(LONG)}${token}`]);
+    expect(suggested).toEqual([undefined]);
+  });
+
+  it('shares the bound across references: the first are matched, the last are not', () => {
+    const docRefs = Array.from({ length: 2_000 }, (_, i) => `DocumentRef-ab-${i}`);
+    const { suggested, candidateIds } = suggest(docRefs, [`${'a'.repeat(LONG)}b`]);
+    expect(suggested[0]).toBe(candidateIds[0]);
+    expect(suggested.at(-1)).toBeUndefined();
   });
 });
 

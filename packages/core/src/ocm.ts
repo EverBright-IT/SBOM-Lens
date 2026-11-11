@@ -45,9 +45,10 @@ export type {
   AcceptanceReportInput,
   AcceptanceSignatureEntry,
 } from './ocm/report';
-export { acceptanceReport, digestSummary } from './ocm/report';
-export type { DigestSummary } from './ocm/report';
-export { verifyRawSignatures } from './ocm/verify';
+export { acceptanceReport, digestSummary, digestVerdict } from './ocm/report';
+export type { DigestSummary, DigestVerdict } from './ocm/report';
+export type { ReferenceCheck, ReferenceResolver } from './ocm/verify';
+export { referenceDigestChecker, verifyRawSignatures } from './ocm/verify';
 export type {
   ArtifactIdentity,
   NtiaSummary,

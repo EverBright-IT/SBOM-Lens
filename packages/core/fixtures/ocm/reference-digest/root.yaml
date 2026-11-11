@@ -1,0 +1,40 @@
+component:
+  componentReferences:
+  - componentName: example.org/child
+    digest:
+      hashAlgorithm: SHA-256
+      normalisationAlgorithm: jsonNormalisation/v3
+      value: 41ba5337e048c0547f893943abc8ae63c26e08e6517693c4402c2955c7e18047
+    name: child
+    version: 1.0.0
+  creationTime: "2026-11-11T03:57:35Z"
+  name: example.org/root
+  provider: acme
+  repositoryContexts: []
+  resources:
+  - access:
+      localReference: sha256:d2936094e937a6c612a3b95a40c322f72dc345322037b9c5721dd89196a644f7
+      mediaType: application/octet-stream
+      type: localBlob
+    digest:
+      hashAlgorithm: SHA-256
+      normalisationAlgorithm: genericBlobDigest/v1
+      value: d2936094e937a6c612a3b95a40c322f72dc345322037b9c5721dd89196a644f7
+    name: data
+    relation: local
+    type: plainText
+    version: 1.0.0
+  sources: []
+  version: 1.0.0
+meta:
+  schemaVersion: v2
+signatures:
+- digest:
+    hashAlgorithm: SHA-256
+    normalisationAlgorithm: jsonNormalisation/v3
+    value: 9a5e9ac404168d44b485cd2ca0b4d12a7fd638bbd90a76bb4eac152dfdc188df
+  name: reference-test
+  signature:
+    algorithm: RSASSA-PKCS1-V1_5
+    mediaType: application/vnd.ocm.signature.rsa
+    value: 4040f2f09cdb8034b1ea2bd565fec3752b66dd96cc41213f97bda8f027b9e6ff259cb6d50ae11e03dbb8bdd410ea805b34d44d90b0dcd868e86f5c5e58bcbe487015a850507e93c9e6ef03d9da529aedeb71eb2bb6e1eae7f6b9dee8d9bf36534d1a093694563b1350f7079fc087b96d48acc238938f40c6068537aad5bc8ac127a8ff17a3f2e72788ade4510a7a13b8253f744e68e6eab9034a28ddd701ed396d33ff75a713ee5a9449c80ca578e4715affcc6506a8605b9c8e1442d22eaeb680a34c6337099e7e24bc52e47a075283bb3751a15e775eab87b6e376e8d3ab6e772defcc4f70285862105235d20f676b5fe650e382cffbb8c6ff0700f0cdb967

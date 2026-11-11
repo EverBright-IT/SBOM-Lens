@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { HostToWebviewMessage, WebviewToHostMessage } from './protocol';
+import { fetchFollowing } from './redirects';
 import { writeTar } from './tar';
 
 /**
@@ -42,6 +43,8 @@ const MANIFEST_ACCEPT = [
   'application/vnd.oci.image.index.v1+json',
   'application/vnd.docker.distribution.manifest.v2+json',
 ].join(', ');
+/** Request headers a blob store may see; Authorization stays with the registry. */
+const PORTABLE = ['Accept'];
 
 export interface OcmRegistryClient {
   listVersions(registry: string, component: string): Promise<VersionsResult>;
@@ -65,23 +68,28 @@ export function createOcmRegistryClient(options?: RegistryClientOptions): OcmReg
     const headers: Record<string, string> = accept ? { Accept: accept } : {};
     const cached = tokens.get(`${host} ${scopeHint}`);
     if (cached) headers.Authorization = `Bearer ${cached}`;
-    let response = await fetchFn(url, { headers });
-    if (response.status !== 401) return response;
+    // Redirects are followed by hand: only to https, and Authorization stays
+    // with the registry's origin. Only an answer of that origin counts as the
+    // registry's challenge; a 401 of a blob store does not.
+    const { response, own } = await fetchFollowing(fetchFn, url, headers, PORTABLE);
+    if (response.status !== 401 || !own) return response;
 
     // Bearer challenge: fetch a token from the advertised realm (anonymous
     // works for public registries; a stored credential rides along as Basic).
     const challenge = parseBearerChallenge(response.headers.get('www-authenticate'));
     if (!challenge) return response;
-    const params = new URLSearchParams();
-    if (challenge.service) params.set('service', challenge.service);
-    params.set('scope', challenge.scope ?? scopeHint);
+    const tokenUrl = tokenUrlFor(challenge.realm, url);
+    if (!tokenUrl) return response;
+    if (challenge.service) tokenUrl.searchParams.set('service', challenge.service);
+    tokenUrl.searchParams.set('scope', challenge.scope ?? scopeHint);
     const tokenHeaders: Record<string, string> = {};
     const credential = await credentialFor(host);
     if (credential) {
       const basic = Buffer.from(`${credential.username}:${credential.password}`).toString('base64');
       tokenHeaders.Authorization = `Basic ${basic}`;
     }
-    const tokenResponse = await fetchFn(`${challenge.realm}?${params.toString()}`, { headers: tokenHeaders });
+    // No redirects: a realm that passed the check must not hand the request on.
+    const tokenResponse = await fetchFn(tokenUrl.href, { headers: tokenHeaders, redirect: 'manual' });
     if (!tokenResponse.ok) return response;
     const body: unknown = await tokenResponse.json().catch(() => null);
     const token =
@@ -91,8 +99,8 @@ export function createOcmRegistryClient(options?: RegistryClientOptions): OcmReg
     if (typeof token !== 'string' || token === '') return response;
     tokens.set(`${host} ${challenge.scope ?? scopeHint}`, token);
 
-    response = await fetchFn(url, { headers: { ...headers, Authorization: `Bearer ${token}` } });
-    return response;
+    const authorized = { ...headers, Authorization: `Bearer ${token}` };
+    return (await fetchFollowing(fetchFn, url, authorized, PORTABLE)).response;
   }
 
   async function getManifest(
@@ -280,4 +288,29 @@ function parseBearerChallenge(
   const realm = params.get('realm');
   if (!realm) return null;
   return { realm, service: params.get('service'), scope: params.get('scope') };
+}
+
+/** Token services that live on another host than their registry. */
+const TOKEN_HOSTS = new Map([
+  ['registry-1.docker.io', 'auth.docker.io'],
+  ['index.docker.io', 'auth.docker.io'],
+  ['registry.gitlab.com', 'gitlab.com'],
+]);
+
+/**
+ * The realm is the registry's word, so it only counts as a token endpoint
+ * over https on the registry's own host (any port) or on the token host known
+ * for that registry. Anything else would let a registry send the extension
+ * host, and a stored credential, to a URL of its choosing: localhost, the
+ * intranet, a metadata endpoint.
+ */
+function tokenUrlFor(realm: string, registryUrl: string): URL | null {
+  try {
+    const url = new URL(realm);
+    const registryHost = new URL(registryUrl).hostname;
+    const trusted = url.hostname === registryHost || url.hostname === TOKEN_HOSTS.get(registryHost);
+    return url.protocol === 'https:' && trusted ? url : null;
+  } catch {
+    return null;
+  }
 }

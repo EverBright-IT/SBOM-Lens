@@ -27,7 +27,8 @@ whether digests and signatures hold.
   version straight from an OCI registry (for example
   `ghcr.io/open-component-model/ocm`) into the same views. Private
   registries: store a `user:token` per host via *OCM Lens: Set registry
-  credential*.
+  credential*. It is only sent to a token endpoint on the registry's own
+  host (Docker Hub and gitlab.com: their known token hosts).
 - **Deep link** for other tools:
   `vscode://everbright-it.ocmlens/open?path=/absolute/path/delivery.ctf`.
 

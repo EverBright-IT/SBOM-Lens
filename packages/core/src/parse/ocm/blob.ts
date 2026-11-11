@@ -182,19 +182,19 @@ export async function checkDeclaredDigest(
  * Digest verdict for a blob that was never materialized: hashed in constant
  * memory straight off the archive source. Only genericBlobDigest/v1 with
  * sha256 is computable this way (the incremental hash is SHA-256 only, and
- * ociArtifactDigest/v1 would need the inner manifest). Both facts arrive as
- * lazy callbacks so the caller can (a) skip the multi-GB hash entirely when
+ * ociArtifactDigest/v1 would need the inner manifest). The hash arrives as a
+ * lazy callback so the caller can (a) skip the multi-GB hash entirely when
  * the declaration is not computable and (b) cache it per blob when several
- * artifacts point at the same one. The either-or rule for gzip-stored blobs
- * carries over: when the stored bytes do not match and the blob is gzip,
- * the declared digest may be over the uncompressed bytes we did not produce
- * — that stays 'unchecked', never a false 'mismatch'. A non-gzip non-match
- * is a real mismatch.
+ * artifacts point at the same one. genericBlobDigest/v1 is the digest of the
+ * stored bytes, and that is what the ocm CLI verifies: a non-match is a real
+ * mismatch, gzip-stored or not. The either-or rule of the materialized path
+ * does NOT carry over. These bytes were never unpacked, and answering a
+ * known non-match with 'unchecked' let a swapped blob pass as merely "not
+ * checkable".
  */
 export async function checkDeclaredDigestIndexed(
   declared: Record<string, unknown> | undefined,
   actualSha256: () => Promise<string>,
-  storedIsGzip: () => Promise<boolean>,
 ): Promise<OcmBlobInfo['digestCheck']> {
   const value = asString(declared?.value);
   if (!value) return undefined;
@@ -203,8 +203,7 @@ export async function checkDeclaredDigestIndexed(
   if (algorithm !== 'sha256' || normalisation !== 'genericBlobDigest/v1') return 'unchecked';
 
   const expected = value.toLowerCase().replace(/^sha\d+:/, '');
-  if ((await actualSha256()) === expected) return 'match';
-  return (await storedIsGzip()) ? 'unchecked' : 'mismatch';
+  return (await actualSha256()) === expected ? 'match' : 'mismatch';
 }
 
 function webCryptoName(hashAlgorithm: string | undefined): 'SHA-256' | 'SHA-512' | undefined {

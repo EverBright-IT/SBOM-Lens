@@ -6,6 +6,7 @@ import { setHost } from '../host/adapter';
 import type { ParseJobRequest, ParseJobResponse } from '../worker/protocol';
 import { ingestUrl } from './ingest';
 import { useAppStore } from './store';
+import { rememberToken } from './tokens';
 
 /** Stands in for the parse worker: same protocol, real core parser. */
 class FakeWorker {
@@ -41,6 +42,10 @@ class FakeWorker {
 
 let fetchResult: FetchDocumentResult;
 const fetchedWith: { url?: string; headers?: Record<string, string> } = {};
+const secrets = new Map<string, string>();
+
+/** The host the page's fetch reaches: it resolves against the page, as webHost does. */
+const reachedHost = (url: string) => new URL(url, 'https://lens.example/app/').host;
 
 const fakeHost: HostAdapter = {
   kind: 'web',
@@ -52,8 +57,11 @@ const fakeHost: HostAdapter = {
   },
   readPref: () => null,
   persistPref: () => {},
-  secretGet: async () => null,
-  secretSet: async () => {},
+  secretGet: async (key) => secrets.get(key) ?? null,
+  secretSet: async (key, value) => {
+    if (value === null) secrets.delete(key);
+    else secrets.set(key, value);
+  },
   exportFile: () => {},
   openExternal: () => {},
   createWorker: () => new FakeWorker() as unknown as Worker,
@@ -64,6 +72,7 @@ describe('ingestUrl through the host adapter', () => {
   beforeEach(() => {
     setHost(fakeHost);
     useAppStore.getState().actions.clearAll();
+    secrets.clear();
   });
 
   it('maps a network-level failure to the CORS hint', async () => {
@@ -109,5 +118,26 @@ describe('ingestUrl through the host adapter', () => {
     expect(second.ok).toBe(true);
     expect(second.documentId).toBe(first.documentId);
     expect(useAppStore.getState().ws.documents.size).toBe(1);
+  });
+
+  // A URL in the page's own scheme without `//` is a host to `new URL`, but a
+  // relative path to the page's fetch: the token would go to our own origin.
+  it.each(['https:registry-a.test/x', 'https:/registry-a.test/x', 'https:\\registry-a.test/x'])(
+    'sends a stored token only to the host it was stored for: %s',
+    async (url) => {
+      await rememberToken('https://registry-a.test/', { scheme: 'bearer', value: 'stored-secret' });
+      fetchResult = { ok: false, status: 404, statusText: 'Not Found' };
+      await ingestUrl(url);
+      expect(fetchedWith.headers).toEqual({ Authorization: 'Bearer stored-secret' });
+      expect(reachedHost(fetchedWith.url!)).toBe('registry-a.test');
+    },
+  );
+
+  it('keeps a relative URL relative and sends no token with it', async () => {
+    await rememberToken('https://registry-a.test/', { scheme: 'bearer', value: 'stored-secret' });
+    fetchResult = { ok: false, status: 404, statusText: 'Not Found' };
+    await ingestUrl('examples/minimal.spdx');
+    expect(fetchedWith.url).toBe('examples/minimal.spdx');
+    expect(fetchedWith.headers).toEqual({});
   });
 });

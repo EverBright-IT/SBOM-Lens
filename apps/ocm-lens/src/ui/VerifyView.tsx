@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { digestSummary } from '@sbomlens/core/ocm';
+import { digestSummary, digestVerdict } from '@sbomlens/core/ocm';
 import { saveBytes } from '../app/download';
 import { runDigestChecks } from '../app/ingest';
 import { prepareAcceptanceReport } from '../app/report';
@@ -49,6 +49,7 @@ export function VerifyView() {
 
   if (!delivery || !bundle) return null;
   const digests = digestSummary(bundle);
+  const digestState = digestVerdict(digests);
 
   const checkDeferred = async () => {
     setDigestRun({ done: 0, total: bundle.digestsDeferred?.blobs ?? 0 });
@@ -172,14 +173,22 @@ export function VerifyView() {
           </div>
         )}
         <p className="text-sm">
-          {digests.checked === 0 && digests.unchecked === 0 ? (
+          {digestState === 'none' ? (
             'No resources with bytes in this bundle.'
-          ) : digests.mismatch.length === 0 ? (
+          ) : digestState === 'match' ? (
             <>
               <Chip tone="ok">all match</Chip>{' '}
               <span className="text-slate-500 dark:text-slate-400">
+                {digests.match} declared digest(s) match the delivered bytes.
+              </span>
+            </>
+          ) : digestState === 'incomplete' ? (
+            <>
+              <Chip tone="warn">{digests.unchecked + digests.pending} not checked</Chip>{' '}
+              <span className="text-slate-500 dark:text-slate-400">
                 {digests.match} declared digest(s) match the delivered bytes
-                {digests.unchecked > 0 ? `; ${digests.unchecked} declared but not checkable` : ''}.
+                {digests.unchecked > 0 ? `; ${digests.unchecked} declared but not checkable` : ''}
+                {digests.pending > 0 ? `; ${digests.pending} deferred` : ''}.
               </span>
             </>
           ) : (

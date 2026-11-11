@@ -33,8 +33,8 @@ export async function extractDeliveryBlob(
 /**
  * Check one deferred blob digest on demand — the same verdict semantics the
  * walk uses for unmaterialized blobs (constant-memory hash off the archive;
- * gzip-stored blobs stay 'unchecked' rather than risking a wrong verdict).
- * Returns undefined when no digest value is declared.
+ * stored bytes that do not hash to the declared value are a 'mismatch',
+ * gzip-stored or not). Returns undefined when no digest value is declared.
  */
 export async function digestDeliveryBlob(
   source: ByteSource,
@@ -45,16 +45,10 @@ export async function digestDeliveryBlob(
   const located = await locateDeliveryBlob(source, localReference);
   if ('reason' in located) return 'unchecked';
   const { container, offset, size, bytes } = located;
-  return checkDeclaredDigestIndexed(
-    declared,
-    () =>
-      bytes
-        ? sha256SourceHex(bufferSource(bytes), 0, bytes.byteLength)
-        : sha256SourceHex(container, offset, size),
-    async () => {
-      const head = bytes ? bytes.subarray(0, 2) : await container.read(offset, 2);
-      return head.byteLength === 2 && head[0] === 0x1f && head[1] === 0x8b;
-    },
+  return checkDeclaredDigestIndexed(declared, () =>
+    bytes
+      ? sha256SourceHex(bufferSource(bytes), 0, bytes.byteLength)
+      : sha256SourceHex(container, offset, size),
   );
 }
 
