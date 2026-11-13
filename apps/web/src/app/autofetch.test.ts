@@ -160,6 +160,35 @@ describe('fetchAllReferences', () => {
     expect(useAppStore.getState().toasts.at(-1)?.message).toContain('1 on another host not followed');
   });
 
+  it('reads a scheme-without-slashes reference the way the request does, not the way the page would', async () => {
+    // The origin check resolved references against the page, but ingestUrl
+    // parses them without a base. `https:evil.test/x` looked like an app-origin
+    // path to the check, yet the request would go to evil.test. A same-origin
+    // sibling (`/app-child`) is still fetched; the cross-origin one is held.
+    vi.stubGlobal('location', { href: 'https://app.test/app/' });
+    const catalog = {
+      sources: [{ label: 'App root', urls: ['/app-root.spdx.json'], loadOnStart: true, resolveRefs: true }],
+    };
+    serve('/app-root.spdx.json', ['/app-child.spdx.json', 'https:evil.test/x.spdx.json']);
+    serve('/app-child.spdx.json');
+    serve('https://evil.test/x.spdx.json'); // where the request WOULD land if the host followed it
+
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = (async () => new Response(JSON.stringify(catalog))) as typeof fetch;
+    try {
+      await initCatalog();
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+    await vi.waitFor(() =>
+      expect(useAppStore.getState().toasts.some((t) => t.message.startsWith('Fetched '))).toBe(true),
+    );
+
+    expect(requested).toContain('/app-child.spdx.json');
+    expect(requested).not.toContain('https://evil.test/x.spdx.json');
+    expect(useAppStore.getState().toasts.at(-1)?.message).toContain('on another host not followed');
+  });
+
   it('lets only the first round after a click reach other hosts', async () => {
     // "Fetch all" covers the placeholders on screen. What the fetched
     // documents reference in turn is the answering server's choice.

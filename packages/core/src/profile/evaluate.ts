@@ -6,6 +6,7 @@ import { licenseIdsInExpression } from '../parse/spec-lint';
 import { isDeprecatedLicenseId, isKnownLicenseId } from '../spec/spdx-license-ids';
 import type { LoadedDocument, WorkspaceState } from '../workspace/workspace';
 import type { ComplianceProfile, CryptoField, DocumentField, PackageField, ProfileCheck, ProfileSpecBaseline } from './model';
+import { isUnsafeRegexPattern } from './regex-safety';
 
 /**
  * Profile evaluation. Field semantics live in the two extractors below and
@@ -465,6 +466,11 @@ function matchesModifiers(
 
 function safeRegex(pattern: string | undefined): RegExp | null {
   if (pattern === undefined) return null;
+  // Defence in depth: validation rejects catastrophic patterns at import, but a
+  // profile persisted before that gate existed could still reach here. A
+  // nested-unbounded-quantifier pattern is never run; the check is treated as
+  // non-matching rather than freezing the UI thread.
+  if (isUnsafeRegexPattern(pattern)) return null;
   try {
     return new RegExp(pattern);
   } catch {

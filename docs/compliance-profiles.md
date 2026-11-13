@@ -45,7 +45,9 @@ field-level (presence, patterns): SBOM Lens does not do legal interpretation.
 
 - **`pattern`**: a regular expression the value must match. `RegExp.test` is
   a substring match: anchor with `^...$` when you mean the full value. No
-  flags in v1 (matching is case-sensitive).
+  flags in v1 (matching is case-sensitive). A quantified group that itself
+  contains `*`, `+` or `{n,}` (for example `([a-z]+)+`) is rejected on import:
+  write `[a-z]+` instead.
 - **`values`**: exact-match allow-list. Combined with `pattern` via AND.
 - **`creators`** is an array: SOME semantics: at least one creator must
   satisfy the modifiers.
@@ -216,7 +218,9 @@ author meant a subset, hence the id. v5 includes everything from v4.
 An unknown check type or field rejects the **whole** profile with a list of
 errors: an older SBOM Lens will never half-evaluate a newer profile and
 report a false "pass". Limits: 200 checks, 64 KB per file, patterns ≤ 500
-chars (must compile), ids unique, `algorithms` ≤ 8 entries.
+chars (must compile, and no nested unbounded quantifiers such as `(a+)+`,
+which backtrack exponentially and would freeze the page), ids unique,
+`algorithms` ≤ 8 entries.
 
 ## Importing a profile
 

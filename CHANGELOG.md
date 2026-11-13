@@ -4,6 +4,33 @@ All notable changes to SBOM Lens. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [SemVer](https://semver.org) (0.x: the API surface is the app itself).
 
+## [0.29.13] - 2026-11-13
+
+### Security
+- **"Fetch all" no longer reaches a host that a reference only disguises
+  as a path.** The cascade keeps a fetched document's references on that
+  document's origin, and it judged a reference by resolving it against the
+  page. The request itself, since 0.29.12, parses an absolute address
+  without a base. A reference written as `https:host/x` (its own scheme, no
+  `//`) therefore passed the check as a path on the app's own host, while
+  the request went to `host`, with the token stored for it. Whoever answered
+  for one document could so make the browser contact hosts of their choosing.
+  The check now reads every address the way the request does.
+- **A compliance profile can no longer freeze the page.** A check's
+  `pattern` runs with `RegExp.test` on the main thread against document
+  fields. A pattern with nested unbounded quantifiers, such as
+  `([a-z]+)+`, backtracks exponentially on an ordinary value and hung the
+  tab, on every later visit too, since an imported profile stays active.
+  Import now rejects such patterns with a message that names the rule, and
+  evaluation never runs one that a profile saved before this release still
+  carries.
+- **A malformed key or certificate no longer hangs signature verification.**
+  The DER reader behind "paste a key" and pinned keys built multi-byte
+  lengths with 32-bit shifts, so a length that overflowed turned negative
+  and the walk over the certificate never advanced. Lengths are now read
+  without overflow and checked against the input; a malformed key is
+  reported as such.
+
 ## [0.29.12] - 2026-11-11
 
 ### Security

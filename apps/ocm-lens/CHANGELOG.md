@@ -3,6 +3,16 @@
 OCM Lens 2.0 versions independently of the monorepo's 0.x line. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.3.2] - pre-release
+
+### Security
+- **A malformed key or certificate no longer hangs Verify.** The DER reader
+  behind the key field and pinned keys built multi-byte lengths with 32-bit
+  shifts; a length that overflowed turned negative, and the walk over the
+  certificate never advanced, freezing the page or the VS Code view. Lengths
+  are now read without overflow and checked against the input, and a
+  malformed key is reported as such instead.
+
 ## [2.3.1] - pre-release
 
 ### Security

@@ -104,19 +104,40 @@ export async function fetchAllReferences(
 }
 
 /**
- * Whether `url` is on the origin `from` was fetched from: same scheme, host
- * and port. Both are resolved the way `fetch` resolves them, so a relative or
- * scheme-relative reference is judged by where the request would really go.
+ * Whether `url` is on the same origin as the document `from` was fetched from.
+ *
+ * Both sides are read the way the request reads them (`requestOrigin`), not the
+ * way a plain `new URL(x, page)` would. That matters for a reference like
+ * `https:host/x` — its own scheme, no `//`. Against the page as base it looks
+ * like a relative path on the app's host, but `ingestUrl` parses it without a
+ * base and the request goes to `host`. Judging it against the page would call
+ * it same-origin and then fetch another host; reading it the request's way
+ * keeps the two in step.
  */
 function sameOrigin(url: string, from: string | undefined): boolean {
   if (from === undefined) return false;
+  const target = requestOrigin(url);
+  const source = requestOrigin(from);
+  return target !== null && source !== null && target === source;
+}
+
+/**
+ * The origin a request for `ref` would really reach, parsed exactly as
+ * `ingestUrl`/`requestTarget` parse it: without a base, so an absolute URL
+ * (including one whose scheme carries no `//`) yields its own origin. Only a
+ * reference with no scheme of its own is relative to the page and resolves
+ * against `location`, where the request would resolve it the same way.
+ */
+function requestOrigin(ref: string): string | null {
   try {
-    const base = globalThis.location?.href;
-    const target = new URL(url, base);
-    const source = new URL(from, base);
-    return target.protocol === source.protocol && target.host === source.host;
+    return new URL(ref).origin;
   } catch {
-    return false;
+    try {
+      const base = globalThis.location?.href;
+      return base ? new URL(ref, base).origin : null;
+    } catch {
+      return null;
+    }
   }
 }
 

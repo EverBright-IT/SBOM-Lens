@@ -77,6 +77,22 @@ describe('evaluateProfile — document checks', () => {
     expect(resultById(report, 'some').pass).toBe(true);
   });
 
+  it('does not hang on a catastrophic pattern that slipped past validation', () => {
+    // validateProfile rejects nested-unbounded-quantifier patterns at import.
+    // A profile persisted before that gate could still reach here, so the
+    // pattern must not run: it is treated as unconstrained, the same as an
+    // un-compilable pattern, never a frozen UI thread.
+    const { ws, loaded } = docFrom({ creators: ['Organization: ACME Corporation and friends'] });
+    const started = Date.now();
+    const report = evaluateProfile(
+      ws,
+      loaded,
+      profileOf({ id: 'evil', type: 'document-field', field: 'creators', pattern: '^(([a-z0-9 :.-])+)+X$' }),
+    );
+    expect(Date.now() - started).toBeLessThan(1000);
+    expect(resultById(report, 'evil').pass).toBe(true);
+  });
+
   it('relationships minCount and created-recency with injected clock', () => {
     const { ws, loaded } = docFrom({ created: '2026-01-01T00:00:00Z' });
     const now = Date.parse('2026-01-31T00:00:00Z');

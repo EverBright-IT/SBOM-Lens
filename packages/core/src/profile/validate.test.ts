@@ -87,6 +87,14 @@ describe('validateProfile', () => {
         checks: [{ type: 'document-field', field: 'name', pattern: 'a'.repeat(501) }],
       })[0],
     ).toContain('exceeds 500');
+    // A catastrophic-backtracking pattern is a valid regex of legal length but
+    // would freeze the UI thread; the import gate refuses it.
+    expect(
+      errorsOf({
+        ...minimal,
+        checks: [{ type: 'document-field', field: 'name', pattern: '^(([a-z0-9 :.-])+)+X$' }],
+      })[0],
+    ).toContain('nested unbounded quantifiers');
   });
 
   it('rejects pattern/values on non-string package fields', () => {

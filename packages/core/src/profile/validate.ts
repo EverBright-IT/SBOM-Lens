@@ -1,4 +1,5 @@
 import { asArray, asString, isRecord } from '../util/narrow';
+import { isUnsafeRegexPattern } from './regex-safety';
 import type { ComplianceProfile, CryptoField, ProfileSpecBaseline, DocumentField, PackageField, ProfileCheck } from './model';
 import {
   CRYPTO_FIELDS,
@@ -339,6 +340,10 @@ function validatePattern(raw: unknown, at: string, errors: string[]): string | u
     new RegExp(pattern);
   } catch {
     errors.push(`${at}: "pattern" is not a valid regular expression`);
+    return undefined;
+  }
+  if (isUnsafeRegexPattern(pattern)) {
+    errors.push(`${at}: "pattern" has nested unbounded quantifiers and is rejected to avoid catastrophic backtracking`);
     return undefined;
   }
   return pattern;

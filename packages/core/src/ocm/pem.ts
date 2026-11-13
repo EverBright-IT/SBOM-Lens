@@ -56,6 +56,7 @@ interface Tlv {
 
 /** Read one DER TLV header at `offset`. */
 function readTlv(der: Uint8Array, offset: number): Tlv {
+  if (offset < 0 || offset + 2 > der.length) throw new KeyImportError('truncated DER');
   const tag = der[offset]!;
   let pos = offset + 1;
   let len = der[pos]!;
@@ -63,10 +64,16 @@ function readTlv(der: Uint8Array, offset: number): Tlv {
   if (len & 0x80) {
     const n = len & 0x7f;
     if (n === 0 || n > 4) throw new KeyImportError('unsupported DER length');
+    if (pos + n > der.length) throw new KeyImportError('truncated DER length');
+    // Multiply, not shift: a 4-byte length overflows the signed 32-bit range
+    // that `<<` works in, which would make `len` negative and point `end`
+    // back before `pos` — an endless walk in `children`.
     len = 0;
-    for (let i = 0; i < n; i++) len = (len << 8) | der[pos++]!;
+    for (let i = 0; i < n; i++) len = len * 256 + der[pos++]!;
   }
-  return { tag, start: offset, contentStart: pos, contentEnd: pos + len, end: pos + len };
+  const end = pos + len;
+  if (end > der.length) throw new KeyImportError('DER length exceeds input');
+  return { tag, start: offset, contentStart: pos, contentEnd: end, end };
 }
 
 function children(der: Uint8Array, seq: Tlv): Tlv[] {
@@ -74,6 +81,9 @@ function children(der: Uint8Array, seq: Tlv): Tlv[] {
   let pos = seq.contentStart;
   while (pos < seq.contentEnd) {
     const tlv = readTlv(der, pos);
+    // Every TLV is at least a tag and a length byte, so `end` always moves
+    // past `pos`. Guard it anyway: a loop that does not advance must not spin.
+    if (tlv.end <= pos) throw new KeyImportError('DER element does not advance');
     out.push(tlv);
     pos = tlv.end;
   }
