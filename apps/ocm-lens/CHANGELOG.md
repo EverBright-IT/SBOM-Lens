@@ -3,6 +3,21 @@
 OCM Lens 2.0 versions independently of the monorepo's 0.x line. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Fixed
+- **Inherited from the shared core (SBOM Lens 0.29.14).** SPDX 3 SBOM
+  resources read lifecycle-scoped dependencies and structured licence sets,
+  and CycloneDX resources read a component without dependencies as such, so
+  fact sheets and package lists see them. OpenVEX resources match by every
+  identifier a product names. The reader hardening against crafted types,
+  duplicate ids and long hyphen runs applies to SBOM resources too, and a
+  CSAF resource whose `csaf_version` is a name such as `constructor` loads
+  instead of failing. A CycloneDX VEX document among a delivery's resources
+  is no longer taken for an SBOM. SPDX 3 resources that write `NoneElement`
+  or the licence individuals as the short terms of the SPDX context are
+  read as such.
+
 ## [2.3.2] - pre-release
 
 ### Security

@@ -66,7 +66,10 @@ field-level (presence, patterns): SBOM Lens does not do legal interpretation.
   and their variants, which CycloneDX `dependencies[]` and nested
   components map onto. A lone `DESCRIBES`, and the containment the parser
   derives from a flat CycloneDX `components[]` list, enumerate no
-  dependency.
+  dependency. The explicit "none" counts: a CycloneDX `dependencies[]`
+  entry without targets, the form CycloneDX gives a component without
+  dependencies, maps onto `DEPENDS_ON NONE`, as SPDX spells the same
+  statement.
 - Entity strings differ by format: SPDX 2 and 3 supplier and originator
   values carry the `Person:`/`Organization:` prefix SPDX defines, CycloneDX
   carries the bare entity name (the Inventory strips the prefix for display

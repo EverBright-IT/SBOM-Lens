@@ -5,6 +5,7 @@ import type { ElementId } from '../model/ids';
 import type { WorkspaceState } from '../workspace/workspace';
 import { cpeMatchKey, elementCpeKeys } from './cpe';
 import { splitPurl } from './purl';
+import { contextText } from '../util/jsonld-context';
 
 /**
  * OpenVEX overlay: what the supplier COMMUNICATES about known
@@ -39,6 +40,11 @@ export interface VexProductRef {
    * `hash:<algorithm>:<value>` pseudo-id, so the reference is never empty.
    */
   id: string;
+  /**
+   * Further purls/CPEs naming the same product (OpenVEX `identifiers` next
+   * to a purl `@id`, or several identifiers); matched like `id`.
+   */
+  aliases?: string[];
   /** purls/CPEs of affected subcomponents inside that product. */
   subcomponents: string[];
   /** File hashes of the product; matched against element checksums (TR-03191 section 4.4). */
@@ -170,8 +176,7 @@ export function sniffVex(text: string): { isVex: true; raw: unknown } | { isVex:
     const raw: unknown = JSON.parse(text);
     if (
       isRecord(raw) &&
-      typeof raw['@context'] === 'string' &&
-      raw['@context'].includes('openvex.dev') &&
+      contextText(raw['@context']).includes('openvex.dev') &&
       Array.isArray(raw.statements)
     ) {
       return { isVex: true, raw };
@@ -263,7 +268,9 @@ function vulnName(node: unknown): string | undefined {
 
 /**
  * Products: strings (early spec) or { "@id", identifiers, subcomponents }.
- * identifiers may carry purl, cpe23, or cpe22 — purl preferred, CPE accepted.
+ * Every purl or CPE a product carries counts: the `@id` when it is one, and
+ * each of `identifiers.purl`, `cpe23`, `cpe22`. An `@id` that is an IRI only
+ * names the product; without identifiers it is kept as the id for display.
  */
 function parseProducts(node: unknown): VexProductRef[] {
   if (!Array.isArray(node)) return [];
@@ -274,25 +281,36 @@ function parseProducts(node: unknown): VexProductRef[] {
       continue;
     }
     if (!isRecord(entry)) continue;
-    const id = firstPurlish(entry['@id']) ?? identifierOf(entry.identifiers);
+    const refs = productRefs(entry);
+    const id = refs[0] ?? firstPurlish(entry['@id']);
     if (!id) continue;
     const subcomponents: string[] = [];
     if (Array.isArray(entry.subcomponents)) {
       for (const sub of entry.subcomponents) {
-        const subId =
-          firstPurlish(sub) ??
-          (isRecord(sub) ? (firstPurlish(sub['@id']) ?? identifierOf(sub.identifiers)) : undefined);
-        if (subId) subcomponents.push(subId);
+        if (typeof sub === 'string' && sub !== '') subcomponents.push(sub);
+        else if (isRecord(sub)) {
+          const subRefs = productRefs(sub);
+          subcomponents.push(...(subRefs.length > 0 ? subRefs : [firstPurlish(sub['@id'])].filter((s): s is string => s !== undefined)));
+        }
       }
     }
-    products.push({ id, subcomponents });
+    const aliases = refs.slice(1);
+    products.push({ id, ...(aliases.length > 0 ? { aliases } : {}), subcomponents });
   }
   return products;
 }
 
-function identifierOf(identifiers: unknown): string | undefined {
-  if (!isRecord(identifiers)) return undefined;
-  return firstPurlish(identifiers.purl) ?? firstPurlish(identifiers.cpe23) ?? firstPurlish(identifiers.cpe22);
+/** The matchable identifiers of a product object, `@id` first, without duplicates. */
+function productRefs(entry: Record<string, unknown>): string[] {
+  const atId = firstPurlish(entry['@id']);
+  const identifiers = isRecord(entry.identifiers) ? entry.identifiers : {};
+  const candidates = [
+    atId !== undefined && refMatchKey(atId) !== undefined ? atId : undefined,
+    firstPurlish(identifiers.purl),
+    firstPurlish(identifiers.cpe23),
+    firstPurlish(identifiers.cpe22),
+  ];
+  return [...new Set(candidates.filter((c): c is string => c !== undefined))];
 }
 
 function firstPurlish(value: unknown): string | undefined {
@@ -390,6 +408,7 @@ export function matchVex(
         // A product known only by its hashes carries a hash: pseudo-id; the
         // hashes list below files it, so the id must not file it again.
         if (!product.id.startsWith('hash:')) fileUnderRef(index, product.id, candidate);
+        for (const alias of product.aliases ?? []) fileUnderRef(index, alias, candidate);
         // A file hash names exact bytes: no version dimension, no wildcard.
         for (const hash of product.hashes ?? []) fileUnder(index, hashKey(hash.algorithm, hash.value), candidate);
         for (const sub of product.subcomponents) {

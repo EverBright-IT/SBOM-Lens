@@ -41,7 +41,14 @@ update PRs must originate on the internal GitLab so history never diverges.
 
 - **osv-scanner**: add an `osv-scanner.toml` at the repo root with
   `[[IgnoredVulns]]` entries (`id`, `reason`, ideally an expiry note). Keep
-  every ignore reviewed: the file is diffed like code.
+  every ignore reviewed: the file is diffed like code. The expiry key is
+  `ignoreUntil` for now. osv-scanner 2.7.1 deprecates it in favour of
+  `effectiveUntil`, so the CI job (image `:latest`) prints a deprecation
+  warning while still honouring the date. Releases before 2.7.1 reject
+  `effectiveUntil` in this table as an unknown key and stop with an error
+  (checked with 2.7.0), so a config written with it fails the gate there.
+  Switch the key once every scanner that runs the gate, local ones included,
+  is 2.7.1 or newer.
 - **Trivy**: add a `.trivyignore` file (one CVE id per line, with a comment
   why). `--ignore-unfixed` is already set, so only fixable findings block.
 - **SAST/Secret Detection**: prefer fixing; for true false positives use the

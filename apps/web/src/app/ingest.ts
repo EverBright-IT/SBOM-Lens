@@ -342,8 +342,8 @@ export async function ingestPush(
 // Archive extensions only make sense where deliveries do — the SPDX-only
 // product would just hand a tarball to a parser that cannot read it.
 const ACCEPTED_FILE = HAS_DELIVERIES
-  ? /\.(spdx|json|yaml|yml|xml|rdf|tar|tgz|gz|ctf)$/i
-  : /\.(spdx|json|yaml|yml|xml|rdf)$/i;
+  ? /\.(spdx|json|jsonld|yaml|yml|xml|rdf|tar|tgz|gz|ctf)$/i
+  : /\.(spdx|json|jsonld|yaml|yml|xml|rdf)$/i;
 // These never buffer up front: the worker streams them via Blob.slice().
 const DELIVERY_FILE = /\.(tar|tgz|gz|ctf)$/i;
 const SKIP_HINT = HAS_DELIVERIES

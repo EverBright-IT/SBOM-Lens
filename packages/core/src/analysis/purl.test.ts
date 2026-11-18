@@ -24,3 +24,10 @@ describe('splitPurl', () => {
     expect(splitPurl('pkg:')).toBeUndefined();
   });
 });
+
+describe('splitPurl scheme case', () => {
+  it('reads the scheme without regard to case, as docs/vex.md promises', () => {
+    expect(splitPurl('PKG:npm/left-pad@1.3.0')).toEqual({ segments: ['npm', 'left-pad'], version: '1.3.0' });
+    expect(splitPurl('Pkg:maven/org.acme/thing')).toEqual({ segments: ['maven', 'org.acme', 'thing'] });
+  });
+});

@@ -45,15 +45,22 @@ function RelationshipRow({
 }) {
   const counterpart = direction === 'out' ? edge.to : edge.from;
   const { label, onClick } = describeCounterpart(ws, loaded, counterpart);
+  // SPDX 3 LifecycleScopedRelationship: the phase the edge holds in.
+  const scope = loaded.document.relationships[edge.relIndex]?.scope;
 
   return (
-    <div className="flex items-baseline gap-2 text-[13px]" title={edge.type}>
+    <div className="flex items-baseline gap-2 text-[13px]" title={scope ? `${edge.type} (${scope})` : edge.type}>
       <span className="w-8 shrink-0 text-[10px] tracking-wide text-slate-300 uppercase dark:text-slate-600">
         {direction === 'out' ? 'out' : 'in'}
       </span>
       <span className="shrink-0 font-mono text-[11px] text-slate-400 dark:text-slate-500">
         {edge.type}
       </span>
+      {scope && (
+        <span className="shrink-0 rounded bg-slate-100 px-1 text-[10px] text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+          {scope}
+        </span>
+      )}
       {onClick ? (
         <button
           type="button"

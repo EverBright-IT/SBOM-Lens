@@ -2,6 +2,7 @@ import type { Diagnostic } from '../../model/diagnostics';
 import { asRecordArray, asString, isRecord } from '../../util/narrow';
 import type { Tally } from '../spec-lint';
 import { checksumProblem, createLint, createTally, isAbsoluteUri, licenseExpressionError } from '../spec-lint';
+import { isVocabularyIndividual } from './individuals';
 
 /**
  * Spec lint for SPDX 3.0.x documents. Deliberately limited to the JSON-LD
@@ -160,7 +161,8 @@ function validateReferences(
   }
 
   const dangling = createTally({ unique: true });
-  const resolves = (ref: string) => ref.startsWith('_:') || byId.has(ref) || imported.has(ref) || isWellKnownIri(ref);
+  const resolves = (ref: string) =>
+    ref.startsWith('_:') || byId.has(ref) || imported.has(ref) || isWellKnownIri(ref) || isVocabularyIndividual(ref);
 
   for (const node of graph) {
     const type = localType(node);

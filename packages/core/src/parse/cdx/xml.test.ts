@@ -108,3 +108,47 @@ describe('CycloneDX XML', () => {
     });
   });
 });
+
+describe('CycloneDX XML reading gaps', () => {
+  const head = '<?xml version="1.0"?><bom xmlns="http://cyclonedx.org/schema/bom/1.6" version="1">';
+  const meta = '<metadata><component type="application" bom-ref="app"><name>app</name><version>1.0.0</version></component></metadata>';
+
+  it('reads an empty <dependency> element as the statement "no dependencies"', () => {
+    const text = `${head}${meta}<dependencies><dependency ref="app"/></dependencies></bom>`;
+    const { document } = parseDocument({ fileName: 'leaf.cdx.xml', text, sha1: '1'.repeat(40), byteSize: text.length });
+    expect(document!.relationships).toContainEqual({
+      from: { kind: 'local', spdxId: 'app' },
+      type: 'DEPENDS_ON',
+      to: { kind: 'special', value: 'NONE' },
+    });
+  });
+
+  it('counts vulnerabilities in the XML form, one or many', () => {
+    for (const [vulns, expected] of [
+      ['<vulnerability><id>CVE-2026-0001</id></vulnerability>', '1 vulnerabilit'],
+      ['<vulnerability><id>CVE-2026-0001</id></vulnerability><vulnerability><id>CVE-2026-0002</id></vulnerability>', '2 vulnerabilit'],
+    ] as const) {
+      const text = `${head}${meta}<components><component type="library" bom-ref="lib"><name>lib</name></component></components><vulnerabilities>${vulns}</vulnerabilities></bom>`;
+      const { diagnostics } = parseDocument({ fileName: 'v.cdx.xml', text, sha1: '2'.repeat(40), byteSize: text.length });
+      expect(diagnostics.find((d) => d.code === 'CDX_VULNERABILITIES_NOT_READ')?.message).toContain(expected);
+    }
+  });
+
+  it('refuses a standalone VEX BOM in XML with a precise reason', () => {
+    const text = `${head}${meta}<vulnerabilities><vulnerability><id>CVE-2026-0001</id></vulnerability></vulnerabilities></bom>`;
+    expect(detect(text)).toMatchObject({ format: 'unsupported', code: 'CDX_VEX_NOT_SUPPORTED' });
+  });
+});
+
+describe('CycloneDX XML inventory nested under the subject', () => {
+  it('is an SBOM, not a VEX document, even with vulnerabilities', () => {
+    const text =
+      '<?xml version="1.0"?><bom xmlns="http://cyclonedx.org/schema/bom/1.6" version="1"><metadata>' +
+      '<component type="application" bom-ref="app"><name>app</name><components>' +
+      '<component type="library" bom-ref="lib"><name>lib</name></component></components></component></metadata>' +
+      '<vulnerabilities><vulnerability><id>CVE-2026-0001</id></vulnerability></vulnerabilities></bom>';
+    expect(detect(text)).toMatchObject({ format: 'cdx-json', serialization: 'xml' });
+    const { document } = parseDocument({ fileName: 'nested.cdx.xml', text, sha1: '3'.repeat(40), byteSize: text.length });
+    expect(document!.elements.map((e) => e.name)).toEqual(['app', 'lib']);
+  });
+});

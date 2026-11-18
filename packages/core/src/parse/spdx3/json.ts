@@ -9,9 +9,11 @@ import type {
 import type { Diagnostic } from '../../model/diagnostics';
 import { diag } from '../../model/diagnostics';
 import { makeDocumentId, makeElementId } from '../../model/ids';
-import { asRecordArray, asString, asStringArray, isRecord } from '../../util/narrow';
+import { contextText } from '../../util/jsonld-context';
+import { asArray, asRecordArray, asString, asStringArray, isRecord } from '../../util/narrow';
 import type { ParseResult, SourceInput } from '../parser';
 import { dedupeBySpdxId } from '../spdx2/common';
+import { vocabularyTerm } from './individuals';
 import { validateSpdx3Structure } from './validate';
 
 /**
@@ -66,11 +68,13 @@ export function parseSpdx3Json(input: SourceInput, root: Record<string, unknown>
     const name = asString(node.name);
     if (!name) return undefined;
     const type = nodeType(node);
+    // SoftwareAgent and Tool are software. A plain Agent says nothing about
+    // its nature and takes the same fallback as any other agent type.
     const prefix = type.includes('Organization')
       ? 'Organization'
       : type.includes('Person')
         ? 'Person'
-        : type.includes('Agent') || type.includes('Tool')
+        : type.includes('SoftwareAgent') || type.includes('Tool')
           ? 'Tool'
           : 'Organization';
     const contact = opts?.contact ? agentContact(node) : undefined;
@@ -86,27 +90,107 @@ export function parseSpdx3Json(input: SourceInput, root: Record<string, unknown>
    *
    *   LicenseExpression element          -> its simplelicensing_licenseExpression
    *   ListedLicense (by IRI or element)  -> the id, the tail of spdx.org/licenses/<id>
-   *   NoAssertionLicense / NoneLicense   -> NOASSERTION / NONE (3.0.1 individuals)
+   *   NoAssertionLicense / NoneLicense   -> NOASSERTION / NONE (3.0.1 individuals,
+   *     by IRI or by the short term the context defines for them)
    *   CustomLicense element              -> LicenseRef-<idstring>, as 2.x spells it
-   *   structured sets (AND/OR/WITH elements) -> not mapped
+   *   ConjunctiveLicenseSet / DisjunctiveLicenseSet -> members joined by AND / OR,
+   *     compound members in parentheses
+   *   OrLaterOperator                    -> <licence>+
+   *   WithAdditionOperator               -> <licence> WITH <exception or AdditionRef->
+   *
+   * Members and operands may be IRIs or inline elements. A structure with a
+   * part that cannot be read yields nothing rather than half an expression.
    */
-  const licenseText = (ref: unknown): string | undefined => {
-    if (typeof ref !== 'string') return undefined;
-    if (ref.endsWith('/NoAssertionLicense')) return 'NOASSERTION';
-    if (ref.endsWith('/NoneLicense')) return 'NONE';
-    const node = byId.get(ref);
+  const licenseMemo = new Map<string, string | undefined>();
+  const licenseInProgress = new Set<string>();
+  const licenseText = (ref: unknown, depth = 0): string | undefined => {
+    const iri = typeof ref === 'string' ? ref : isRecord(ref) ? (asString(ref.spdxId) ?? asString(ref['@id'])) : undefined;
+    const term = iri !== undefined ? vocabularyTerm(iri) : undefined;
+    if (term === 'NoAssertionLicense' || iri?.endsWith('/NoAssertionLicense')) return 'NOASSERTION';
+    if (term === 'NoneLicense' || iri?.endsWith('/NoneLicense')) return 'NONE';
+    const node = isRecord(ref) ? ref : iri !== undefined ? byId.get(iri) : undefined;
     if (node) {
       const type = nodeType(node);
       if (type.endsWith('NoAssertionLicense')) return 'NOASSERTION';
       if (type.endsWith('NoneLicense')) return 'NONE';
       const expression = asString(node.simplelicensing_licenseExpression);
       if (expression !== undefined) return upperCaseOperators(expression);
-      if (type.endsWith('ListedLicense')) return iriTail(ref);
-      if (type.endsWith('CustomLicense')) return customLicenseRef(ref, node);
-      return undefined;
+      if (type.endsWith('ListedLicense')) return iri !== undefined ? iriTail(iri) : undefined;
+      if (type.endsWith('CustomLicense')) return customLicenseRef(iri ?? '', node);
+      if (depth >= MAX_LICENSE_DEPTH) return undefined;
+      // Structures can be shared, and a hostile one can contain itself: each
+      // referenced structure is folded once, a cycle reads as unreadable, and
+      // the text is capped far above any real expression.
+      if (iri !== undefined) {
+        if (licenseMemo.has(iri)) return licenseMemo.get(iri);
+        if (licenseInProgress.has(iri)) return undefined;
+        licenseInProgress.add(iri);
+      }
+      const folded = foldLicenseStructure(node, type, depth);
+      const result = folded !== undefined && folded.length <= MAX_LICENSE_TEXT ? folded : undefined;
+      if (iri !== undefined) {
+        licenseInProgress.delete(iri);
+        licenseMemo.set(iri, result);
+      }
+      return result;
     }
-    if (ref.includes('/licenses/') || ref.startsWith('spdx.org/licenses/')) return iriTail(ref); // ListedLicense IRI
-    return noAssertion(ref);
+    if (iri === undefined) return undefined;
+    if (iri.includes('/licenses/') || iri.startsWith('spdx.org/licenses/')) return iriTail(iri); // ListedLicense IRI
+    return noAssertion(iri);
+  };
+
+  /**
+   * A licence that can stand inside a set or under an operator: resolved, and
+   * neither an absence (NONE, NOASSERTION) nor a reference that resolves to
+   * nothing and merely comes back as its own text.
+   */
+  const licenseOperand = (ref: unknown, depth: number): string | undefined => {
+    const text = licenseText(ref, depth);
+    return text === undefined || text === 'NONE' || text === 'NOASSERTION' || text === ref ? undefined : text;
+  };
+
+  /** AND/OR sets, or-later and with-addition operators; undefined when a part cannot be read. */
+  const foldLicenseStructure = (node: Record<string, unknown>, type: string, depth: number): string | undefined => {
+    const conjunctive = type.endsWith('ConjunctiveLicenseSet');
+    if (conjunctive || type.endsWith('DisjunctiveLicenseSet')) {
+      const parts: string[] = [];
+      let length = 0;
+      for (const member of asArray(node.expandedlicensing_member)) {
+        const part = licenseOperand(member, depth + 1);
+        if (part === undefined) return undefined;
+        const piece = /\s(AND|OR)\s/.test(part) ? `(${part})` : part;
+        length += piece.length + 5;
+        if (length > MAX_LICENSE_TEXT) return undefined;
+        parts.push(piece);
+      }
+      return parts.length > 0 ? parts.join(conjunctive ? ' AND ' : ' OR ') : undefined;
+    }
+    if (type.endsWith('OrLaterOperator')) {
+      const subject = licenseOperand(node.expandedlicensing_subjectLicense, depth + 1);
+      return subject !== undefined && /^[A-Za-z0-9.:-]+$/.test(subject) ? `${subject}+` : undefined;
+    }
+    if (type.endsWith('WithAdditionOperator')) {
+      const subject = licenseOperand(node.expandedlicensing_subjectExtendableLicense, depth + 1);
+      const addition = additionText(node.expandedlicensing_subjectAddition);
+      return subject !== undefined && addition !== undefined && /^[A-Za-z0-9.:-]+\+?$/.test(subject)
+        ? `${subject} WITH ${addition}`
+        : undefined;
+    }
+    return undefined;
+  };
+
+  /** The operand after WITH: a listed exception by its id, a custom addition as AdditionRef-<idstring>. */
+  const additionText = (ref: unknown): string | undefined => {
+    const iri = typeof ref === 'string' ? ref : isRecord(ref) ? (asString(ref.spdxId) ?? asString(ref['@id'])) : undefined;
+    const node = isRecord(ref) ? ref : iri !== undefined ? byId.get(iri) : undefined;
+    const type = node ? nodeType(node) : '';
+    if (type.endsWith('CustomLicenseAddition')) {
+      const tail = iri !== undefined ? iriTail(iri) : '';
+      if (/^AdditionRef-[A-Za-z0-9.-]+$/.test(tail)) return tail;
+      return `AdditionRef-${idstring(tail || asString(node?.name) || 'custom') || 'custom'}`;
+    }
+    if (iri !== undefined && (type.endsWith('ListedLicenseException') || iri.includes('/licenses/'))) return iriTail(iri);
+    return undefined;
   };
 
   // --- document identity ------------------------------------------------------
@@ -170,6 +254,8 @@ export function parseSpdx3Json(input: SourceInput, root: Record<string, unknown>
 
   /** Relationship ends resolve against imports first, local otherwise. */
   const elementRef = (iri: string): ElementRef => {
+    const special = specialElement(iri);
+    if (special) return { kind: 'special', value: special };
     const docRef = importedElements.get(iri);
     return docRef !== undefined
       ? { kind: 'external', docRef, spdxId: iri }
@@ -183,15 +269,18 @@ export function parseSpdx3Json(input: SourceInput, root: Record<string, unknown>
 
   for (const node of graph) {
     const type = nodeType(node);
-    if (type === 'software_Package' || type === 'software_File' || type in PURPOSE_BY_PACKAGE_TYPE) {
+    const impliedPurpose = Object.hasOwn(PURPOSE_BY_PACKAGE_TYPE, type) ? PURPOSE_BY_PACKAGE_TYPE[type] : undefined;
+    if (type === 'software_Package' || type === 'software_File' || impliedPurpose !== undefined) {
       const kind = type === 'software_File' ? 'file' : 'package';
       const name = asString(node.name) ?? `(unnamed ${kind})`;
       const spdxId = asString(node.spdxId) ?? `SPDXRef-sbomlens-anonymous-${++anonCounter}`;
-      const externalRefs = readExternalIdentifiers(node.externalIdentifier);
+      const identifiers = readExternalIdentifiers(node.externalIdentifier);
+      const links = readExternalRefs(node.externalRef);
+      const externalRefs = identifiers || links ? [...(identifiers ?? []), ...(links ?? [])] : undefined;
       // SPDX 3.0.1 carries the purl as its own property on software_Package
       // (software_packageUrl); generators that use the externalIdentifier
       // form instead are read through readExternalIdentifiers.
-      const purl = asString(node.software_packageUrl) ?? externalRefs?.find((r) => r.type === 'purl')?.locator;
+      const purl = asString(node.software_packageUrl) ?? identifiers?.find((r) => r.type === 'purl')?.locator;
       elements.push({
         id: makeElementId(documentId, spdxId),
         documentId,
@@ -208,7 +297,7 @@ export function parseSpdx3Json(input: SourceInput, root: Record<string, unknown>
         copyright: noAssertion(asString(node.software_copyrightText)),
         // The AI and dataset profiles say what the package is even when
         // primaryPurpose is absent; a stated purpose still wins.
-        purpose: asString(node.software_primaryPurpose)?.toUpperCase() ?? PURPOSE_BY_PACKAGE_TYPE[type],
+        purpose: asString(node.software_primaryPurpose)?.toUpperCase() ?? impliedPurpose,
         description: asString(node.description) ?? asString(node.summary),
         comment: asString(node.comment),
         checksums: readHashes(node.verifiedUsing),
@@ -232,7 +321,14 @@ export function parseSpdx3Json(input: SourceInput, root: Record<string, unknown>
       type === 'software_Sbom' ||
       type === 'CreationInfo' ||
       type === 'Relationship' ||
+      type === 'LifecycleScopedRelationship' ||
       type === 'ExternalIdentifier' ||
+      type === 'ExternalRef' ||
+      type === 'ExternalMap' ||
+      type === 'NamespaceMap' ||
+      type === 'DictionaryEntry' ||
+      type === 'PositiveIntegerRange' ||
+      type === 'PackageVerificationCode' ||
       type === 'Hash' ||
       type.includes('Agent') ||
       type === 'Person' ||
@@ -260,21 +356,28 @@ export function parseSpdx3Json(input: SourceInput, root: Record<string, unknown>
   const licenseByElement = new Map<string, { declared?: string; concluded?: string }>();
   const distributionArtifacts = new Map<string, string>();
   let malformedRels = 0;
+  let unmappedLicenses = 0;
 
   for (const node of graph) {
-    if (nodeType(node) !== 'Relationship') continue;
+    const relClass = nodeType(node);
+    if (relClass !== 'Relationship' && relClass !== 'LifecycleScopedRelationship') continue;
     const from = asString(node.from);
-    const relType = asString(node.relationshipType);
-    const targets = asStringArray(node.to);
+    const relTypeText = asString(node.relationshipType);
+    const relType = relTypeText !== undefined ? iriTail(relTypeText) : undefined;
+    // `to` is a list in 3.x; the single-value shorthand occurs in the wild.
+    const targets = typeof node.to === 'string' ? [node.to] : asStringArray(node.to);
     if (!from || !relType || targets.length === 0) {
       malformedRels++;
       continue;
     }
+    const scopeText = asString(node.scope);
+    const scope = scopeText !== undefined ? iriTail(scopeText) : undefined;
     // License relationships fold into the element's license fields instead of
     // becoming tree edges (license expressions are not tree elements here).
     if (relType === 'hasDeclaredLicense' || relType === 'hasConcludedLicense') {
       const entry = licenseByElement.get(from) ?? {};
       const text = licenseText(targets[0]);
+      if (text === undefined) unmappedLicenses++;
       if (relType === 'hasDeclaredLicense') entry.declared = text;
       else entry.concluded = text;
       licenseByElement.set(from, entry);
@@ -282,12 +385,13 @@ export function parseSpdx3Json(input: SourceInput, root: Record<string, unknown>
     }
     if (relType === 'hasDistributionArtifact') distributionArtifacts.set(from, targets[0]!);
     for (const to of targets) {
-      if (relType === 'describes' && !importedElements.has(to)) describes.add(to);
+      if (relType === 'describes' && !importedElements.has(to) && !specialElement(to)) describes.add(to);
       relationships.push({
         from: elementRef(from),
         type: camelToScreamingSnake(relType),
         to: elementRef(to),
         comment: asString(node.comment),
+        ...(scope !== undefined ? { scope } : {}),
       });
     }
   }
@@ -296,9 +400,25 @@ export function parseSpdx3Json(input: SourceInput, root: Record<string, unknown>
       diag('warning', 'REL_MALFORMED', `${malformedRels} relationship(s) without from/relationshipType/to skipped.`),
     );
   }
+  if (unmappedLicenses > 0) {
+    diagnostics.push(
+      diag(
+        'info',
+        'SPDX3_LICENSE_NOT_MAPPED',
+        `${unmappedLicenses} licence statement(s) point at a licence structure this version cannot read as an expression; those licence fields stay empty.`,
+      ),
+    );
+  }
+
+  // First element per spdxId, as the lookups below always took; duplicates
+  // are reported by dedupeBySpdxId.
+  const elementBySpdxId = new Map<string, SbomElement>();
+  for (const element of elements) {
+    if (!elementBySpdxId.has(element.spdxId)) elementBySpdxId.set(element.spdxId, element);
+  }
 
   for (const [spdxId, licenses] of licenseByElement) {
-    const element = elements.find((e) => e.spdxId === spdxId);
+    const element = elementBySpdxId.get(spdxId);
     if (!element) continue;
     if (licenses.declared) element.licenseDeclared = licenses.declared;
     if (licenses.concluded) element.licenseConcluded = licenses.concluded;
@@ -307,14 +427,14 @@ export function parseSpdx3Json(input: SourceInput, root: Record<string, unknown>
   // TR-03183-2 appendix 8.2: a package's filename is the name of the File it
   // reaches through hasDistributionArtifact. The edge stays in the tree.
   for (const [spdxId, target] of distributionArtifacts) {
-    const element = elements.find((e) => e.spdxId === spdxId);
-    const file = elements.find((e) => e.spdxId === target && e.kind === 'file');
-    if (element && file && element.fileName === undefined) element.fileName = file.name;
+    const element = elementBySpdxId.get(spdxId);
+    const file = elementBySpdxId.get(target);
+    if (element && file?.kind === 'file' && element.fileName === undefined) element.fileName = file.name;
   }
 
   for (const rootRef of [...asStringArray(docNode?.rootElement), ...asStringArray(sbomNode?.rootElement)]) {
     // rootElement may point at the Sbom collection itself; only elements count.
-    if (elements.some((e) => e.spdxId === rootRef)) describes.add(rootRef);
+    if (elementBySpdxId.has(rootRef)) describes.add(rootRef);
   }
 
   // Spec lint last: parser notes explain what could not be read, spec findings
@@ -344,7 +464,12 @@ export function parseSpdx3Json(input: SourceInput, root: Record<string, unknown>
   return { document, diagnostics };
 }
 
-/** Package subclasses of the AI and dataset profiles, and the purpose they imply. */
+/** Nesting cap for structured licence sets: deep enough for any real document. */
+const MAX_LICENSE_DEPTH = 16;
+/** Length cap for a folded licence expression, far above any real one. */
+const MAX_LICENSE_TEXT = 8192;
+
+/** Package subclasses of the AI and dataset profiles, and the purpose they imply. Read with Object.hasOwn: the key comes from the document. */
 const PURPOSE_BY_PACKAGE_TYPE: Record<string, string> = {
   ai_AIPackage: 'MODEL',
   dataset_DatasetPackage: 'DATA',
@@ -379,6 +504,36 @@ function readExternalIdentifiers(value: unknown): ExternalRef[] | undefined {
     else refs.push({ category: 'OTHER', type, locator: identifier });
   }
   return refs.length > 0 ? refs : undefined;
+}
+
+/**
+ * General externalRef links (vcs, securityAdvisory, ...): one entry per
+ * locator, category OTHER, the type as its vocabulary term. They are links,
+ * not identifiers, so the unique-identifier checks do not count them.
+ */
+function readExternalRefs(value: unknown): ExternalRef[] | undefined {
+  const refs: ExternalRef[] = [];
+  for (const entry of asRecordArray(value)) {
+    const typeText = asString(entry.externalRefType);
+    const type = typeText !== undefined ? iriTail(typeText) : 'other';
+    const locators = typeof entry.locator === 'string' ? [entry.locator] : asStringArray(entry.locator);
+    for (const locator of locators) {
+      if (locator.length > 0) refs.push({ category: 'OTHER', type, locator });
+    }
+  }
+  return refs.length > 0 ? refs : undefined;
+}
+
+/**
+ * The Core individuals that stand for "no element" and "no assertion" as a
+ * relationship end, by IRI or by the context's short term. An element of the
+ * document's own whose IRI merely ends in one of these names stays an element.
+ */
+function specialElement(ref: string): 'NONE' | 'NOASSERTION' | undefined {
+  const term = vocabularyTerm(ref);
+  if (term === 'NoneElement') return 'NONE';
+  if (term === 'NoAssertionElement') return 'NOASSERTION';
+  return undefined;
 }
 
 /** The contact an agent states: an email, else a urlScheme, else an http(s) identifier of type other. */
@@ -432,13 +587,25 @@ function iriTail(iri: string): string {
 function customLicenseRef(iri: string, node: Record<string, unknown>): string {
   const tail = iriTail(iri);
   if (/^LicenseRef-[A-Za-z0-9.-]+$/.test(tail)) return tail;
-  const stem = (tail || asString(node.name) || 'custom').replace(/[^A-Za-z0-9.-]+/g, '-').replace(/^-+|-+$/g, '');
-  return `LicenseRef-${stem || 'custom'}`;
+  return `LicenseRef-${idstring(tail || asString(node.name) || 'custom') || 'custom'}`;
+}
+
+/**
+ * An idstring as SPDX spells it: every run of other characters becomes one
+ * hyphen, and no hyphen stays at either end. The ends are trimmed by index,
+ * not by a regular expression: `-+$` backtracks quadratically over a long
+ * hyphen run, and the IRI comes from the document.
+ */
+function idstring(text: string): string {
+  const collapsed = text.replace(/[^A-Za-z0-9.-]+/g, '-');
+  let start = 0;
+  let end = collapsed.length;
+  while (start < end && collapsed.charCodeAt(start) === 45) start++;
+  while (end > start && collapsed.charCodeAt(end - 1) === 45) end--;
+  return collapsed.slice(start, end);
 }
 
 function versionFromContext(root: Record<string, unknown>): string | undefined {
-  const context = root['@context'];
-  const text = Array.isArray(context) ? context.join(' ') : String(context ?? '');
-  const match = /spdx\.org\/rdf\/(3\.[0-9.]*[0-9])/.exec(text);
+  const match = /spdx\.org\/rdf\/(3\.[0-9.]*[0-9])/.exec(contextText(root['@context']));
   return match?.[1];
 }

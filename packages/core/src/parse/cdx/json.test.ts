@@ -235,3 +235,120 @@ describe('parseCdxJson', () => {
     });
   });
 });
+
+describe('CycloneDX reading gaps', () => {
+  const subject = { type: 'application', 'bom-ref': 'app', name: 'app', version: '1.0.0' };
+  const evaluateWith = async (text: string, profileName: 'ntia' | 'bsi') => {
+    const { evaluateProfile } = await import('../../profile/evaluate');
+    const profile = profileName === 'ntia' ? (await import('../../profile/ntia')).NTIA_PROFILE : (await import('../../profile/bsi')).BSI_TR_03183_PROFILE;
+    return evaluateProfile(emptyWorkspace, loadedFromText('gaps.cdx.json', text), profile);
+  };
+
+  it('reads an explicitly empty dependency entry as the statement "no dependencies"', async () => {
+    const text = bom({
+      metadata: { component: subject },
+      components: [{ type: 'library', 'bom-ref': 'lib', name: 'lib', version: '2.0.0' }],
+      dependencies: [{ ref: 'app', dependsOn: ['lib'] }, { ref: 'lib', dependsOn: [] }],
+    });
+    const { document } = parseDocument(input('deps.cdx.json', text));
+    expect(document!.relationships).toContainEqual({
+      from: { kind: 'local', spdxId: 'lib' },
+      type: 'DEPENDS_ON',
+      to: { kind: 'special', value: 'NONE' },
+    });
+  });
+
+  it('lets a leaf SBOM pass the dependency checks', async () => {
+    // TR-03183-2 appendix 8.2: components without dependencies are declared as empty elements.
+    const text = bom({ metadata: { component: subject }, dependencies: [{ ref: 'app' }] });
+    const { document } = parseDocument(input('leaf.cdx.json', text));
+    expect(document!.relationships).toContainEqual({
+      from: { kind: 'local', spdxId: 'app' },
+      type: 'DEPENDS_ON',
+      to: { kind: 'special', value: 'NONE' },
+    });
+    expect((await evaluateWith(text, 'ntia')).results.find((r) => r.id === 'relationships')?.pass).toBe(true);
+    expect((await evaluateWith(text, 'bsi')).results.find((r) => r.id === 'relationships')?.pass).toBe(true);
+  });
+
+  it('adds no NONE edge when the targets only fail to resolve', () => {
+    const text = bom({ metadata: { component: subject }, dependencies: [{ ref: 'app', dependsOn: ['ghost'] }] });
+    const result = parseDocument(input('ghost.cdx.json', text));
+    expect(result.document!.relationships.filter((r) => r.type === 'DEPENDS_ON')).toEqual([]);
+    expect(result.diagnostics.map((d) => d.code)).toContain('CDX_DEPENDENCIES_UNMAPPED');
+  });
+
+  it('says when vulnerabilities and compositions are present but not read', () => {
+    const text = bom({
+      metadata: { component: subject },
+      components: [{ type: 'library', 'bom-ref': 'lib', name: 'lib' }],
+      vulnerabilities: [{ id: 'CVE-2026-0001' }, { id: 'CVE-2026-0002' }],
+      compositions: [{ aggregate: 'complete', assemblies: ['app'] }],
+    });
+    const { diagnostics } = parseDocument(input('vulns.cdx.json', text));
+    expect(diagnostics.find((d) => d.code === 'CDX_VULNERABILITIES_NOT_READ')).toMatchObject({ severity: 'info' });
+    expect(diagnostics.find((d) => d.code === 'CDX_VULNERABILITIES_NOT_READ')?.message).toContain('2 vulnerabilit');
+    expect(diagnostics.find((d) => d.code === 'CDX_COMPOSITIONS_NOT_READ')).toMatchObject({ severity: 'info' });
+  });
+
+  it('reads a component type that exists only on the prototype chain as plain text', () => {
+    const text = bom({
+      metadata: { component: subject },
+      components: [
+        { type: 'constructor', 'bom-ref': 'a', name: 'a' },
+        { type: '__proto__', 'bom-ref': 'b', name: 'b' },
+        { type: 'toString', 'bom-ref': 'c', name: 'c' },
+      ],
+    });
+    const { document } = parseDocument(input('proto.cdx.json', text));
+    const purposes = Object.fromEntries(document!.elements.map((e) => [e.name, e.purpose]));
+    expect(purposes).toMatchObject({ a: 'CONSTRUCTOR', b: '__PROTO__', c: 'TOSTRING' });
+  });
+
+  it('states "no dependencies" for an entry that only provides', () => {
+    const text = bom({
+      metadata: { component: subject },
+      components: [
+        { type: 'library', 'bom-ref': 'crypto', name: 'crypto' },
+        { type: 'cryptographic-asset', 'bom-ref': 'aes', name: 'AES' },
+      ],
+      dependencies: [{ ref: 'crypto', provides: ['aes'] }],
+    });
+    const rels = parseDocument(input('provides.cdx.json', text)).document!.relationships;
+    expect(rels).toContainEqual({ from: { kind: 'local', spdxId: 'crypto' }, type: 'PROVIDES', to: { kind: 'local', spdxId: 'aes' } });
+    expect(rels).toContainEqual({ from: { kind: 'local', spdxId: 'crypto' }, type: 'DEPENDS_ON', to: { kind: 'special', value: 'NONE' } });
+  });
+
+  it('never states "none" next to targets, and states it once per component', () => {
+    const text = bom({
+      metadata: { component: subject },
+      components: [
+        { type: 'library', 'bom-ref': 'lib', name: 'lib' },
+        { type: 'library', 'bom-ref': 'leaf', name: 'leaf' },
+      ],
+      // Spec-invalid repeats of one ref: the reader must not contradict itself.
+      dependencies: [{ ref: 'app', dependsOn: [] }, { ref: 'app', dependsOn: ['lib'] }, { ref: 'leaf' }, { ref: 'leaf', dependsOn: [] }],
+    });
+    const none = parseDocument(input('repeat.cdx.json', text)).document!.relationships.filter(
+      (r) => r.type === 'DEPENDS_ON' && r.to.kind === 'special',
+    );
+    expect(none).toEqual([{ from: { kind: 'local', spdxId: 'leaf' }, type: 'DEPENDS_ON', to: { kind: 'special', value: 'NONE' } }]);
+  });
+
+  it('suffixes many duplicate bom-refs and names in linear time', () => {
+    const count = 6000;
+    const components = [
+      ...Array.from({ length: count }, () => ({ type: 'library', 'bom-ref': 'dup', name: 'dup' })),
+      ...Array.from({ length: count }, () => ({ type: 'library', name: 'same name' })),
+    ];
+    const text = bom({ metadata: { component: subject }, components });
+    const started = performance.now();
+    const { document } = parseDocument(input('dups.cdx.json', text));
+    const elapsed = performance.now() - started;
+    const ids = document!.elements.map((e) => e.spdxId);
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(ids).toContain(`dup-${count}`);
+    expect(ids).toContain(`SPDXRef-same-name-${count}`);
+    expect(elapsed).toBeLessThan(1500);
+  });
+});

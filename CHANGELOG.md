@@ -4,6 +4,90 @@ All notable changes to SBOM Lens. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [SemVer](https://semver.org) (0.x: the API surface is the app itself).
 
+## [0.29.14] - 2026-11-18
+
+### Security
+- **A token saved for an https registry no longer goes to plain http.**
+  Stored access tokens were keyed by host alone, so a reference to
+  `http://` on the same host received the token in clear text, in the
+  browser and through the VS Code bridge alike. Tokens are now keyed by
+  origin (scheme, host and port), and only http and https carry one. A
+  token saved by an earlier version still serves https on its host, never
+  http.
+- **Crafted values no longer crash or stall the readers.** A CycloneDX
+  component type or an SPDX 3 node type such as `constructor` or
+  `__proto__` was looked up through the prototype chain and yielded a
+  function or an object where the views expect text. The same kind of
+  lookup made a CSAF advisory that names such a `csaf_version` and carries
+  a TLP label fail to load, and turned an XML entity such as
+  `&constructor;` into function text. Many duplicate CycloneDX bom-refs or
+  component names made
+  the id suffixing quadratic, and a long hyphen run in an SPDX 3 custom
+  licence name made its trimming quadratic; both stalled the parse worker.
+  Every such lookup now reads own keys only, and suffixing and trimming run
+  in linear time.
+
+### Fixed
+- **SPDX 3 dependencies written as lifecycle-scoped relationships load.**
+  `LifecycleScopedRelationship`, which build tools use for build and
+  runtime dependencies, was counted as a skipped element instead of read:
+  the tree showed no dependencies, and the dependency checks failed. It now
+  loads as an edge that keeps its scope, shown next to the type in the
+  relationship list.
+- **Structured SPDX 3 licence sets read as expressions.** Conjunctive and
+  disjunctive licence sets, the or-later operator and `WITH` additions left
+  the licence field empty, so the licence checks failed on a licensed
+  package. They now fold into one expression, members by IRI or inline. A
+  structure with a part that cannot be read, one that contains itself, an
+  operator applied to no licence, or one that would grow far beyond any
+  real expression leaves the field empty, and a notice counts such
+  statements.
+- **More SPDX 3 shapes load as written.** A `NoneElement` or
+  `NoAssertionElement` relationship end reads as NONE or NOASSERTION
+  instead of a reference into nothing, whether it is written as an IRI or
+  as the short term the SPDX context defines, and the spec lint no longer
+  calls the short term a dangling reference. The licence individuals
+  `NoneLicense` and `NoAssertionLicense` are read in their short form too;
+  they used to land in the licence field as text. General `externalRef`
+  links (vcs,
+  advisories and the like) appear next to the identifiers without counting
+  as one; an object-valued or nested `@context` is recognized; a
+  single-value `to` is accepted, as the spec lint already did; helper nodes
+  such as `ExternalMap` no longer count as skipped elements; and a creator
+  of the plain `Agent` type is listed as an organization instead of a
+  tool. Licence and distribution-artifact lookups no longer scan the whole
+  element list for every relationship, which slowed very large documents
+  down.
+- **A CycloneDX component without dependencies counts as a dependency
+  statement.** CycloneDX declares such a component as an entry of
+  `dependencies[]` without targets, and BSI TR-03183-2 requires that form.
+  The entry was dropped, so since 0.29.10 a BOM whose components have no
+  dependencies failed the dependency checks. It now reads as
+  `DEPENDS_ON NONE`, the way SPDX states the same fact: once per
+  component, also when the entry only lists what the component provides.
+- **CycloneDX says what it does not read.** A BOM that carries
+  `vulnerabilities` or `compositions` gets a notice instead of silence, and
+  a standalone CycloneDX VEX document, which lists vulnerabilities but no
+  components, is refused with that reason instead of loading as an empty
+  SBOM. A BOM that nests its components under `metadata.component` stays
+  an SBOM.
+- **OpenVEX matches by every identifier a product names.** A product whose
+  `@id` is an IRI and whose purl sits under `identifiers` never matched,
+  and of several identifiers only the first counted. Every purl and CPE of
+  a product, and of each subcomponent object, now matches. An array-valued
+  `@context` is recognized, and a purl whose scheme is written in capitals
+  (`PKG:`) matches, as the documentation already said.
+- **The VS Code extension opens files it used to pass over.** `bom.json`
+  and `bom.xml`, the names the CycloneDX specification recommends, open
+  from the editor picker, the explorer menu and the folder and workspace
+  scans; the manifest listed only `*.bom.json` and `*.bom.xml`, which need
+  a dot before `bom`. `*.spdx3.json` and `*.spdx.jsonld` open the same
+  three ways. A file of any other name, such as `sbom.json` or an export
+  with a name of its own, opens through *Open with SBOM Lens* in the
+  command palette, which now appears there and acts on the active file.
+- **The web app accepts `.jsonld` files**, and a JSON file that is no
+  supported format gets a message that names all of them.
+
 ## [0.29.13] - 2026-11-13
 
 ### Security

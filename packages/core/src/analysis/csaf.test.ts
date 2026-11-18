@@ -694,3 +694,16 @@ describe('CSAF 2.1', () => {
     expect(doc.statements[0]!.remediations!.map((r) => r.category)).toEqual(['fix_planned', 'optional_patch']);
   });
 });
+
+describe('CSAF version lookups', () => {
+  it('reports an unknown csaf_version instead of failing on a prototype key', () => {
+    for (const version of ['constructor', 'toString', '__proto__']) {
+      const raw = csafDoc();
+      const docNode = raw.document as Record<string, unknown>;
+      docNode.csaf_version = version;
+      docNode.distribution = { tlp: { label: 'WHITE' } };
+      const doc = parseCsaf('odd.csaf.json', raw);
+      expect(doc.diagnostics.map((d) => d.code)).toContain('CSAF_SCHEMA_BAD_VERSION');
+    }
+  });
+});

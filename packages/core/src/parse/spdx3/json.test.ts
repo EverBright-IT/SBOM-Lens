@@ -6,6 +6,7 @@ import { buildIndexes } from '../../graph/indexes';
 import { loadFixture, loadedFromText } from '../../test-fixtures';
 import { detect } from '../detect';
 import { parseDocument } from '../parser';
+import { hasUniqueIdentifier } from '../../model/document';
 
 /**
  * SPDX 3.0.1 ingestion. Additive: the 2.x parsers are untouched (the rest of
@@ -409,5 +410,297 @@ describe('SPDX 3 contacts and distribution artifacts (TR-03183-2 appendix 8.2)',
     expect(widget.fileName).toBe('widget-1.0.0.jar');
     // The relationship stays an edge of the tree as well.
     expect(document!.relationships).toContainEqual(expect.objectContaining({ type: 'HAS_DISTRIBUTION_ARTIFACT' }));
+  });
+});
+
+describe('SPDX 3 reading gaps', () => {
+  const B = 'https://acme.example';
+  const ci = '_:ci';
+  const creation = { type: 'CreationInfo', '@id': ci, specVersion: '3.0.1', created: '2026-06-01T10:00:00Z' };
+  const docNode = { type: 'SpdxDocument', spdxId: `${B}/doc/gaps`, creationInfo: ci, name: 'gaps', rootElement: [`${B}/pkg/app`] };
+  const pkg = (name: string, extra: Record<string, unknown> = {}) => ({
+    type: 'software_Package',
+    spdxId: `${B}/pkg/${name}`,
+    creationInfo: ci,
+    name,
+    ...extra,
+  });
+  const rel = (from: string, relationshipType: string, to: unknown, extra: Record<string, unknown> = {}) => ({
+    type: 'Relationship',
+    spdxId: `${B}/rel/${from}-${relationshipType}-${Math.random().toString(36).slice(2)}`,
+    creationInfo: ci,
+    from: `${B}/pkg/${from}`,
+    relationshipType,
+    to,
+    ...extra,
+  });
+  function parse3(nodes: Record<string, unknown>[], options: { context?: unknown; creation?: Record<string, unknown> } = {}) {
+    const text = JSON.stringify({
+      '@context': options.context ?? 'https://spdx.org/rdf/3.0.1/spdx-context.jsonld',
+      '@graph': [options.creation ?? creation, docNode, ...nodes],
+    });
+    return parseDocument({ fileName: 'gaps.spdx3.json', text, sha1: 'e'.repeat(40), byteSize: text.length });
+  }
+  const codes = (result: { diagnostics: { code: string }[] }) => result.diagnostics.map((d) => d.code);
+
+  it('reads LifecycleScopedRelationship as an edge and keeps its scope', () => {
+    const result = parse3([
+      pkg('app'),
+      pkg('lib'),
+      pkg('gcc'),
+      { ...rel('app', 'dependsOn', [`${B}/pkg/lib`]), type: 'LifecycleScopedRelationship', scope: 'runtime' },
+      {
+        ...rel('app', 'dependsOn', [`${B}/pkg/gcc`]),
+        type: 'LifecycleScopedRelationship',
+        scope: 'https://spdx.org/rdf/3.0.1/terms/Core/LifecycleScopeType/build',
+      },
+    ]);
+    const deps = result.document!.relationships.filter((r) => r.type === 'DEPENDS_ON');
+    expect(deps).toEqual([
+      expect.objectContaining({ from: { kind: 'local', spdxId: `${B}/pkg/app` }, to: { kind: 'local', spdxId: `${B}/pkg/lib` }, scope: 'runtime' }),
+      expect.objectContaining({ to: { kind: 'local', spdxId: `${B}/pkg/gcc` }, scope: 'build' }),
+    ]);
+    expect(codes(result)).not.toContain('SPDX3_ELEMENTS_SKIPPED');
+    const loaded = loadedFromText('gaps.spdx3.json', JSON.stringify({
+      '@context': 'https://spdx.org/rdf/3.0.1/spdx-context.jsonld',
+      '@graph': [creation, docNode, pkg('app'), pkg('lib'), { ...rel('app', 'dependsOn', [`${B}/pkg/lib`]), type: 'LifecycleScopedRelationship', scope: 'runtime' }],
+    }));
+    const report = evaluateProfile(emptyWorkspace, loaded, NTIA_PROFILE);
+    expect(report.results.find((r) => r.id === 'relationships')?.pass).toBe(true);
+  });
+
+  it('folds structured licence sets and operators into one expression', () => {
+    const result = parse3([
+      pkg('a'),
+      pkg('b'),
+      pkg('c'),
+      pkg('d'),
+      { type: 'expandedlicensing_ConjunctiveLicenseSet', spdxId: `${B}/lic/and`, creationInfo: ci, expandedlicensing_member: ['https://spdx.org/licenses/MIT', `${B}/lic/or`] },
+      { type: 'expandedlicensing_DisjunctiveLicenseSet', spdxId: `${B}/lic/or`, creationInfo: ci, expandedlicensing_member: ['https://spdx.org/licenses/Apache-2.0', 'https://spdx.org/licenses/BSD-3-Clause'] },
+      { type: 'expandedlicensing_OrLaterOperator', spdxId: `${B}/lic/gpl-or-later`, creationInfo: ci, expandedlicensing_subjectLicense: 'https://spdx.org/licenses/GPL-2.0-only' },
+      {
+        type: 'expandedlicensing_WithAdditionOperator',
+        spdxId: `${B}/lic/gpl-cp`,
+        creationInfo: ci,
+        expandedlicensing_subjectExtendableLicense: `${B}/lic/gpl-or-later`,
+        expandedlicensing_subjectAddition: 'https://spdx.org/licenses/Classpath-exception-2.0',
+      },
+      {
+        type: 'expandedlicensing_ConjunctiveLicenseSet',
+        spdxId: `${B}/lic/inline`,
+        creationInfo: ci,
+        expandedlicensing_member: [
+          { type: 'expandedlicensing_CustomLicense', spdxId: `${B}/licenses/LicenseRef-acme`, creationInfo: ci, name: 'ACME' },
+          'https://spdx.org/licenses/MIT',
+        ],
+      },
+      { type: 'expandedlicensing_ConjunctiveLicenseSet', spdxId: `${B}/lic/unknown`, creationInfo: ci, expandedlicensing_member: ['https://spdx.org/licenses/MIT', `${B}/lic/mystery`] },
+      { type: 'expandedlicensing_Mystery', spdxId: `${B}/lic/mystery`, creationInfo: ci },
+      rel('a', 'hasConcludedLicense', [`${B}/lic/and`]),
+      rel('b', 'hasDeclaredLicense', [`${B}/lic/gpl-cp`]),
+      rel('c', 'hasDeclaredLicense', [`${B}/lic/inline`]),
+      rel('d', 'hasDeclaredLicense', [`${B}/lic/unknown`]),
+    ]);
+    const byName = Object.fromEntries(result.document!.elements.map((e) => [e.name, e]));
+    expect(byName.a!.licenseConcluded).toBe('MIT AND (Apache-2.0 OR BSD-3-Clause)');
+    expect(byName.b!.licenseDeclared).toBe('GPL-2.0-only+ WITH Classpath-exception-2.0');
+    expect(byName.c!.licenseDeclared).toBe('LicenseRef-acme AND MIT');
+    // Never half an expression: an unreadable member leaves the field empty and says so.
+    expect(byName.d!.licenseDeclared).toBeUndefined();
+    expect(result.diagnostics.find((d) => d.code === 'SPDX3_LICENSE_NOT_MAPPED')?.message).toContain('1 licence statement');
+  });
+
+  it('maps NoneElement and NoAssertionElement targets to the special ends', () => {
+    const result = parse3([
+      pkg('app'),
+      rel('app', 'dependsOn', ['https://spdx.org/rdf/3.0.1/terms/Core/NoneElement']),
+      rel('app', 'contains', ['https://spdx.org/rdf/3.0.1/terms/Core/NoAssertionElement']),
+    ]);
+    const rels = result.document!.relationships;
+    expect(rels.find((r) => r.type === 'DEPENDS_ON')?.to).toEqual({ kind: 'special', value: 'NONE' });
+    expect(rels.find((r) => r.type === 'CONTAINS')?.to).toEqual({ kind: 'special', value: 'NOASSERTION' });
+  });
+
+  it('accepts a single-value to, as the spec lint already does', () => {
+    const result = parse3([pkg('app'), pkg('lib'), rel('app', 'contains', `${B}/pkg/lib`)]);
+    expect(result.document!.relationships).toContainEqual(
+      expect.objectContaining({ type: 'CONTAINS', to: { kind: 'local', spdxId: `${B}/pkg/lib` } }),
+    );
+    expect(codes(result)).not.toContain('REL_MALFORMED');
+  });
+
+  it('reads general externalRef links next to the identifiers, without counting them as identifiers', () => {
+    const result = parse3([
+      pkg('app', {
+        externalRef: [
+          { type: 'ExternalRef', externalRefType: 'vcs', locator: ['https://git.acme.example/app.git'] },
+          {
+            type: 'ExternalRef',
+            externalRefType: 'https://spdx.org/rdf/3.0.1/terms/Core/ExternalRefType/securityAdvisory',
+            locator: ['https://acme.example/adv/1', 'https://acme.example/adv/2'],
+          },
+        ],
+      }),
+    ]);
+    const app = result.document!.elements.find((e) => e.name === 'app')!;
+    expect(app.externalRefs).toEqual([
+      { category: 'OTHER', type: 'vcs', locator: 'https://git.acme.example/app.git' },
+      { category: 'OTHER', type: 'securityAdvisory', locator: 'https://acme.example/adv/1' },
+      { category: 'OTHER', type: 'securityAdvisory', locator: 'https://acme.example/adv/2' },
+    ]);
+    expect(hasUniqueIdentifier(app)).toBe(false);
+  });
+
+  it('does not count helper nodes as skipped elements', () => {
+    const result = parse3([
+      pkg('app'),
+      { type: 'ExternalMap', '@id': '_:m', externalSpdxId: 'https://other.example/doc#x' },
+      { type: 'NamespaceMap', '@id': '_:n', prefix: 'acme', namespace: `${B}/` },
+      { type: 'DictionaryEntry', '@id': '_:d', key: 'k', value: 'v' },
+      { type: 'PositiveIntegerRange', '@id': '_:r', beginIntegerRange: 1, endIntegerRange: 2 },
+      { type: 'PackageVerificationCode', '@id': '_:p', algorithm: 'sha1', hashValue: 'a'.repeat(40) },
+      { type: 'ExternalRef', '@id': '_:e', externalRefType: 'vcs', locator: ['https://git.acme.example/x.git'] },
+    ]);
+    expect(codes(result)).not.toContain('SPDX3_ELEMENTS_SKIPPED');
+  });
+
+  it('names a plain Agent creator as an organization; SoftwareAgent and Tool stay tools', () => {
+    const result = parse3(
+      [
+        { type: 'Agent', spdxId: `${B}/agent/oe`, creationInfo: ci, name: 'OpenEmbedded' },
+        { type: 'SoftwareAgent', spdxId: `${B}/agent/bot`, creationInfo: ci, name: 'release-bot' },
+        { type: 'Tool', spdxId: `${B}/tool/gen`, creationInfo: ci, name: 'generator 1.0' },
+        pkg('app'),
+      ],
+      { creation: { ...creation, createdBy: [`${B}/agent/oe`, `${B}/agent/bot`], createdUsing: [`${B}/tool/gen`] } },
+    );
+    expect(result.document!.creators).toEqual(['Organization: OpenEmbedded', 'Tool: release-bot', 'Tool: generator 1.0']);
+  });
+
+  it('ignores node types that exist only on the prototype chain', () => {
+    const result = parse3([
+      pkg('app'),
+      { type: 'constructor', spdxId: `${B}/x/1`, creationInfo: ci, name: 'not-a-package' },
+      { type: '__proto__', spdxId: `${B}/x/2`, creationInfo: ci, name: 'not-a-package-either' },
+      { type: 'toString', spdxId: `${B}/x/3`, creationInfo: ci, name: 'nor-this' },
+    ]);
+    const names = result.document!.elements.map((e) => e.name);
+    expect(names).toEqual(['app']);
+    for (const element of result.document!.elements) expect(['string', 'undefined']).toContain(typeof element.purpose);
+    expect(result.diagnostics.find((d) => d.code === 'SPDX3_ELEMENTS_SKIPPED')?.message).toContain('constructor (1)');
+  });
+
+  it('names a CustomLicense with a long hyphen run in linear time', () => {
+    const iri = `${B}/licenses/a${'-'.repeat(60_000)}b`;
+    const started = performance.now();
+    const result = parse3([
+      pkg('app'),
+      { type: 'expandedlicensing_CustomLicense', spdxId: iri, creationInfo: ci, name: 'odd' },
+      rel('app', 'hasDeclaredLicense', [iri]),
+    ]);
+    const elapsed = performance.now() - started;
+    expect(result.document!.elements[0]!.licenseDeclared).toBe(`LicenseRef-a${'-'.repeat(60_000)}b`);
+    expect(elapsed).toBeLessThan(250);
+  });
+
+  it('reads a licence set that contains itself as unreadable, without recursing forever', () => {
+    const result = parse3([
+      pkg('app'),
+      { type: 'expandedlicensing_ConjunctiveLicenseSet', spdxId: `${B}/lic/loop`, creationInfo: ci, expandedlicensing_member: ['https://spdx.org/licenses/MIT', `${B}/lic/loop`] },
+      rel('app', 'hasDeclaredLicense', [`${B}/lic/loop`]),
+    ]);
+    expect(result.document!.elements[0]!.licenseDeclared).toBeUndefined();
+    expect(codes(result)).toContain('SPDX3_LICENSE_NOT_MAPPED');
+  });
+
+  it('folds a wide, shared licence structure in bounded time and size', () => {
+    // Seven levels of sets, each naming the next level six times: without
+    // memoisation and a length cap this fans out to 6^7 calls and megabytes.
+    const levels = 7;
+    const nodes: Record<string, unknown>[] = [pkg('app')];
+    for (let level = 0; level < levels; level++) {
+      const next = level + 1 < levels ? `${B}/lic/l${level + 1}` : 'https://spdx.org/licenses/MIT';
+      nodes.push({ type: 'expandedlicensing_DisjunctiveLicenseSet', spdxId: `${B}/lic/l${level}`, creationInfo: ci, expandedlicensing_member: Array(6).fill(next) });
+    }
+    nodes.push(rel('app', 'hasDeclaredLicense', [`${B}/lic/l0`]));
+    const started = performance.now();
+    const result = parse3(nodes);
+    expect(performance.now() - started).toBeLessThan(250);
+    const declared = result.document!.elements[0]!.licenseDeclared;
+    expect(declared === undefined || declared.length <= 8192).toBe(true);
+  });
+
+  it('reads a set member that points at nothing as unreadable, not as licence text', () => {
+    const result = parse3([
+      pkg('app'),
+      { type: 'expandedlicensing_ConjunctiveLicenseSet', spdxId: `${B}/lic/dangling`, creationInfo: ci, expandedlicensing_member: ['https://spdx.org/licenses/MIT', `${B}/lic/nowhere`] },
+      rel('app', 'hasDeclaredLicense', [`${B}/lic/dangling`]),
+    ]);
+    expect(result.document!.elements[0]!.licenseDeclared).toBeUndefined();
+  });
+
+  it('reads the short terms the official context defines for the individuals, and does not call them dangling', () => {
+    // The 3.0.1 context maps NoneElement, NoAssertionElement and the two
+    // licence individuals to short terms, and `to` is @vocab-typed there:
+    // a compacting serializer writes these, not the IRIs.
+    const result = parse3([
+      pkg('app'),
+      pkg('lib'),
+      rel('app', 'dependsOn', ['NoneElement']),
+      rel('app', 'contains', ['NoAssertionElement']),
+      rel('app', 'hasDeclaredLicense', ['expandedlicensing_NoAssertionLicense']),
+      rel('lib', 'hasConcludedLicense', ['expandedlicensing_NoneLicense']),
+    ]);
+    const rels = result.document!.relationships;
+    expect(rels.find((r) => r.type === 'DEPENDS_ON')?.to).toEqual({ kind: 'special', value: 'NONE' });
+    expect(rels.find((r) => r.type === 'CONTAINS')?.to).toEqual({ kind: 'special', value: 'NOASSERTION' });
+    const byName = Object.fromEntries(result.document!.elements.map((e) => [e.name, e]));
+    expect(byName.app!.licenseDeclared).toBe('NOASSERTION');
+    expect(byName.lib!.licenseConcluded).toBe('NONE');
+    expect(codes(result)).not.toContain('SPDX3_SCHEMA_DANGLING_REF');
+    expect(codes(result)).not.toContain('SPDX3_LICENSE_NOT_MAPPED');
+  });
+
+  it("keeps a document's own element whose IRI merely ends in NoneElement", () => {
+    const odd = `${B}/pkg/NoneElement`;
+    const result = parse3([
+      pkg('app'),
+      { type: 'software_Package', spdxId: odd, creationInfo: ci, name: 'odd' },
+      rel('app', 'dependsOn', [odd]),
+    ]);
+    expect(result.document!.relationships.find((r) => r.type === 'DEPENDS_ON')?.to).toEqual({ kind: 'local', spdxId: odd });
+  });
+
+  it('leaves the field empty when an operator is applied to an absence or to nothing', () => {
+    const result = parse3([
+      pkg('a'),
+      pkg('b'),
+      pkg('c'),
+      { type: 'expandedlicensing_OrLaterOperator', spdxId: `${B}/lic/later-none`, creationInfo: ci, expandedlicensing_subjectLicense: 'expandedlicensing_NoAssertionLicense' },
+      { type: 'expandedlicensing_OrLaterOperator', spdxId: `${B}/lic/later-dangling`, creationInfo: ci, expandedlicensing_subjectLicense: 'urn:acme:nowhere' },
+      {
+        type: 'expandedlicensing_WithAdditionOperator',
+        spdxId: `${B}/lic/with-none`,
+        creationInfo: ci,
+        expandedlicensing_subjectExtendableLicense: 'https://spdx.org/rdf/3.0.1/terms/ExpandedLicensing/NoneLicense',
+        expandedlicensing_subjectAddition: 'https://spdx.org/licenses/Classpath-exception-2.0',
+      },
+      rel('a', 'hasDeclaredLicense', [`${B}/lic/later-none`]),
+      rel('b', 'hasDeclaredLicense', [`${B}/lic/later-dangling`]),
+      rel('c', 'hasDeclaredLicense', [`${B}/lic/with-none`]),
+    ]);
+    for (const element of result.document!.elements) expect(element.licenseDeclared).toBeUndefined();
+    expect(result.diagnostics.find((d) => d.code === 'SPDX3_LICENSE_NOT_MAPPED')?.message).toContain('3 licence statement');
+  });
+
+  it('reads the version from an object-valued @context', () => {
+    const { creationInfo: _drop, ...docWithoutCi } = docNode;
+    void _drop;
+    const text = JSON.stringify({
+      '@context': [{ '@import': 'https://spdx.org/rdf/3.0.1/spdx-context.jsonld' }],
+      '@graph': [{ type: 'CreationInfo', '@id': ci, created: '2026-06-01T10:00:00Z' }, { ...docWithoutCi, creationInfo: ci }, pkg('app')],
+    });
+    const result = parseDocument({ fileName: 'ctx.spdx3.json', text, sha1: 'f'.repeat(40), byteSize: text.length });
+    expect(result.document?.spec.version).toBe('SPDX-3.0.1');
   });
 });

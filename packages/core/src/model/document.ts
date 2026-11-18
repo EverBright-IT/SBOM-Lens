@@ -49,6 +49,11 @@ export interface Relationship {
    * the BOM subject. Dependency checks skip derived edges.
    */
   derived?: true;
+  /**
+   * SPDX 3 LifecycleScopedRelationship: the lifecycle phase the relationship
+   * holds in (design, development, build, test, runtime, other), verbatim.
+   */
+  scope?: string;
 }
 
 /**

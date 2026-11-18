@@ -22,7 +22,8 @@ export interface PurlSegments {
  * match.
  */
 export function splitPurl(purl: string): PurlSegments | undefined {
-  if (!purl.startsWith('pkg:')) return undefined;
+  // The scheme is case-insensitive; `pkg` is only its canonical spelling.
+  if (purl.slice(0, 4).toLowerCase() !== 'pkg:') return undefined;
   let rest = purl.slice('pkg:'.length);
   const hash = rest.indexOf('#');
   if (hash !== -1) rest = rest.slice(0, hash);

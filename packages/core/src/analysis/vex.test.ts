@@ -307,3 +307,47 @@ describe('verify-facing contract (Etappe K handover)', () => {
     });
   });
 });
+
+describe('OpenVEX reading gaps', () => {
+  const statement = (products: unknown[]) => ({
+    vulnerability: { name: 'CVE-2026-0001' },
+    products,
+    status: 'not_affected',
+    justification: 'component_not_present',
+  });
+  const parsed = (statements: unknown[], extra: Record<string, unknown> = {}) => {
+    const sniff = sniffVex(vexJson(statements, extra));
+    if (!sniff.isVex) throw new Error('not recognized as OpenVEX');
+    return parseOpenVex('gaps.openvex.json', sniff.raw);
+  };
+
+  it('matches a product by its identifiers when @id is an IRI', () => {
+    const ws = wsWith(['lib', '1.0.0', 'pkg:npm/lib@1.0.0']);
+    const doc = parsed([statement([{ '@id': 'https://acme.example/product/lib', identifiers: { purl: 'pkg:npm/lib@1.0.0' } }])]);
+    expect(findingsFor(ws, 'lib', matchVex(ws, [doc]))?.[0]?.status).toBe('not_affected');
+  });
+
+  it('matches by every identifier a product carries, not only the first', () => {
+    const ws = wsWith(['lib', '1.0.0', 'pkg:npm/lib@1.0.0']);
+    const doc = parsed([statement([{ '@id': 'pkg:npm/other@2.0.0', identifiers: { purl: 'pkg:npm/lib@1.0.0' } }])]);
+    expect(findingsFor(ws, 'lib', matchVex(ws, [doc]))?.[0]?.status).toBe('not_affected');
+  });
+
+  it('reads every identifier of a subcomponent object', () => {
+    const ws = wsWith(['lib', '1.0.0', 'pkg:npm/lib@1.0.0']);
+    const doc = parsed([
+      statement([{ '@id': 'pkg:oci/app@sha256%3Aabc', subcomponents: [{ '@id': 'https://acme.example/sub/lib', identifiers: { purl: 'pkg:npm/lib@1.0.0' } }] }]),
+    ]);
+    expect(findingsFor(ws, 'lib', matchVex(ws, [doc]))?.[0]?.status).toBe('not_affected');
+  });
+
+  it('recognizes OpenVEX whose @context is an array', () => {
+    expect(sniffVex(vexJson([], { '@context': ['https://openvex.dev/ns/v0.2.0', { acme: 'https://acme.example/' }] })).isVex).toBe(true);
+  });
+
+  it('matches a purl whose scheme is written in capitals', () => {
+    const ws = wsWith(['lib', '1.0.0', 'pkg:npm/lib@1.0.0']);
+    const doc = parsed([statement(['PKG:npm/lib@1.0.0'])]);
+    expect(findingsFor(ws, 'lib', matchVex(ws, [doc]))?.[0]?.status).toBe('not_affected');
+  });
+});

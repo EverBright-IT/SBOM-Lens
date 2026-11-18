@@ -1,4 +1,6 @@
+import { contextText } from '../util/jsonld-context';
 import { isRecord } from '../util/narrow';
+import { isStandaloneCdxVex } from './cdx/vex-shape';
 import { bomObjectFromXml } from './cdx/xml';
 import { XmlError, parseXml } from './xml/tokenizer';
 
@@ -64,6 +66,7 @@ export function detect(text: string): Detection {
         'XML document is not a CycloneDX BOM: expected <bom xmlns="http://cyclonedx.org/schema/bom/1.x">.',
       );
     }
+    if (isStandaloneCdxVex(bom)) return cdxVexNotSupported();
     return { format: 'cdx-json', parsed: bom, serialization: 'xml' };
   }
 
@@ -101,9 +104,8 @@ function classifyObject(parsed: unknown, serialization: 'json' | 'yaml'): Detect
     return unsupported(`${label}_NOT_OBJECT`, `${label} root is not an object: not an SPDX document.`);
   }
 
-  const context = parsed['@context'];
-  const contextStr = Array.isArray(context) ? context.join(' ') : String(context ?? '');
-  if (contextStr.includes('spdx.org/rdf/3.')) {
+  // The context may be a string, an array, or an object (inline or @import).
+  if (contextText(parsed['@context']).includes('spdx.org/rdf/3.')) {
     return { format: 'spdx3-json', parsed, serialization };
   }
 
@@ -141,6 +143,7 @@ function classifyObject(parsed: unknown, serialization: 'json' | 'yaml'): Detect
   }
 
   if (parsed.bomFormat === 'CycloneDX') {
+    if (isStandaloneCdxVex(parsed)) return cdxVexNotSupported();
     return { format: 'cdx-json', parsed, serialization };
   }
 
@@ -153,7 +156,14 @@ function classifyObject(parsed: unknown, serialization: 'json' | 'yaml'): Detect
 
   return unsupported(
     `${label}_NOT_SPDX`,
-    `${label} document has no "spdxVersion": not an SPDX 2.x document.`,
+    `${label} document is not a recognized SBOM: expected SPDX 2.x ("spdxVersion"), SPDX 3 (an spdx.org/rdf/3 "@context"), or CycloneDX ("bomFormat").`,
+  );
+}
+
+function cdxVexNotSupported(): Detection {
+  return unsupported(
+    'CDX_VEX_NOT_SUPPORTED',
+    'This is a CycloneDX VEX document: it lists vulnerabilities but no components. Vulnerability status is read from OpenVEX and CSAF documents; CycloneDX VEX is not read.',
   );
 }
 

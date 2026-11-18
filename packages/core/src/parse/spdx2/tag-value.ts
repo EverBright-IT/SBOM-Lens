@@ -255,7 +255,8 @@ export function parseSpdx2TagValue(input: SourceInput): ParseResult {
     // -- Element-scope tags ---------------------------------------------------
     if (context === 'element' && current) {
       current.pairs.push([tag, value]);
-      const field = ELEMENT_STRING_TAGS[tag];
+      // Object.hasOwn: the tag name comes from the document.
+      const field = Object.hasOwn(ELEMENT_STRING_TAGS, tag) ? ELEMENT_STRING_TAGS[tag] : undefined;
       if (field) {
         (current as unknown as Record<string, string>)[field as string] = value;
       } else if (tag === 'PackageChecksum' || tag === 'FileChecksum') {

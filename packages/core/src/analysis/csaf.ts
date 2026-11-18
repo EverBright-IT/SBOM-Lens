@@ -315,7 +315,8 @@ function csafSchemaFindings(root: Record<string, unknown>, defined: ReadonlySet<
   // a "TLP:" prefix for display only); 2.1 makes distribution mandatory.
   const distribution = isRecord(docNode.distribution) ? docNode.distribution : undefined;
   const tlpLabel = distribution && isRecord(distribution.tlp) ? asString(distribution.tlp.label) : undefined;
-  const labels = version !== undefined ? TLP_LABELS[version] : undefined;
+  // Object.hasOwn: the version string comes from the document.
+  const labels = version !== undefined && Object.hasOwn(TLP_LABELS, version) ? TLP_LABELS[version] : undefined;
   if (version === '2.1' && tlpLabel === undefined) {
     lint.warn('CSAF_SCHEMA_MISSING_DISTRIBUTION', 'document.distribution.tlp.label is mandatory in CSAF 2.1.');
   } else if (tlpLabel !== undefined && labels !== undefined && !labels.includes(tlpLabel)) {

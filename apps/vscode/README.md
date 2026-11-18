@@ -13,10 +13,14 @@ release diff, and quality reports.
 ## Opening documents
 
 - **Open with SBOM Lens**: right-click a `.spdx`, `.spdx.json`,
-  `.spdx.yaml`, `.cdx.json`, or `.bom.json` file in the explorer (or use
-  *Reopen editor with...*).
+  `.spdx3.json`, `.spdx.jsonld`, `.spdx.yaml`, `.cdx.json` or `.cdx.xml`
+  file, or one named `bom.json` or `bom.xml` (also `*.bom.json` and
+  `*.bom.xml`), in the explorer (or use *Reopen editor with...*).
   Multi-select several files and they open together in one panel, with
   cross-document references resolved between them.
+- **Any other file name**: open the file, then run *Open with SBOM Lens*
+  from the command palette. It opens the active file whatever it is
+  called; the content decides what it is.
 - **Open folder with SBOM Lens**: right-click a folder, and every SPDX
   document under it loads into one panel.
 - **SBOM Lens: Scan workspace for SBOMs**: the command-palette way to load

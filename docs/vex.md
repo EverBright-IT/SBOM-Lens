@@ -120,15 +120,16 @@ owns that.
 ## Matching rules (deliberately conservative)
 
 - Matching happens on **package URLs** (purl), **CPEs** and, for CSAF,
-  **file hashes**: the statement's `products` (their `@id` or
-  `identifiers.purl`/`.cpe23`/`.cpe22`, or the hashes of a CSAF
+  **file hashes**: the statement's `products` (every purl or CPE a product
+  carries: its `@id` when that is one, and each of
+  `identifiers.purl`/`.cpe23`/`.cpe22`; or the hashes of a CSAF
   `product_identification_helper`) and `subcomponents` against each
   element's purl, its SECURITY `cpe22Type`/`cpe23Type` external references
   and, for packages, its checksums. A finding says which key matched
   (`matchedBy`: purl, cpe or hash); a product reachable through several
   keys yields one finding, attributed to the first of purl, CPE, hash.
   Elements with none of these never match.
-- Normalisation: the purl **type and namespace are case-folded**, the name
+- Normalisation: the purl **scheme, type and namespace are case-folded**, the name
   and version compare **exactly** (after percent-decoding); **qualifiers
   and subpath are ignored** on both sides.
 - A **versioned** VEX purl matches only that exact version. A

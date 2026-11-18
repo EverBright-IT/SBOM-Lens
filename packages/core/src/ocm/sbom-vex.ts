@@ -195,7 +195,7 @@ export function deliveryVex(model: DeliveryPackages, sources: readonly VexSource
       unmatched.push({
         vulnerability: statement.vulnerability,
         status: statement.status,
-        products: statement.products.flatMap((p) => [p.id, ...p.subcomponents]),
+        products: statement.products.flatMap((p) => [p.id, ...(p.aliases ?? []), ...p.subcomponents]),
         origin,
         document: document.title ?? document.id,
       });

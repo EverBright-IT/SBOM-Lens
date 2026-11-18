@@ -11,9 +11,10 @@ import type { CryptoElementExt, CryptoRelatedAsset } from '../../model/crypto';
 import type { Diagnostic } from '../../model/diagnostics';
 import { diag } from '../../model/diagnostics';
 import { makeDocumentId, makeElementId } from '../../model/ids';
-import { asRecordArray, asString, asStringArray, isRecord } from '../../util/narrow';
+import { asArray, asRecordArray, asString, asStringArray, isRecord } from '../../util/narrow';
 import type { ParseResult, SourceInput } from '../parser';
 import { validateCdxStructure } from './validate';
+import { cdxListLength } from './vex-shape';
 
 /**
  * CycloneDX 1.x JSON → document model. Additive next to the SPDX parsers,
@@ -81,7 +82,7 @@ export function parseCdxJson(
   const metadata = isRecord(root.metadata) ? root.metadata : {};
   const elements: SbomElement[] = [];
   const relationships: Relationship[] = [];
-  const usedIds = new Set<string>();
+  const usedIds: IdPool = { used: new Set<string>(), next: new Map<string, number>() };
   const idByBomRef = new Map<string, string>();
 
   // BOM-Links: urn:cdx:<uuid>/<version>[#bom-ref] → external document refs,
@@ -160,7 +161,7 @@ export function parseCdxJson(
       copyright: asString(node.copyright),
       licenseDeclared: licenseParts(node.licenses, 'declared'),
       licenseConcluded: licenseParts(node.licenses, 'concluded'),
-      ...(isFile ? {} : { purpose: PURPOSE_BY_TYPE[type] ?? (type ? type.toUpperCase() : undefined) }),
+      ...(isFile ? {} : { purpose: (Object.hasOwn(PURPOSE_BY_TYPE, type) ? PURPOSE_BY_TYPE[type] : undefined) ?? (type ? type.toUpperCase() : undefined) }),
       description: asString(node.description),
       checksums: readHashes(node.hashes),
       externalRefs: readExternalRefs(node),
@@ -208,13 +209,30 @@ export function parseCdxJson(
 
   // dependencies[]: { ref, dependsOn[] } in bom-ref space; a dependsOn entry
   // that is itself a BOM-Link points into another document.
+  const dependencyEntries = asRecordArray(root.dependencies);
+  // An entry that names no dependsOn target is a statement, not an omission:
+  // CycloneDX declares a component without dependencies as an empty element
+  // of the graph (TR-03183-2 appendix 8.2 requires it). It becomes DEPENDS_ON
+  // NONE, the SPDX idiom for the same fact: once per component, and never for
+  // a component that names targets in another entry of its own. Targets that
+  // merely fail to resolve do not count as none.
+  const refsWithTargets = new Set<string>();
+  for (const dep of dependencyEntries) {
+    const ref = asString(dep.ref);
+    if (ref !== undefined && asArray(dep.dependsOn).some((t) => typeof t === 'string')) refsWithTargets.add(ref);
+  }
+  const statedNone = new Set<string>();
   let unmappedDeps = 0;
-  for (const dep of asRecordArray(root.dependencies)) {
+  for (const dep of dependencyEntries) {
     const fromRef = asString(dep.ref);
-    const from = fromRef ? idByBomRef.get(fromRef) : undefined;
-    if (!from) {
+    const from = fromRef !== undefined ? idByBomRef.get(fromRef) : undefined;
+    if (fromRef === undefined || from === undefined) {
       unmappedDeps++;
       continue;
+    }
+    if (!refsWithTargets.has(fromRef) && !statedNone.has(from)) {
+      statedNone.add(from);
+      relationships.push({ from: { kind: 'local', spdxId: from }, type: 'DEPENDS_ON', to: { kind: 'special', value: 'NONE' } });
     }
     for (const target of Array.isArray(dep.dependsOn) ? dep.dependsOn : []) {
       if (typeof target !== 'string') continue;
@@ -282,6 +300,28 @@ export function parseCdxJson(
         'info',
         'CDX_CRYPTO_PROPERTIES_MISSING',
         `${assetsWithoutProperties} cryptographic-asset component(s) carry no cryptoProperties and are listed without algorithm, certificate, key or protocol data.`,
+      ),
+    );
+  }
+
+  // Present in the BOM but not read in this version: said, not dropped.
+  const vulnerabilityCount = cdxListLength(root.vulnerabilities, 'vulnerability');
+  if (vulnerabilityCount > 0) {
+    diagnostics.push(
+      diag(
+        'info',
+        'CDX_VULNERABILITIES_NOT_READ',
+        `${vulnerabilityCount} vulnerability entr${vulnerabilityCount === 1 ? 'y is' : 'ies are'} in this BOM but not read: vulnerability status is read from OpenVEX and CSAF documents loaded next to the SBOM.`,
+      ),
+    );
+  }
+  const compositionCount = cdxListLength(root.compositions, 'composition');
+  if (compositionCount > 0) {
+    diagnostics.push(
+      diag(
+        'info',
+        'CDX_COMPOSITIONS_NOT_READ',
+        `${compositionCount} composition${compositionCount === 1 ? '' : 's'} (completeness statements) in this BOM ${compositionCount === 1 ? 'is' : 'are'} not read in this version.`,
       ),
     );
   }
@@ -465,27 +505,36 @@ function decodeFragment(fragment: string): string {
   }
 }
 
-/** Verbatim id, suffixed only on (spec-invalid) duplicates. */
-function uniqueRaw(candidate: string, used: Set<string>): string {
-  let id = candidate;
-  if (used.has(id)) {
-    let suffix = 2;
-    while (used.has(`${id}-${suffix}`)) suffix++;
-    id = `${id}-${suffix}`;
+/**
+ * Ids handed out so far, and per base id the next suffix worth trying. Ids
+ * are never released, so every suffix below `next` is taken: the n-th
+ * duplicate costs one step instead of n, and a BOM with many duplicate
+ * bom-refs or names cannot stall the parse worker.
+ */
+interface IdPool {
+  used: Set<string>;
+  next: Map<string, number>;
+}
+
+function claimId(base: string, pool: IdPool): string {
+  let id = base;
+  if (pool.used.has(id)) {
+    let suffix = pool.next.get(base) ?? 2;
+    while (pool.used.has(`${base}-${suffix}`)) suffix++;
+    id = `${base}-${suffix}`;
+    pool.next.set(base, suffix + 1);
   }
-  used.add(id);
+  pool.used.add(id);
   return id;
 }
 
-function uniqueId(candidate: string, used: Set<string>): string {
-  let id = candidate.replace(/[^A-Za-z0-9.-]/g, '-');
-  if (used.has(id)) {
-    let suffix = 2;
-    while (used.has(`${id}-${suffix}`)) suffix++;
-    id = `${id}-${suffix}`;
-  }
-  used.add(id);
-  return id;
+/** Verbatim id, suffixed only on (spec-invalid) duplicates. */
+function uniqueRaw(candidate: string, pool: IdPool): string {
+  return claimId(candidate, pool);
+}
+
+function uniqueId(candidate: string, pool: IdPool): string {
+  return claimId(candidate.replace(/[^A-Za-z0-9.-]/g, '-'), pool);
 }
 
 /**

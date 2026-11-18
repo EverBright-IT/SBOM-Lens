@@ -172,3 +172,29 @@ describe('tag-value parser: degenerate inputs', () => {
     expect(diagnostics.some((d) => d.code === 'TV_UNTERMINATED_TEXT')).toBe(true);
   });
 });
+
+describe('tag-value parser: tag names on the prototype chain', () => {
+  it('treats them as unknown tags, not as fields', () => {
+    const text = [
+      'SPDXVersion: SPDX-2.3',
+      'DataLicense: CC0-1.0',
+      'SPDXID: SPDXRef-DOCUMENT',
+      'DocumentName: proto',
+      'DocumentNamespace: https://example.org/spdxdocs/proto',
+      'Creator: Tool: test',
+      'Created: 2026-06-01T00:00:00Z',
+      'PackageName: app',
+      'SPDXID: SPDXRef-app',
+      'PackageDownloadLocation: NOASSERTION',
+      'constructor: evil',
+      'toString: evil',
+      'valueOf: evil',
+      '',
+    ].join('\n');
+    const { document } = parseDocument({ fileName: 'proto.spdx', text, sha1: '9'.repeat(40), byteSize: text.length });
+    const app = document!.elements[0]!;
+    expect(app.name).toBe('app');
+    expect(Object.keys(app).filter((key) => key.startsWith('function'))).toEqual([]);
+    expect(JSON.stringify(app)).not.toContain('native code');
+  });
+});

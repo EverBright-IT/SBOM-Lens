@@ -22,6 +22,13 @@ Then open the repo in VS Code and press **F5** ("Run SBOM Lens extension").
       document map fills in.
 - [ ] Multi-select two cascade files → "Open with SBOM Lens": ONE shared
       panel with both documents linked.
+- [ ] A file named exactly `bom.json` (and `bom.xml`): offered in "Reopen
+      editor with...", has the explorer menu entry, and is found by the
+      folder and workspace scans.
+- [ ] A file with a free name (`sbom.json`): open it as text, run "Open
+      with SBOM Lens" from the command palette, and it opens in the viewer.
+      With no editor open the command is not offered; with a non-file tab
+      active it shows a hint instead of doing nothing.
 - [ ] Right-click a folder → "Open folder with SBOM Lens": only that
       folder's SBOMs load; re-running replaces the shared panel's content.
 - [ ] "SBOM Lens: Scan workspace for SBOMs": singleton panel, progress

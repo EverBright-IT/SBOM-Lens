@@ -233,17 +233,21 @@ conformance verdict: for authoritative validation use
 
 - **SPDX 2.x tag-value** (`.spdx`), **JSON**, and **YAML**: fully supported.
   Detection is content-based, never by file extension.
-- **SPDX 3.0.x JSON-LD**: loads. Packages, files, relationships, hashes,
-  external identifiers (purl, CPE), license relationships, and
-  cross-document **imports** (ExternalMap) map onto the same views as 2.x:
-  import entries become external document references that resolve through
-  the same cascade machinery, so a 3.x document referencing elements of
-  another 3.x document links up the moment both are loaded. Elements from
-  profiles outside core/software (AI, dataset, build) are counted in a
-  notice rather than shown. Tag-value has no 3.x serialization; other 3.x
-  serializations are not parsed.
+- **SPDX 3.0.x JSON-LD**: loads. Packages, files, relationships (a
+  lifecycle-scoped one keeps its scope, such as build or runtime), hashes,
+  external identifiers (purl, CPE) and external references, license
+  relationships (structured AND, OR, or-later and WITH sets fold into one
+  expression), and cross-document **imports** (ExternalMap) map onto the
+  same views as 2.x: import entries become external document references
+  that resolve through the same cascade machinery, so a 3.x document
+  referencing elements of another 3.x document links up the moment both are
+  loaded. AI and dataset packages load as packages; elements of other
+  profiles (build, security, ...) are counted in a notice rather than
+  shown. Tag-value has no 3.x serialization; other 3.x serializations are
+  not parsed.
 - **CycloneDX 1.x** as JSON or XML: components (including nested
-  assemblies), dependencies, purl and CPE identity, hashes, licenses,
+  assemblies), dependencies (an entry without targets states that a
+  component has none), purl and CPE identity, hashes, licenses,
   cryptographic assets (CBOM), and BOM-Links. A reference of type `bom`
   (`urn:cdx:...`) resolves across loaded BOMs through the same cascade
   machinery. Read-only viewing, no conversion.
@@ -264,9 +268,12 @@ Known boundaries, stated plainly so nothing surprises you:
 
 - **Format scope.** SPDX 2.x in full; SPDX 3.0.x as JSON-LD with the
   core/software profiles mapped (other profiles are counted, not rendered);
-  CycloneDX 1.x as JSON or XML including CBOM cryptographic assets (services,
-  compositions and embedded VEX data are out of scope; a YAML-serialized BOM
-  is read tolerantly but is not a CycloneDX serialization). XML is read by a small built-in reader that
+  CycloneDX 1.x as JSON or XML including CBOM cryptographic assets
+  (services, compositions and vulnerability data are not read: a BOM that
+  carries compositions or vulnerabilities says so in a notice, and a
+  standalone CycloneDX VEX document is refused with that reason; a
+  YAML-serialized BOM is read tolerantly but is not a CycloneDX
+  serialization). XML is read by a small built-in reader that
   refuses document type declarations (no entity expansion, no external
   references) and expects UTF-8; SPDX RDF/XML is recognized only far enough
   to say so. Trivy-native JSON is recognized with a conversion hint, not

@@ -3,6 +3,7 @@ import * as vscode from 'vscode';
 import type { HostToWebviewMessage, WebviewToHostMessage } from './protocol';
 import type { BridgeContext } from './bridge';
 import { buildWebviewHtml, createBridgeHandler, nodeFetchBytes, prefsSnapshot } from './bridge';
+import { pickOpenTargets } from './openTarget';
 
 /**
  * Everything that differs between the Lens extension flavors. The shell owns
@@ -47,6 +48,13 @@ export interface LensShellApi {
     title: string,
     opts?: { compare?: boolean },
   ): Promise<void>;
+}
+
+/** The resource of the active tab when it is not a text editor: custom editors and notebooks carry a uri too. */
+function activeTabUri(): vscode.Uri | undefined {
+  const input: unknown = vscode.window.tabGroups.activeTabGroup.activeTab?.input;
+  if (typeof input !== 'object' || input === null || !('uri' in input)) return undefined;
+  return input.uri instanceof vscode.Uri ? input.uri : undefined;
 }
 
 /**
@@ -151,11 +159,19 @@ export function activateLens(context: vscode.ExtensionContext, config: LensShell
       `${config.commandPrefix}.openWith`,
       (uri?: vscode.Uri, uris?: vscode.Uri[]) => {
         // Explorer multi-select passes every selected uri as the 2nd arg —
-        // several files belong together, so they share ONE panel.
-        const selection = (
-          uris?.length ? uris : [uri ?? vscode.window.activeTextEditor?.document.uri]
-        ).filter((u): u is vscode.Uri => u !== undefined);
-        if (selection.length === 0) return;
+        // several files belong together, so they share ONE panel. From the
+        // command palette nothing is passed: the active file is meant, and
+        // vscode.openWith opens any file in an editor it is told by name.
+        const selection = pickOpenTargets(uri, uris, {
+          textEditor: vscode.window.activeTextEditor?.document.uri,
+          tab: activeTabUri(),
+        });
+        if (selection.length === 0) {
+          void vscode.window.showInformationMessage(
+            `${config.displayName}: open a file first, then run this command on it.`,
+          );
+          return;
+        }
         if (selection.length === 1) {
           void vscode.commands.executeCommand('vscode.openWith', selection[0], config.viewType);
           return;

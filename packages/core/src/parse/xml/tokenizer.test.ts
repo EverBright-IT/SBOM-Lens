@@ -83,3 +83,10 @@ describe('parseXml', () => {
     });
   });
 });
+
+describe('entity names that exist only on the prototype chain', () => {
+  it('keeps them as written, like any other undeclared entity', () => {
+    const root = parseXml('<a>&constructor; &toString; &hasOwnProperty;</a>');
+    expect(root.text).toBe('&constructor; &toString; &hasOwnProperty;');
+  });
+});
