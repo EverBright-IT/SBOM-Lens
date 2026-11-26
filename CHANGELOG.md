@@ -4,6 +4,37 @@ All notable changes to SBOM Lens. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [SemVer](https://semver.org) (0.x: the API surface is the app itself).
 
+## [0.29.15] - 2026-11-26
+
+### Security
+- **Compliance-profile patterns are matched without backtracking.** A
+  pattern is input from whoever wrote the profile, and it ran through
+  JavaScript's `RegExp` on the page, where a short pattern can take hours on
+  a short value. The guard from 0.29.13 refused nested unbounded repetitions
+  only; other shapes got through, among them a repeated group whose
+  alternatives start alike (`^(a|a)+$`), a bounded repetition inside a
+  repeated group (`(a+){8}$`), and rows of alternatives or repetitions that
+  multiply. Judging a pattern by its shape did not hold, so patterns no
+  longer reach `RegExp` at all: SBOM Lens reads a pattern and follows every
+  way it can match at once, which looks at each character of a value once
+  per position of the pattern. The answer is the one the language defines
+  for `RegExp.test`, lookahead and lookbehind included, and no pattern runs
+  long whatever its shape. Patterns that 0.29.13 and 0.29.14 refused for
+  their shape, such as `([a-z]+)+`, are accepted again. Back references
+  (`\1`, `\k<name>`) cannot be matched this way and are rejected on import,
+  as is a pattern whose counted repetitions write out to more than 4096
+  positions. One report has a fixed allowance of matching work; a check
+  that would go past it is reported as not evaluated instead of holding
+  the page. A pattern that cannot be matched (possible only in a profile
+  stored before a gate) now matches nothing instead of counting as no
+  constraint.
+- **Delivery acceptance names an ambiguous file instead of picking one.**
+  Delivered files were matched by their normalised path, so `lib\x.so` and
+  `lib/x.so`, two files on Linux and macOS, collapsed into one: the last one
+  read was checked and the other was neither checked nor listed as extra.
+  Such an SBOM file now reads *mismatch* with the reason *ambiguous*, and
+  the report and the detail pane name every delivered path.
+
 ## [0.29.14] - 2026-11-18
 
 ### Security

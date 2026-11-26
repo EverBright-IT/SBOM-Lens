@@ -4,6 +4,7 @@ import { asRecordArray, asString, isRecord } from '../../util/narrow';
 import { hashHex } from '../../util/sha1';
 import type { TarEntry } from '../../util/tar';
 import { readTar } from '../../util/tar';
+import { OCI_EMPTY_DIGEST } from './oci';
 
 /**
  * Inspects one localBlob of a delivery inside the worker: what kind of
@@ -34,7 +35,16 @@ export interface BlobDigestSubjects {
   uncompressed?: Uint8Array;
   /** The OCI artifact set's manifest bytes, when one was identified. */
   manifest?: Uint8Array;
+  /**
+   * For an OCI artifact set: whether the config and layers its manifest
+   * names are in the set with the bytes their digests record. A matching
+   * manifest alone vouches for nothing the manifest points at.
+   */
+  artifactParts?: ArtifactPartsState;
 }
+
+/** intact: every named blob present and matching; altered: one does not match; incomplete: one is missing or not checkable. */
+export type ArtifactPartsState = 'intact' | 'altered' | 'incomplete';
 
 export interface BlobInspection {
   /** Content summary without a digest verdict (that is per resource). */
@@ -77,6 +87,7 @@ export async function inspectBlob(stored: Uint8Array, mediaType: string | undefi
       const manifestEntry = resolveManifest(indexEntry, named);
       if (manifestEntry) {
         subjects.manifest = manifestEntry.bytes;
+        subjects.artifactParts = await artifactPartsState(manifestEntry, named);
         info.previews = [textPreview({ ...manifestEntry, name: manifestEntry.name || 'manifest.json' })];
         info.oci = { layers: manifestLayers(manifestEntry) };
       }
@@ -130,6 +141,48 @@ function resolveManifest(indexEntry: TarEntry, entries: TarEntry[]): TarEntry | 
   }
 }
 
+/**
+ * Hold every blob an artifact set's manifest names (config and layers)
+ * against the digest the manifest records for it. All copies under a name
+ * must match. Only SHA-256 and SHA-512 digests are computable; anything else
+ * leaves the set incomplete rather than guessed.
+ */
+async function artifactPartsState(
+  manifestEntry: TarEntry,
+  entries: TarEntry[],
+): Promise<ArtifactPartsState> {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(new TextDecoder().decode(manifestEntry.bytes));
+  } catch {
+    return 'incomplete';
+  }
+  if (!isRecord(parsed)) return 'incomplete';
+  const parts = [
+    ...(isRecord(parsed.config) ? [parsed.config] : []),
+    ...asRecordArray(parsed.layers),
+  ];
+  let state: ArtifactPartsState = 'intact';
+  for (const part of parts) {
+    const digest = asString(part.digest)?.toLowerCase();
+    const named = digest ? /^(sha256|sha512):([0-9a-f]+)$/.exec(digest) : null;
+    if (!digest || !named) {
+      state = 'incomplete';
+      continue;
+    }
+    const [, algorithm, hex] = named;
+    const copies = entries.filter((e) => e.name === `blobs/${algorithm}.${hex}` || e.name === `blobs/${digest}`);
+    if (copies.length === 0) {
+      if (digest !== OCI_EMPTY_DIGEST) state = 'incomplete';
+      continue;
+    }
+    for (const copy of copies) {
+      if ((await hashHex(algorithm === 'sha256' ? 'SHA-256' : 'SHA-512', copy.bytes)) !== hex) return 'altered';
+    }
+  }
+  return state;
+}
+
 function manifestLayers(manifestEntry: TarEntry): OcmOciLayerInfo[] {
   try {
     const parsed: unknown = JSON.parse(new TextDecoder().decode(manifestEntry.bytes));
@@ -173,7 +226,13 @@ export async function checkDeclaredDigest(
 
   const expected = value.toLowerCase().replace(/^sha\d+:/, '');
   for (const candidate of candidates) {
-    if ((await hashHex(algorithm, candidate)) === expected) return 'match';
+    if ((await hashHex(algorithm, candidate)) !== expected) continue;
+    // ociArtifactDigest covers the manifest; the blobs it names must match it too.
+    if (normalisation === 'ociArtifactDigest/v1' && subjects.artifactParts === 'altered')
+      return 'mismatch';
+    if (normalisation === 'ociArtifactDigest/v1' && subjects.artifactParts === 'incomplete')
+      return 'unchecked';
+    return 'match';
   }
   return 'mismatch';
 }

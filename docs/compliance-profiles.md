@@ -43,11 +43,30 @@ field-level (presence, patterns): SBOM Lens does not do legal interpretation.
 
 ### Modifiers and semantics
 
-- **`pattern`**: a regular expression the value must match. `RegExp.test` is
-  a substring match: anchor with `^...$` when you mean the full value. No
-  flags in v1 (matching is case-sensitive). A quantified group that itself
-  contains `*`, `+` or `{n,}` (for example `([a-z]+)+`) is rejected on import:
-  write `[a-z]+` instead.
+- **`pattern`**: a regular expression the value must match, in JavaScript
+  syntax. It is a substring match, as `RegExp.test` is: anchor with `^...$`
+  when you mean the full value. No flags in v1 (matching is
+  case-sensitive).
+
+  A pattern is input from whoever wrote the profile, and it is matched on
+  the page. JavaScript's own `RegExp` backtracks, so a short pattern such as
+  `(a+)+$` can take hours on a short value. SBOM Lens therefore does not
+  hand patterns to `RegExp`: it reads the pattern and follows every way it
+  can match at once, which looks at each character of a value once per
+  position of the pattern. No pattern runs long, whatever its shape, and
+  the answer is the one the language defines for `RegExp.test`. Lookahead
+  and lookbehind work. Two things do not:
+  - back references (`\1`, `\k<name>`) are rejected on import: matching
+    them needs backtracking by nature;
+  - a pattern whose counted repetitions write out to more than 4096
+    positions (`a{5000}`, `(a{70}){70}`) is rejected on import: write `a+`
+    or a smaller count.
+
+  One report has a fixed allowance of matching work, far more than ordinary
+  patterns need on a large document. A check that would go past it is
+  reported as *not evaluated* and fails, the same on every machine, instead
+  of holding the page. A pattern that cannot be matched (only possible in a
+  profile stored before these rules) matches nothing.
 - **`values`**: exact-match allow-list. Combined with `pattern` via AND.
 - **`creators`** is an array: SOME semantics: at least one creator must
   satisfy the modifiers.
@@ -221,9 +240,8 @@ author meant a subset, hence the id. v5 includes everything from v4.
 An unknown check type or field rejects the **whole** profile with a list of
 errors: an older SBOM Lens will never half-evaluate a newer profile and
 report a false "pass". Limits: 200 checks, 64 KB per file, patterns ≤ 500
-chars (must compile, and no nested unbounded quantifiers such as `(a+)+`,
-which backtrack exponentially and would freeze the page), ids unique,
-`algorithms` ≤ 8 entries.
+chars (must be a regular expression the matcher under `pattern` above can
+match), ids unique, `algorithms` ≤ 8 entries.
 
 ## Importing a profile
 

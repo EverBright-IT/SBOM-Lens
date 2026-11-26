@@ -230,16 +230,29 @@ export async function openSbomDemo(): Promise<void> {
 /**
  * Pull one blob back out of the opened delivery (download-on-demand). The
  * viewer never holds blob bytes; the archive is re-read from its source.
+ * With the resource's declared digest, only bytes that match it come back.
  */
-export async function extractBlob(localReference: string): Promise<Uint8Array | null> {
+export async function extractBlob(
+  localReference: string,
+  declared?: Record<string, unknown>,
+): Promise<{ bytes: Uint8Array } | { reason: string }> {
   const { delivery } = useAppStore.getState();
   const source = await jobSource();
-  if (!source || !delivery) return null;
+  if (!source || !delivery) return { reason: 'the delivery is no longer open' };
   const response = await run(
-    { kind: 'extract', fileName: delivery.bundle.fileName, localReference, ...source },
+    { kind: 'extract', fileName: delivery.bundle.fileName, localReference, ...(declared ? { declared } : {}), ...source },
     source.buffer ? [source.buffer] : [],
   );
-  return response.kind === 'extract' ? response.bytes : null;
+  if (response.kind === 'extract' && response.bytes) return { bytes: response.bytes };
+  return { reason: response.kind === 'extract' && response.reason ? response.reason : 'the blob could not be read back from the archive' };
+}
+
+/** The digest node a resource declares, when it declares one. */
+export function declaredDigest(raw: Record<string, unknown>): Record<string, unknown> | undefined {
+  const declared = raw.digest;
+  return typeof declared === 'object' && declared !== null && !Array.isArray(declared)
+    ? (declared as Record<string, unknown>)
+    : undefined;
 }
 
 /**
@@ -477,7 +490,10 @@ async function readPendingVex(): Promise<boolean> {
     // Never extracted: no VEX or CSAF document is this large, and a blob
     // only typed or marked as one could be anything.
     if ((artifact?.blob?.size ?? 0) > VEX_DOCUMENT_MAX) oversized[entry.key] = { reason: TOO_LARGE };
-    else items.push({ key: entry.key, fileName: entry.name, localReference });
+    else {
+      const declared = artifact ? declaredDigest(artifact.raw) : undefined;
+      items.push({ key: entry.key, fileName: entry.name, localReference, ...(declared ? { declared } : {}) });
+    }
   }
   if (Object.keys(oversized).length > 0) {
     useAppStore.getState().actions.applyVexResults(oversized, delivery.extracted);

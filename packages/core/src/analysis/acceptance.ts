@@ -38,8 +38,13 @@ export interface FileAcceptance {
   declared?: string;
   /** Recomputed digest of the delivered bytes (present for match/mismatch). */
   actual?: string;
-  /** Why a pair could not be verified. */
+  /** Why a pair could not be verified, or why it is a mismatch without digests. */
   reason?: string;
+  /**
+   * The delivered paths that all read as this file, when there is more than
+   * one: the delivery is ambiguous, and the verdict is a mismatch.
+   */
+  delivered?: string[];
 }
 
 export interface ExtraFile {
@@ -99,8 +104,16 @@ export function hasVerifiableFiles(ws: WorkspaceState): boolean {
  * order of `files` follows document then element order, `extra` is sorted.
  */
 export function checkDelivery(ws: WorkspaceState, delivered: readonly DeliveredFile[]): AcceptanceReport {
-  const deliveredByPath = new Map<string, DeliveredFile>();
-  for (const file of delivered) deliveredByPath.set(normalizePath(file.path), file);
+  // Several delivered files can read as one path ("lib\x.so" and "lib/x.so"
+  // are two files on Linux and macOS). None of them is picked: the file is
+  // ambiguous, a mismatch that names every path.
+  const deliveredByPath = new Map<string, DeliveredFile[]>();
+  for (const file of delivered) {
+    const key = normalizePath(file.path);
+    const same = deliveredByPath.get(key);
+    if (same) same.push(file);
+    else deliveredByPath.set(key, [file]);
+  }
   const claimed = new Set<string>();
 
   const files: FileAcceptance[] = [];
@@ -108,13 +121,23 @@ export function checkDelivery(ws: WorkspaceState, delivered: readonly DeliveredF
     for (const element of loaded.document.elements) {
       if (element.kind !== 'file') continue;
       const key = normalizePath(element.name);
-      const match = deliveredByPath.get(key);
-      if (!match) {
+      const matches = deliveredByPath.get(key);
+      if (!matches) {
         files.push({ elementId: element.id, path: element.name, verdict: 'missing' });
         continue;
       }
       claimed.add(key);
-      files.push(verdictFor(element, match));
+      files.push(
+        matches.length === 1
+          ? verdictFor(element, matches[0]!)
+          : {
+              elementId: element.id,
+              path: element.name,
+              verdict: 'mismatch',
+              reason: `ambiguous: ${matches.length} delivered files read as this path`,
+              delivered: matches.map((file) => file.path),
+            },
+      );
     }
   }
 

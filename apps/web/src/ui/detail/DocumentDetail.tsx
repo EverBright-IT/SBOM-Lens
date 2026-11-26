@@ -326,7 +326,10 @@ function QualitySection({ ws, loaded }: { ws: WorkspaceState; loaded: LoadedDocu
 function Meter({ result }: { result: ProfileCheckResult }) {
   const { satisfied, total, percent, threshold } = result.coverage!;
   const gated = threshold !== undefined;
-  const failing = gated && !result.pass;
+  // A meter whose pattern was not evaluated has no numbers to show: say so
+  // instead of drawing a share the document does not have.
+  const stopped = result.actual !== undefined;
+  const failing = (gated && !result.pass) || stopped;
   return (
     <div className="grid grid-cols-[11rem_1fr_8rem] items-center gap-x-3 text-xs">
       <span
@@ -340,15 +343,21 @@ function Meter({ result }: { result: ProfileCheckResult }) {
           className={`block h-full rounded-full ${
             failing ? 'bg-amber-400/90' : percent === 100 ? 'bg-emerald-400/80' : 'bg-accent-400/80'
           }`}
-          style={{ width: `${total === 0 ? 0 : percent}%` }}
+          style={{ width: `${total === 0 || stopped ? 0 : percent}%` }}
         />
       </span>
       <span
         className={`text-right tabular-nums ${failing ? 'text-amber-700 dark:text-amber-400' : 'text-slate-400'}`}
-        title={gated ? `Requires at least ${threshold}%` : undefined}
+        title={stopped ? result.actual : gated ? `Requires at least ${threshold}%` : undefined}
       >
-        {formatCount(satisfied)}/{formatCount(total)} · {total === 0 ? 'none in scope' : `${percent}%`}
-        {gated ? ` · ≥${threshold}%` : ''}
+        {stopped ? (
+          'not evaluated'
+        ) : (
+          <>
+            {formatCount(satisfied)}/{formatCount(total)} · {total === 0 ? 'none in scope' : `${percent}%`}
+            {gated ? ` · ≥${threshold}%` : ''}
+          </>
+        )}
       </span>
     </div>
   );

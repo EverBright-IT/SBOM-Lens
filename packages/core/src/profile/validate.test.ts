@@ -87,14 +87,18 @@ describe('validateProfile', () => {
         checks: [{ type: 'document-field', field: 'name', pattern: 'a'.repeat(501) }],
       })[0],
     ).toContain('exceeds 500');
-    // A catastrophic-backtracking pattern is a valid regex of legal length but
-    // would freeze the UI thread; the import gate refuses it.
-    expect(
-      errorsOf({
-        ...minimal,
-        checks: [{ type: 'document-field', field: 'name', pattern: '^(([a-z0-9 :.-])+)+X$' }],
-      })[0],
-    ).toContain('nested unbounded quantifiers');
+    // Patterns are matched without backtracking, so the shapes earlier
+    // versions refused for their backtracking are ordinary patterns.
+    for (const pattern of ['^(([a-z0-9 :.-])+)+X$', '^(a|a)+$', '(a+){8}$', '([a-z]+)+', '^(\\d{1,3}\\.){3}\\d{1,3}$']) {
+      expect(validateProfile({ ...minimal, checks: [{ type: 'document-field', field: 'name', pattern }] }).ok, pattern).toBe(true);
+    }
+    // What the matcher cannot match is refused at import, with the reason.
+    expect(errorsOf({ ...minimal, checks: [{ type: 'document-field', field: 'name', pattern: '(a)\\1' }] })[0]).toContain(
+      '"pattern" cannot be matched (back references are not supported)',
+    );
+    expect(errorsOf({ ...minimal, checks: [{ type: 'document-field', field: 'name', pattern: '(a{70}){70}' }] })[0]).toContain(
+      '"pattern" cannot be matched (too large once its counted repetitions are written out)',
+    );
   });
 
   it('rejects pattern/values on non-string package fields', () => {

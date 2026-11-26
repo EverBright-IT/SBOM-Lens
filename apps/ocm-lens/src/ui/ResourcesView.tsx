@@ -3,7 +3,7 @@ import clsx from 'clsx';
 import type { OcmArtifact, OcmCv, OcmTransport } from '@sbomlens/core/ocm';
 import { coveragePlaceKey } from '@sbomlens/core/ocm';
 import { useSbomEvidence } from '../app/evidence';
-import { extractBlob, runDigestChecks } from '../app/ingest';
+import { declaredDigest, extractBlob, runDigestChecks } from '../app/ingest';
 import { saveBytes } from '../app/download';
 import { useAppStore } from '../app/store';
 import { BUTTON_SECONDARY, Chip, KV, Section, formatBytes } from './bits';
@@ -250,11 +250,12 @@ function ArtifactDetail({ row }: { row: Row }) {
     setBusy(true);
     setDownloadError(null);
     try {
-      const bytes = await extractBlob(localReference);
-      if (!bytes) {
-        setDownloadError('The blob could not be read back from the archive.');
+      // Only bytes that match the declared digest come back.
+      const result = await extractBlob(localReference, declaredDigest(artifact.raw));
+      if ('reason' in result) {
+        setDownloadError(`Not saved: ${result.reason}.`);
       } else {
-        saveBytes(artifact.name, artifact.blob?.mediaType ?? 'application/octet-stream', bytes);
+        saveBytes(artifact.name, artifact.blob?.mediaType ?? 'application/octet-stream', result.bytes);
       }
     } finally {
       setBusy(false);

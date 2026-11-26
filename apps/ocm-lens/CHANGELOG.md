@@ -3,9 +3,62 @@
 OCM Lens 2.0 versions independently of the monorepo's 0.x line. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [Unreleased]
+## [2.3.3] - pre-release
+
+### Security
+- **An image, chart or artifact set matches only when every blob its
+  manifest names matches.** The digest of a stored image or chart, and an
+  `ociArtifactDigest/v1`, cover the manifest. The config and layers were
+  checked for presence and size only, so a layer swapped for other bytes of
+  the same length still read *match*, and the report said every declared
+  digest matched. Each blob is now hashed against the digest the manifest
+  records: a differing one is a mismatch, a missing one leaves the verdict
+  unchecked. Past the hash budget the verdict is pending, and "Check now"
+  judges the manifest and every layer.
+- **Stored images are recognised by their bytes, also in a large
+  delivery.** Whether a localBlob was an image or chart stored by value,
+  and so whether its layers were checked at all, went by the media type in
+  its access, which the signature does not cover: with that media type
+  changed, a swapped layer read *match* again. The walk and "Check now" now
+  recognise a manifest by its content. An image stored as an index (several
+  platforms, or build attestations) is checked down to every manifest and
+  layer the index names, where only the index itself was compared. And a
+  delivery past the in-memory budget (512 MB of archive entries) keeps its
+  structure: descriptors, descriptor manifests and the manifests of stored
+  images that came later in the archive were skipped without a word, so
+  component versions went missing and a stored image was judged by its
+  manifest alone. They are now read on demand.
+- **A digest mismatch shows on the dashboard and opens the report's
+  verdict.** The verdict answers transport only, so a delivery whose bytes
+  differ from their descriptor still read *self-contained*, and the mismatch
+  appeared only in Verify and in the report's integrity section. The
+  dashboard now shows the number of mismatches as a red chip that leads to
+  Verify, also after a deferred check finds one, and the report's Verdict
+  section names them first. The JSON keeps its shape.
+- **A download or a delivery's VEX is the blob the check vouched for.** An
+  archive can carry several entries under one blob name. The digest check
+  judged one of them, while a download and the reading of a VEX or CSAF
+  document took the first one found, which could be another. Every entry
+  under the name is now held against the resource's declared digest and
+  only a matching one is handed out; without a digest, differing entries
+  are refused as ambiguous. Repeated archive entries are reported.
+- **A reference copy that cannot be compared no longer hides one that
+  differs.** When a delivery carried the referenced component version more
+  than once, the first copy without artifact digests ended the comparison as
+  unchecked, though a later copy provably differed from the recorded digest.
+  Every copy is now compared, and a provable mismatch wins.
+- **The normal form hashes a `__proto__` key like any other key.** A label
+  value or an identity attribute named `__proto__` fell out of the bytes the
+  signature check hashes, so content under it could change without changing
+  the verdict, and the view showed it as signed. Such keys are now hashed as
+  the ocm CLI hashes them.
 
 ### Fixed
+- **The OCI empty config is not missing.** An artifact stored by value
+  whose manifest names the empty config read incomplete when the archive
+  left that blob out, though its bytes follow from its digest. And a JSON
+  resource shaped a little like a manifest is no longer taken for one by
+  "Check now", where it read unchecked.
 - **Inherited from the shared core (SBOM Lens 0.29.14).** SPDX 3 SBOM
   resources read lifecycle-scoped dependencies and structured licence sets,
   and CycloneDX resources read a component without dependencies as such, so

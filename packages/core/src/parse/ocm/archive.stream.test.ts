@@ -5,6 +5,7 @@ import { loadFixture } from '../../test-fixtures';
 import { blobSource, bufferSource } from '../../util/bytesource';
 import { readTarFrom } from '../../util/tar';
 import { readOcmDeliveryFrom } from './archive';
+import { cd as descriptorText, ctfOf } from './test-ctf';
 
 /**
  * Large-delivery behaviour: blobs past the materialization cap are indexed
@@ -307,3 +308,49 @@ function concatBytes(...parts: Uint8Array[]): Uint8Array {
   }
   return out;
 }
+
+describe('readOcmDeliveryFrom: structure past the materialization budget', () => {
+  // The tar reader loads nothing; the walk reads the artifact index,
+  // descriptor manifests and descriptors on demand, so a delivery larger
+  // than the budget keeps every component version.
+  const NOTHING = { materializeTotalMax: 0 };
+
+  it('reads every component version of a CTF', async () => {
+    const ctf = ctfOf([descriptorText('acme.org/a', '1.0.0', []), descriptorText('acme.org/b', '2.0.0', [])]);
+    const result = await readOcmDeliveryFrom('big.ctf.tar', bufferSource(ctf), NOTHING);
+    expect(result.documents.map((d) => d.document.name).sort()).toEqual(['acme.org/a', 'acme.org/b']);
+    expect(result.diagnostics.filter((d) => d.severity !== 'info')).toEqual([]);
+  });
+
+  it('reads the descriptor of a component archive', async () => {
+    const tar: Uint8Array = writeTar([
+      { name: 'component-descriptor.yaml', bytes: descriptorText('acme.org/archive', '1.0.0', []) },
+    ]);
+    const result = await readOcmDeliveryFrom('big.tar', bufferSource(tar), NOTHING);
+    expect(result.documents.map((d) => d.document.name)).toEqual(['acme.org/archive']);
+  });
+
+  it('reads the index and descriptor inside a nested artifact set', async () => {
+    const cd = descriptorText('acme.org/nested', '3.0.0', []);
+    const cdSha = await sha256HexOf(text(cd));
+    const setTar: Uint8Array = writeTar([
+      {
+        name: 'artifact-set-descriptor.json',
+        bytes: JSON.stringify({
+          layers: [{ mediaType: 'application/vnd.ocm.software.component-descriptor.v2+yaml', digest: `sha256:${cdSha}` }],
+        }),
+      },
+      { name: `blobs/sha256.${cdSha}`, bytes: cd },
+    ]);
+    const setSha = await sha256HexOf(setTar);
+    const ctf: Uint8Array = writeTar([
+      {
+        name: 'artifact-index.json',
+        bytes: JSON.stringify({ artifacts: [{ repository: 'acme.org/nested', tag: '3.0.0', digest: `sha256:${setSha}` }] }),
+      },
+      { name: `blobs/sha256.${setSha}`, bytes: setTar },
+    ]);
+    const result = await readOcmDeliveryFrom('nested.ctf', bufferSource(ctf), { materializeEntryMax: 1024, ...NOTHING });
+    expect(result.documents.map((d) => d.document.name)).toEqual(['acme.org/nested']);
+  });
+});

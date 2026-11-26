@@ -1,4 +1,5 @@
 import type { OcmBundle } from '@sbomlens/core/ocm';
+import { digestSummary } from '@sbomlens/core/ocm';
 import type { MainView } from '../app/store';
 import { useSbomEvidence } from '../app/evidence';
 import { useAppStore } from '../app/store';
@@ -38,6 +39,9 @@ export function Dashboard() {
   if (!delivery) return null;
   const { bundle, diagnostics } = delivery;
   const c = bundle.completeness;
+  // Transport and integrity are separate answers: a self-contained delivery
+  // can still carry bytes that differ from their descriptor.
+  const mismatches = digestSummary(bundle).mismatch.length;
 
   const signedCvs = bundle.componentVersions.filter((cv) => (cv.signatures?.length ?? 0) > 0).length;
   const issues = [...bundle.issues, ...diagnostics, ...(evidence?.findings ?? [])];
@@ -63,6 +67,16 @@ export function Dashboard() {
           <span className="rounded border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-[11px] text-amber-700 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-400">
             needs network to deploy
           </span>
+        )}
+        {mismatches > 0 && (
+          <button
+            type="button"
+            onClick={() => useAppStore.getState().actions.setView('verify')}
+            className="rounded border border-red-300 bg-red-50 px-1.5 py-0.5 text-[11px] font-medium text-red-700 hover:border-red-400 dark:border-red-800 dark:bg-red-950 dark:text-red-400"
+            title="The delivered bytes do not match the declared digest; see the Verify view"
+          >
+            {mismatches} digest mismatch{mismatches === 1 ? '' : 'es'}
+          </button>
         )}
         {bundle.digestsDeferred && (
           <button

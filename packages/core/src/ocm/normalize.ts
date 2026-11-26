@@ -56,7 +56,7 @@ export function normalizeDescriptor(
 }
 
 function normalizeComponent(component: Record<string, unknown>): Record<string, unknown> {
-  const out: Record<string, unknown> = {};
+  const out = plainMap();
   for (const [key, value] of Object.entries(component)) {
     if (key === 'repositoryContexts') continue; // excluded
     if (key === 'provider') {
@@ -92,7 +92,7 @@ function normalizeArtifacts(value: unknown, isResource: boolean): unknown[] {
   if (!Array.isArray(value)) return [];
   return value.map((entry) => {
     if (!isRecord(entry)) return entry;
-    const out: Record<string, unknown> = {};
+    const out = plainMap();
     for (const [key, v] of Object.entries(entry)) {
       if (key === 'access' || key === 'srcRefs') continue;
       if (key === 'labels') {
@@ -111,7 +111,7 @@ function normalizeReferences(value: unknown): unknown[] {
   if (!Array.isArray(value)) return [];
   return value.map((entry) => {
     if (!isRecord(entry)) return entry;
-    const out: Record<string, unknown> = {};
+    const out = plainMap();
     for (const [key, v] of Object.entries(entry)) {
       if (key === 'labels') {
         const labels = signedLabels(v);
@@ -130,7 +130,7 @@ function signedLabels(value: unknown): unknown[] {
   return value
     .filter((label): label is Record<string, unknown> => isRecord(label) && isSigning(label.signing))
     .map((label) => {
-      const out: Record<string, unknown> = {};
+      const out = plainMap();
       for (const key of ['name', 'version', 'value', 'signing'] as const) {
         if (label[key] !== undefined) out[key] = label[key];
       }
@@ -140,6 +140,16 @@ function signedLabels(value: unknown): unknown[] {
 
 function isSigning(v: unknown): boolean {
   return v === true || v === 'true';
+}
+
+/**
+ * An object without a prototype: every key the descriptor carries, `__proto__`
+ * included, lands as its own property and is hashed as the CLI hashes it.
+ * With a plain literal, assigning `__proto__` would set the prototype instead
+ * and drop the key and everything under it from the signed bytes.
+ */
+function plainMap(): Record<string, unknown> {
+  return Object.create(null) as Record<string, unknown>;
 }
 
 /** provider is serialised as a map; a bare string becomes `{ name }`. */
@@ -161,7 +171,7 @@ function serialize(value: unknown): string {
 function sortKeys(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(sortKeys);
   if (isRecord(value)) {
-    const out: Record<string, unknown> = {};
+    const out = plainMap();
     for (const key of Object.keys(value).sort()) out[key] = sortKeys(value[key]);
     return out;
   }

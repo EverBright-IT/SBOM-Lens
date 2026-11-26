@@ -36,10 +36,13 @@ export interface SbomAnalysisItem {
   bytes: Uint8Array;
 }
 
-/** A VEX or CSAF document to read: bytes the reader added, or a blob of the delivery. */
+/**
+ * A VEX or CSAF document to read: bytes the reader added, or a blob of the
+ * delivery with the resource's declared digest, which the bytes must match.
+ */
 export type VexReadItem = { key: string; fileName: string } & (
   | { bytes: Uint8Array }
-  | { localReference: string }
+  | { localReference: string; declared?: Record<string, unknown> }
 );
 
 export type VexReadResult = { document: VexDocument } | { reason: string };
@@ -62,8 +65,11 @@ export interface DigestCheckResult {
 
 export type WorkerRequest =
   | ({ kind: 'bundle'; id: number; options?: BundleWalkOptions } & JobSource)
-  /** Pull one blob back out of the delivery (download-on-demand). */
-  | ({ kind: 'extract'; id: number; localReference: string } & JobSource)
+  /**
+   * Pull one blob back out of the delivery (download-on-demand). `declared`
+   * is the resource's digest node: only bytes that match it are returned.
+   */
+  | ({ kind: 'extract'; id: number; localReference: string; declared?: Record<string, unknown> } & JobSource)
   /** Check deferred digests on demand; progress per blob. */
   | ({ kind: 'digests'; id: number; checks: DigestCheckRequest[] } & JobSource)
   /**

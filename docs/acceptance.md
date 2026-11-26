@@ -25,7 +25,8 @@ Per file, matched by relative path:
 - **match** (emerald) — the delivered bytes hash to the checksum the SBOM
   declares.
 - **mismatch** (red) — a file is present but its digest differs: tampered or
-  corrupt. The detail pane shows declared vs. actual.
+  corrupt. The detail pane shows declared vs. actual. Also a file that
+  several delivered files read as (*ambiguous*, see below).
 - **missing** (amber) — the SBOM describes the file, but it was not
   delivered.
 - **unverifiable** (slate) — the SBOM file has no checksum, or none in an
@@ -47,6 +48,13 @@ with the chosen folder's name — that single shared root segment is stripped
 so the paths line up with the SBOM. Files whose paths do not line up show as
 *missing* (SBOM side) and *extra* (delivery side) rather than silently
 matching.
+
+A backslash counts as a path separator, so `lib\x.so` lines up with an SBOM
+entry `./lib/x.so`. On Linux and macOS a backslash is also an ordinary
+file-name character, and a delivery can carry both `lib\x.so` and
+`lib/x.so`. Neither is picked: the SBOM file reads **mismatch** with the
+reason *ambiguous*, and the report names every delivered path that reads as
+it.
 
 ## Limits (deliberate)
 

@@ -57,8 +57,10 @@ export function profileReportToMarkdown(
       const c = result.coverage!;
       const threshold = c.threshold === undefined ? '-' : `≥ ${c.threshold}%`;
       const verdict = c.threshold === undefined ? 'info' : result.pass ? 'pass' : '**fail**';
+      // A meter whose pattern was not evaluated says so next to its verdict.
+      const note = result.actual ? ` (${result.actual})` : '';
       const percent = c.total === 0 ? 'none in scope' : `${c.percent}%`;
-      lines.push(`| ${result.label} | ${c.satisfied}/${c.total} | ${percent} | ${threshold} | ${verdict} |`);
+      lines.push(`| ${result.label} | ${c.satisfied}/${c.total} | ${percent} | ${threshold} | ${verdict}${note} |`);
     }
     lines.push('');
   };

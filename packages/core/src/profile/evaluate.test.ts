@@ -77,20 +77,69 @@ describe('evaluateProfile — document checks', () => {
     expect(resultById(report, 'some').pass).toBe(true);
   });
 
-  it('does not hang on a catastrophic pattern that slipped past validation', () => {
-    // validateProfile rejects nested-unbounded-quantifier patterns at import.
-    // A profile persisted before that gate could still reach here, so the
-    // pattern must not run: it is treated as unconstrained, the same as an
-    // un-compilable pattern, never a frozen UI thread.
-    const { ws, loaded } = docFrom({ creators: ['Organization: ACME Corporation and friends'] });
-    const started = Date.now();
-    const report = evaluateProfile(
-      ws,
-      loaded,
-      profileOf({ id: 'evil', type: 'document-field', field: 'creators', pattern: '^(([a-z0-9 :.-])+)+X$' }),
+  it('answers a pattern that RegExp backtracks on for hours, at once and correctly', () => {
+    // Patterns are matched without backtracking (pattern-matcher.ts), so the
+    // shapes that froze the page are ordinary patterns now.
+    const patterns = ['^(([a-z0-9 :.-])+)+X$', '^(a|a)+$', '(a+){8}$', `^${'(?:\\w|\\d)'.repeat(40)}$`, '^a*a*b*b*c*c*d*d*$'];
+    const { ws, loaded } = docFrom({
+      creators: ['Organization: ACME Corporation and friends', `${'a'.repeat(40)}!`, `${'1'.repeat(40)}-rc1`],
+    });
+    for (const pattern of patterns) {
+      const started = Date.now();
+      const report = evaluateProfile(ws, loaded, profileOf({ id: 'evil', type: 'document-field', field: 'creators', pattern }));
+      expect(Date.now() - started, pattern).toBeLessThan(1000);
+      expect(resultById(report, 'evil').pass, pattern).toBe(false);
+    }
+    const hit = docFrom({ creators: ['a'.repeat(40)] });
+    for (const pattern of ['^(a|a)+$', '(a+){8}$', '^a*a*b*b*c*c*d*d*$']) {
+      const report = evaluateProfile(hit.ws, hit.loaded, profileOf({ id: 'fine', type: 'document-field', field: 'creators', pattern }));
+      expect(resultById(report, 'fine').pass, pattern).toBe(true);
+    }
+  });
+
+  it('does not pass a pattern that cannot be matched', () => {
+    // validateProfile refuses a back reference at import. A profile persisted
+    // before that gate could still reach here: the pattern does not run, and
+    // a check whose pattern did not run is not satisfied.
+    const { ws, loaded } = docFrom({ creators: ['Organization: aa'] });
+    const report = evaluateProfile(ws, loaded, profileOf({ id: 'ref', type: 'document-field', field: 'creators', pattern: '(a)\\1' }));
+    expect(resultById(report, 'ref').pass).toBe(false);
+  });
+
+  it('matches a pattern on a value of any length', () => {
+    const far = 'Organization: ' + 'x'.repeat(200_000) + 'foo';
+    const { ws, loaded } = docFrom({ creators: [far] });
+    for (const pattern of ['.*foo.*', '^Organization: x+foo$', '(x+x+)+foo$']) {
+      const report = evaluateProfile(ws, loaded, profileOf({ id: 'q', type: 'document-field', field: 'creators', pattern }));
+      expect(resultById(report, 'q').pass, pattern).toBe(true);
+    }
+  });
+
+  it('reports a check as not evaluated once the pattern work of one report is used up', () => {
+    const { ws, loaded } = docFrom({
+      creators: [`${'a'.repeat(5000)}x`],
+      packages: [{ version: '1.0.0' }, { version: '2.0.0' }],
+    });
+    const profile = profileOf(
+      { id: 'heavy', type: 'document-field', field: 'creators', pattern: '.*.*.*x' },
+      { id: 'after', type: 'package-coverage', field: 'version', pattern: '^\\d', threshold: 100 },
+      { id: 'plain', type: 'document-field', field: 'namespace' },
     );
-    expect(Date.now() - started).toBeLessThan(1000);
-    expect(resultById(report, 'evil').pass).toBe(true);
+    // With the allowance of a real report every check is evaluated.
+    const full = evaluateProfile(ws, loaded, profile);
+    expect(full.results.map((r) => [r.id, r.pass])).toEqual([
+      ['heavy', true],
+      ['after', true],
+      ['plain', true],
+    ]);
+    // With too little, the pattern checks fail and say why; the others are untouched.
+    const short = evaluateProfile(ws, loaded, profile, { patternWork: 10_000 });
+    const note = 'not evaluated: the pattern work limit of one report was reached';
+    expect(resultById(short, 'heavy')).toMatchObject({ pass: false, actual: note });
+    expect(resultById(short, 'after')).toMatchObject({ pass: false, actual: note, coverage: { satisfied: 0, total: 2 } });
+    expect(resultById(short, 'plain').pass).toBe(true);
+    expect(short.gatedFailed).toBe(2);
+    expect(profileReportToMarkdown(short, { docName: 'doc' })).toContain(`**fail** (${note})`);
   });
 
   it('relationships minCount and created-recency with injected clock', () => {

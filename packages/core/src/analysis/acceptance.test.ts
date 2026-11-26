@@ -37,6 +37,24 @@ function delivered(path: string, digests: Record<string, string>, size = 10): De
 }
 
 describe('checkDelivery', () => {
+  it('calls two delivered files that share one path ambiguous, never a match, and names both', () => {
+    const ws = fileWorkspace(['./lib/x.so', [['SHA256', A_SHA256]]]);
+    // A backslash is an ordinary file-name character on Linux and macOS:
+    // both files are delivered, and both read as lib/x.so.
+    for (const order of [
+      [delivered('lib\\x.so', { SHA256: B_SHA256 }), delivered('lib/x.so', { SHA256: A_SHA256 })],
+      [delivered('lib/x.so', { SHA256: A_SHA256 }), delivered('lib\\x.so', { SHA256: B_SHA256 })],
+    ]) {
+      const report = checkDelivery(ws, order);
+      const file = report.files[0]!;
+      expect(file.verdict).toBe('mismatch');
+      expect(file.reason).toContain('ambiguous');
+      expect([...file.delivered!].sort()).toEqual(['lib/x.so', 'lib\\x.so']);
+      expect(report.extra).toEqual([]);
+      expect(report.summary).toMatchObject({ match: 0, mismatch: 1, extra: 0, total: 1 });
+    }
+  });
+
   it('matches, mismatches, and flags missing files', () => {
     const ws = fileWorkspace(
       ['./src/app.js', [['SHA256', A_SHA256]]],

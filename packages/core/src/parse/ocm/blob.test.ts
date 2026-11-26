@@ -129,16 +129,52 @@ describe('checkDeclaredDigest — per-resource verdicts', () => {
     expect(await checkDeclaredDigest(subjects, generic('9'.repeat(64)))).toBe('mismatch');
   });
 
-  it('matches ociArtifactDigest/v1 against the manifest bytes', async () => {
-    const manifest = JSON.stringify({ schemaVersion: 2, layers: [{ digest: 'sha256:aa', size: 1 }] });
-    const tar: Uint8Array = writeTar([{ name: 'artifact-set-descriptor.json', bytes: manifest }]);
-    const { subjects } = await inspectBlob(tar, undefined);
-    const verdict = await checkDeclaredDigest(subjects, {
+  /** An OCI artifact set: the manifest names a config and a layer by digest; `layer` is what the tar carries. */
+  async function artifactSet(layer: 'intact' | 'altered' | 'missing') {
+    const config = enc('{"name":"chart","version":"1.0.0"}');
+    const content = enc('pretend this is a chart tgz');
+    const manifest = JSON.stringify({
+      schemaVersion: 2,
+      config: { digest: `sha256:${await sha256Of(config)}`, size: config.length },
+      layers: [{ digest: `sha256:${await sha256Of(content)}`, size: content.length }],
+    });
+    const altered = enc('pretend this is a chart TGZ');
+    const tar: Uint8Array = writeTar([
+      { name: 'artifact-set-descriptor.json', bytes: manifest },
+      { name: `blobs/sha256.${await sha256Of(config)}`, bytes: config },
+      ...(layer === 'missing'
+        ? []
+        : [
+            {
+              name: `blobs/sha256.${await sha256Of(content)}`,
+              bytes: layer === 'altered' ? altered : content,
+            },
+          ]),
+    ]);
+    const declared = {
       hashAlgorithm: 'SHA-256',
       normalisationAlgorithm: 'ociArtifactDigest/v1',
       value: await sha256Of(enc(manifest)),
-    });
-    expect(verdict).toBe('match');
+    };
+    return { tar, declared };
+  }
+
+  it('matches ociArtifactDigest/v1 against the manifest bytes and the blobs it names', async () => {
+    const { tar, declared } = await artifactSet('intact');
+    const { subjects } = await inspectBlob(tar, undefined);
+    expect(await checkDeclaredDigest(subjects, declared)).toBe('match');
+  });
+
+  it('calls an artifact set whose layer does not match its recorded digest a mismatch, though the manifest matches', async () => {
+    const { tar, declared } = await artifactSet('altered');
+    const { subjects } = await inspectBlob(tar, undefined);
+    expect(await checkDeclaredDigest(subjects, declared)).toBe('mismatch');
+  });
+
+  it('cannot judge an artifact set whose layer is missing', async () => {
+    const { tar, declared } = await artifactSet('missing');
+    const { subjects } = await inspectBlob(tar, undefined);
+    expect(await checkDeclaredDigest(subjects, declared)).toBe('unchecked');
   });
 
   it('never guesses: unknown normalisation or hash stays unchecked, absent digest stays absent', async () => {

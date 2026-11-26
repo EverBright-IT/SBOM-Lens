@@ -38,6 +38,35 @@ describe('normalizeDescriptor — gold value against the ocm CLI', () => {
       normalizeDescriptor({ component: { name: 'x', version: '1', value: 1.5 } }, 'jsonNormalisation/v4alpha1'),
     ).toThrow();
   });
+
+  it('hashes a __proto__ key like any other key, as the CLI does', async () => {
+    // Built with `ocm add cv` (0.21.0) from a constructor whose signed label
+    // value carries the key; `ocm sign cv --dry-run` recorded the digest below.
+    const signedLabel = '{"name":"probe","value":{"__proto__":{"a":1},"b":2},"signing":true}';
+    const probe = (label: string, extraIdentity = '') =>
+      JSON.parse(
+        `{"meta":{"schemaVersion":"v2"},"component":{"name":"example.org/proto-probe","version":"1.0.0",` +
+          `"labels":[${label}],"repositoryContexts":null,"provider":"example.org","resources":[{"name":"data",` +
+          `"version":"1.0.0","type":"plainText","relation":"local"${extraIdentity},"access":{"localReference":` +
+          `"sha256:5891b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be03","mediaType":"text/plain; charset=utf-8",` +
+          `"type":"LocalBlob/v1"},"digest":{"hashAlgorithm":"SHA-256","normalisationAlgorithm":"genericBlobDigest/v1",` +
+          `"value":"5891b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be03"}}],"sources":null,"componentReferences":null}}`,
+      ) as Record<string, unknown>;
+    const digestOf = async (descriptor: Record<string, unknown>) =>
+      hashHex('SHA-256', normalizeDescriptor(descriptor, 'jsonNormalisation/v4alpha1'));
+
+    const bytes = normalizeDescriptor(probe(signedLabel), 'jsonNormalisation/v4alpha1');
+    expect(new TextDecoder().decode(bytes)).toContain('"__proto__":{"a":1}');
+    expect(await digestOf(probe(signedLabel))).toBe('1b75b8cf9ef8527c6d8c750d9d62f07d5fe6098783df77a839e27be7df47d065');
+    // What sits under the key is signed: a changed value is a different digest.
+    expect(await digestOf(probe(signedLabel.replace('"a":1', '"a":2')))).not.toBe(
+      await digestOf(probe(signedLabel)),
+    );
+    // The same for an identity attribute of that name.
+    expect(await digestOf(probe(signedLabel, ',"extraIdentity":{"__proto__":"x"}'))).not.toBe(
+      await digestOf(probe(signedLabel, ',"extraIdentity":{"__proto__":"y"}')),
+    );
+  });
 });
 
 describe('spkiFromPem', () => {
@@ -205,5 +234,23 @@ describe('referenceDigestChecker', () => {
     const b = cv('acme.org/b', [await referenceTo(a)]);
     (a.component.componentReferences as unknown[]).push(await referenceTo(b));
     expect((await check(a, a, b)).verdict).not.toBe('match');
+  });
+
+  it('lets a provable mismatch win over a copy it cannot compare, in either order', async () => {
+    const top = cv('acme.org/top', [await referenceTo(cv('acme.org/leaf'))]);
+    const swapped = cv('acme.org/leaf', [], [{ name: 'extra', digest: { value: 'ab' } }]);
+    const gaps = {
+      'records no artifact digests': cv('acme.org/leaf', [], [{ name: 'data', type: 'plainText' }]),
+      'cannot be normalised': cv('acme.org/leaf', [], [{ name: 'data', digest: { value: 'ab' }, size: 1.5 }]),
+    };
+    for (const [why, gap] of Object.entries(gaps)) {
+      expect((await referenceDigestChecker(delivery(gap))(top)).reason, why).toContain(why.split(' ')[0]);
+      for (const order of [
+        [gap, swapped],
+        [swapped, gap],
+      ]) {
+        expect((await referenceDigestChecker(delivery(...order))(top)).verdict, why).toBe('mismatch');
+      }
+    }
   });
 });

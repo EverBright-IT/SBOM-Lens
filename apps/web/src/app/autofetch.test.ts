@@ -243,6 +243,24 @@ describe('fetchAllReferences', () => {
     ]);
   });
 
+  it('never follows a file: or data: reference, though both sides read origin "null"', async () => {
+    // The origin rule alone would call two opaque addresses one origin. What
+    // keeps them apart is the scheme filter of the fetch plan: only http,
+    // https and relative references are candidates. This pins that.
+    for (const [root, child] of [
+      ['file:///sboms/root.spdx.json', 'file:///sboms/child.spdx.json'],
+      ['data:application/json,root', 'data:application/json,child'],
+    ] as const) {
+      useAppStore.getState().actions.clearAll();
+      served = {};
+      requested = [];
+      serve(root, [child]);
+      serve(child);
+      await loadCatalogSource({ label: 'Opaque', urls: [root], resolveRefs: true });
+      expect(requested, root).toEqual([root]);
+    }
+  });
+
   it('lets a second catalog source join the cascade that is already running', async () => {
     serve('https://a.test/root.spdx.json', ['https://a.test/child.spdx.json']);
     serve('https://a.test/child.spdx.json');

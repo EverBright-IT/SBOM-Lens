@@ -34,9 +34,13 @@ in a worker; files never leave the machine.
   Versioned access spellings from the current CLI (`LocalBlob/v1`) classify
   like their base type. An image or Helm chart stored by value (what
   `ocm transfer --copy-resources` and `input: helm` write) is a localBlob
-  whose bytes are an OCI manifest: it counts as `transported` only when
-  every blob the manifest names is in the archive at the declared size,
-  otherwise it is `broken` with `OCM_ARTIFACT_INCOMPLETE`.
+  whose bytes are an OCI manifest, or an index over several manifests
+  (platforms, build attestations). It is recognised by those bytes, not by
+  the media type its access declares, which the signature does not cover.
+  It counts as `transported` only when every blob below it is in the
+  archive at the declared size (the OCI empty config excepted: its bytes
+  follow from its digest), otherwise it is `broken` with
+  `OCM_ARTIFACT_INCOMPLETE`.
 - **CLI archive layout** (ocm CLI 0.13): a component version with stored
   artifacts is tagged as an OCI index around its descriptor manifest and
   the artifacts' manifests, and those manifests are listed untagged as
@@ -58,8 +62,8 @@ opened.
 ## The views (apps/ocm-lens)
 
 - **Dashboard**: the delivery at a glance - CV/root counts, archive size and
-  dedup, transported vs external vs broken, reference closure, signatures
-  and SBOM coverage, findings. Every card jumps into the view that explains
+  dedup, transported vs external vs broken, digest mismatches, reference
+  closure, signatures and SBOM coverage, findings. Every card jumps into the view that explains
   it.
 - **Components**: the reference graph as navigation (roots first, diamonds
   badged, cycles broken visibly), with the CV detail in spec vocabulary and
@@ -68,7 +72,11 @@ opened.
   artifact detail with access spec, digest verdict, content previews
   (helm/OCI/text/hex from the load-time inspection), SBOM download, and
   blob download-on-demand (`extractDeliveryBlob` re-reads the archive; the
-  viewer never hoards blob bytes).
+  viewer never hoards blob bytes). A download, like a delivery's VEX or
+  CSAF document, hands out only a blob that matches the resource's declared
+  digest; an archive that carries several different blobs under the name
+  without a digest to tell them apart is refused as ambiguous, and repeated
+  archive entries are reported.
 - **SBOMs** (2.1): every embedded SBOM tied to the artifact it describes,
   graded by what matched, with a fact sheet per SBOM (see below).
 - **Packages** (2.2): every package the SBOMs list, with the artifact it
@@ -83,7 +91,9 @@ opened.
   export. A signature reads *valid* only when the component versions the
   signed descriptor references are part of the delivery and match the
   digests it records; a differing one makes it *invalid*, a missing one
-  *unverifiable*.
+  *unverifiable*. When the delivery carries a referenced component version
+  more than once, every copy is compared, and one that provably differs
+  wins over one that cannot be compared.
 
 ## SBOM evidence (2.1)
 
@@ -236,7 +246,11 @@ self-contained; needs network to deploy (external access, references
 outside the bundle, unknown access types); or incomplete delivery (a
 localBlob missing or cut short), which outranks the other two because no
 network brings such a blob back. The JSON keeps `airGapReady` plus the
-reasons, broken ones first.
+reasons, broken ones first. That verdict answers transport only, so when
+delivered bytes differ from their descriptor the Verdict section opens with
+the number of digest mismatches, ahead of the transport answer, and the
+dashboard shows them as a red chip that leads to Verify; the JSON lists them
+under `digests.mismatch` and keeps its shape.
 
 ## The demo delivery
 
@@ -322,6 +336,13 @@ the last pre-release.
   of archive size. Entries larger than **8 GiB** are supported in both
   spellings real tools write (GNU base-256 and Go's PAX `size` records;
   the ocm CLI is Go).
+- **Structure is read wherever it sits.** Entries are held in memory up to
+  **512 MB** per archive. The structure past that point (the artifact
+  index, descriptor manifests, descriptors, the manifests of stored
+  images) is read on demand, so a large delivery keeps every component
+  version and every stored image is judged with all its layers. A manifest
+  larger than **4 MiB** (what registries accept) is not read as one; a
+  descriptor larger than **64 MB** is reported, not read.
 - **Digest checking is budgeted.** The one full-byte read the walk performs
   (hashing declared localBlobs for their verdict) stops at **256 MB** per
   open; beyond it, verdicts open as `pending` and the dashboard says so.
@@ -363,10 +384,17 @@ the last pre-release.
   with that checksum, never a file entry (it then shows as a statement
   without a package). SBOMs and VEX documents attached to images as OCI
   referrers are not read.
-- Stored images are checked for completeness (every layer present, at the
-  declared size), not hashed layer by layer: the resource digest covers
-  the manifest, which pins each layer by digest, and a registry verifies
-  layer digests when the delivery is imported.
+- Stored images and charts are checked byte by byte: the resource digest
+  covers the manifest or index, and every blob below it (the manifests an
+  index names, every config and layer) is hashed against the digest
+  recorded for it. A blob that differs makes the verdict a mismatch, a
+  missing one makes the resource incomplete, and a manifest named by an
+  index that cannot be read as one leaves the verdict unchecked. The
+  layers count against the hash budget; past it the verdict is `pending`
+  until "Check now". An OCI artifact set packed into one blob
+  (`ociArtifactDigest/v1`) is held to the same rule. Layer digests other
+  than SHA-256 (SHA-512 inside an artifact set) leave the verdict
+  unchecked.
 - Archive limits are inherited from the shared walker (see
   [docs/ocm.md](ocm.md)): entry caps, preview caps.
 - One delivery at a time; delivery-to-delivery diff is on the 2.x roadmap.

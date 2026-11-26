@@ -196,6 +196,15 @@ export function acceptanceReport(input: AcceptanceReportInput): AcceptanceReport
   push();
   push('## Verdict');
   push();
+  // Delivered bytes that differ from their descriptor come first: the
+  // transport answer below says nothing about whether the bytes are right.
+  if (digests.mismatch.length > 0) {
+    const n = digests.mismatch.length;
+    push(
+      `**${n} DIGEST MISMATCH${n === 1 ? '' : 'ES'}.** The delivered bytes do not match the declared digest for ${n} resource${n === 1 ? '' : 's'} (see Integrity below).`,
+    );
+    push();
+  }
   // Broken outranks external: no network brings back a localBlob the
   // delivery lost or cut short.
   push(

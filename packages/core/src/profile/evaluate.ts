@@ -6,7 +6,8 @@ import { licenseIdsInExpression } from '../parse/spec-lint';
 import { isDeprecatedLicenseId, isKnownLicenseId } from '../spec/spdx-license-ids';
 import type { LoadedDocument, WorkspaceState } from '../workspace/workspace';
 import type { ComplianceProfile, CryptoField, DocumentField, PackageField, ProfileCheck, ProfileSpecBaseline } from './model';
-import { isUnsafeRegexPattern } from './regex-safety';
+import type { PatternBudget, PatternMatcher } from './pattern-matcher';
+import { compilePattern } from './pattern-matcher';
 
 /**
  * Profile evaluation. Field semantics live in the two extractors below and
@@ -30,7 +31,10 @@ export interface ProfileCheckResult {
   label: string;
   kind: 'boolean' | 'coverage';
   pass: boolean;
-  /** Boolean checks: the observed value, truncated, for tooltips/reports. */
+  /**
+   * Boolean checks: the observed value, truncated, for tooltips/reports. On
+   * any check: the reason its pattern was not evaluated (the check fails).
+   */
   actual?: string;
   coverage?: CoverageStat;
   /** v4: a boolean check the profile marked as a meter; reported, never gated. */
@@ -62,14 +66,27 @@ const MS_PER_DAY = 86_400_000;
 const ACTUAL_MAX = 120;
 
 /**
+ * Matching work one report may spend on its patterns, in matcher steps (one
+ * automaton state looked at for one position of a value). Patterns are
+ * matched in linear time, but pattern size times the text of every value
+ * still has no ceiling of its own: this is it. A report on a large document
+ * with ordinary patterns uses a small fraction; past the limit the checks
+ * that still have a pattern to match are reported as not evaluated, the same
+ * on every machine, instead of holding the page.
+ */
+export const PATTERN_WORK_MAX = 200_000_000;
+const PATTERN_WORK_NOTE = 'not evaluated: the pattern work limit of one report was reached';
+
+/**
  * `ws` is unused by v1 checks but stays in the signature for future
- * resolution-based checks; `opts.now` makes created-recency deterministic.
+ * resolution-based checks; `opts.now` makes created-recency deterministic,
+ * `opts.patternWork` replaces PATTERN_WORK_MAX.
  */
 export function evaluateProfile(
   ws: WorkspaceState,
   loaded: LoadedDocument,
   profile: ComplianceProfile,
-  opts?: { now?: number },
+  opts?: { now?: number; patternWork?: number },
 ): ProfileReport {
   void ws;
   const doc = loaded.document;
@@ -80,6 +97,9 @@ export function evaluateProfile(
   const cryptoElements = doc.elements.filter((el): el is CryptoElement => el.crypto !== undefined);
   // Refs between assets (a certificate to its signature algorithm) resolve by bom-ref.
   const cryptoByRef: ReadonlyMap<string, CryptoElementExt> = new Map(cryptoElements.map((el) => [el.spdxId, el.crypto]));
+  // One allowance of matching work for the whole report, shared by its checks.
+  const work: PatternBudget = { remaining: opts?.patternWork ?? PATTERN_WORK_MAX };
+  const stopped = (check: { pattern?: string }) => check.pattern !== undefined && work.exhausted === true;
 
   // Preconditions gate FIRST: a requirement source that only accepts a
   // format must show that mismatch as a failing check, not bury it in the
@@ -105,7 +125,8 @@ export function evaluateProfile(
       case 'document-field': {
         const value = extractDocumentField(doc, check.field);
         const present = Array.isArray(value) ? value.length > 0 : Boolean(value);
-        const pass = present && matchesModifiers(value, check.pattern, check.values);
+        const pass = present && matchesModifiers(value, work, check.pattern, check.values);
+        if (stopped(check)) return { id, label, kind: 'boolean', pass: false, actual: PATTERN_WORK_NOTE, ...meter };
         return { id, label, kind: 'boolean', pass, actual: renderActual(value), ...meter };
       }
       case 'relationships': {
@@ -139,7 +160,7 @@ export function evaluateProfile(
           const present = typeof value === 'boolean' ? value : Boolean(value);
           if (
             present &&
-            matchesModifiers(value, check.pattern, check.values) &&
+            matchesModifiers(value, work, check.pattern, check.values) &&
             licenseIdsSatisfied(value, check.licenseIds, check.allowDeprecated, dialect)
           ) {
             satisfied++;
@@ -153,7 +174,8 @@ export function evaluateProfile(
           id,
           label,
           kind: 'coverage',
-          pass,
+          pass: pass && !stopped(check),
+          ...(stopped(check) ? { actual: PATTERN_WORK_NOTE } : {}),
           coverage: { satisfied, total, percent, threshold: check.threshold },
         };
       }
@@ -172,7 +194,7 @@ export function evaluateProfile(
         for (const el of scope) {
           const value = extractCryptoField(el, check.field, cryptoByRef);
           const present = typeof value === 'boolean' ? value : Boolean(value);
-          if (present && matchesModifiers(value, check.pattern, check.values, { caseInsensitiveValues: true })) satisfied++;
+          if (present && matchesModifiers(value, work, check.pattern, check.values, { caseInsensitiveValues: true })) satisfied++;
         }
         const total = scope.length;
         const percent = total === 0 ? 100 : Math.round((satisfied / total) * 100);
@@ -182,7 +204,8 @@ export function evaluateProfile(
           label,
           kind: 'coverage',
           subject: 'crypto',
-          pass,
+          pass: pass && !stopped(check),
+          ...(stopped(check) ? { actual: PATTERN_WORK_NOTE } : {}),
           coverage: { satisfied, total, percent, threshold: check.threshold },
         };
       }
@@ -447,6 +470,7 @@ function extractPackageField(
  */
 function matchesModifiers(
   value: string | string[] | boolean | undefined,
+  work: PatternBudget,
   pattern?: string,
   values?: string[],
   opts?: { caseInsensitiveValues?: boolean },
@@ -454,28 +478,33 @@ function matchesModifiers(
   if (pattern === undefined && values === undefined) return true;
   if (typeof value === 'boolean' || value === undefined) return true;
   const candidates = Array.isArray(value) ? value : [value];
-  const regex = safeRegex(pattern);
+  const matcher = pattern === undefined ? undefined : compiledPattern(pattern);
   const fold = (s: string) => (opts?.caseInsensitiveValues ? s.toLowerCase() : s);
   const allowed = values?.map(fold);
   return candidates.some(
     (candidate) =>
-      (regex === null || regex.test(candidate)) &&
+      (matcher === undefined || (matcher !== null && matcher.test(candidate, work))) &&
       (allowed === undefined || allowed.includes(fold(candidate))),
   );
 }
 
-function safeRegex(pattern: string | undefined): RegExp | null {
-  if (pattern === undefined) return null;
-  // Defence in depth: validation rejects catastrophic patterns at import, but a
-  // profile persisted before that gate existed could still reach here. A
-  // nested-unbounded-quantifier pattern is never run; the check is treated as
-  // non-matching rather than freezing the UI thread.
-  if (isUnsafeRegexPattern(pattern)) return null;
-  try {
-    return new RegExp(pattern);
-  } catch {
-    return null; // validation already rejected this; defensive only
-  }
+const compiledPatterns = new Map<string, PatternMatcher | null>();
+
+/**
+ * A pattern compiled once, or null when it cannot be matched (a back
+ * reference, say). Validation refuses such patterns at import, but a profile
+ * persisted before a gate existed can still reach here: a pattern that does
+ * not run matches nothing, because a check whose pattern did not run has not
+ * been satisfied. No pattern reaches RegExp (see pattern-matcher.ts).
+ */
+function compiledPattern(pattern: string): PatternMatcher | null {
+  const known = compiledPatterns.get(pattern);
+  if (known !== undefined) return known;
+  const compiled = compilePattern(pattern);
+  const matcher = compiled.ok ? compiled.matcher : null;
+  if (compiledPatterns.size >= 256) compiledPatterns.clear();
+  compiledPatterns.set(pattern, matcher);
+  return matcher;
 }
 
 function renderActual(value: string | string[] | undefined): string {

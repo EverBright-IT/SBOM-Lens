@@ -13,7 +13,19 @@ import {
   readSbomPackages,
   readVexDocument,
 } from '@sbomlens/core/ocm';
+import type { BlobExtraction } from '@sbomlens/core/ocm';
 import type { DigestCheckResult, VexReadResult, WorkerRequest, WorkerResponse } from './protocol';
+
+type ExtractionFailure = Extract<BlobExtraction, { ok: false }>['reason'];
+
+/** Why a blob could not be read back, in words the views show as they are. */
+const EXTRACTION_FAILURE: Record<ExtractionFailure, string> = {
+  'not-found': 'the blob is not in the archive',
+  'too-large': 'the blob is too large to read back',
+  unreadable: 'the archive could not be read again',
+  mismatch: 'the blob in the archive does not match its declared digest',
+  ambiguous: 'the archive holds different blobs under this name',
+};
 
 // YAML lives in the worker chunk only; the main bundle stays lean.
 registerYamlParser(parseYaml);
@@ -67,12 +79,12 @@ async function handle(job: WorkerRequest): Promise<void> {
           results[item.key] = await readVexDocument(item);
           continue;
         }
-        const blob = source ? await extractDeliveryBlob(source, item.localReference) : undefined;
+        const blob = source ? await extractDeliveryBlob(source, item.localReference, item.declared) : undefined;
         results[item.key] = !blob
           ? { reason: 'the delivery could not be read again' }
           : blob.ok
             ? await readVexDocument({ fileName: item.fileName, bytes: blob.bytes })
-            : { reason: blob.reason };
+            : { reason: EXTRACTION_FAILURE[blob.reason] };
       }
       scope.postMessage({ kind: 'vex-read', id: job.id, results });
       return;
@@ -80,13 +92,13 @@ async function handle(job: WorkerRequest): Promise<void> {
 
     if (job.kind === 'extract') {
       const source = job.blob ? blobSource(job.blob) : bufferAsSource(job.buffer);
-      const result = await extractDeliveryBlob(source, job.localReference);
+      const result = await extractDeliveryBlob(source, job.localReference, job.declared);
       if (result.ok) {
         scope.postMessage({ kind: 'extract', id: job.id, bytes: result.bytes }, [
           result.bytes.buffer as ArrayBuffer,
         ]);
       } else {
-        scope.postMessage({ kind: 'extract', id: job.id, bytes: null, reason: result.reason });
+        scope.postMessage({ kind: 'extract', id: job.id, bytes: null, reason: EXTRACTION_FAILURE[result.reason] });
       }
       return;
     }

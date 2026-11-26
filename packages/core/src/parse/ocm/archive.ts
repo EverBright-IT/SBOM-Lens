@@ -8,7 +8,7 @@ import { asRecordArray, asString, isRecord } from '../../util/narrow';
 import { sha1Hex } from '../../util/sha1';
 import { sha256SourceHex } from '../../util/sha256';
 import type { TarStreamEntry, TarStreamOptions } from '../../util/tar';
-import { readTar, readTarFrom } from '../../util/tar';
+import { MATERIALIZE_ENTRY_MAX, readTar, readTarFrom } from '../../util/tar';
 import type { OcmBlobInfo } from '../../model/ocm';
 import type { Detection } from '../detect';
 import { detect } from '../detect';
@@ -16,6 +16,16 @@ import type { SourceInput } from '../parser';
 import type { BlobInspection } from './blob';
 import { checkDeclaredDigest, checkDeclaredDigestIndexed, inspectBlob } from './blob';
 import { isSbomResource, parseOcmComponentDescriptor } from './cd';
+import type { OciContent, OciPart, PartRead } from './oci';
+import {
+  CD_LAYER_MARKER,
+  OCI_EMPTY_DIGEST,
+  OCI_MANIFEST_MAX,
+  carriesComponentDescriptor,
+  mayBeOciContent,
+  ociContent,
+  storedArtifactParts,
+} from './oci';
 
 /**
  * Walks a local OCM delivery — CTF tar(.gz), component archive, or any tar
@@ -131,19 +141,18 @@ export interface DeliveryWalk {
 const CD_MEDIA_PREFIX = 'application/vnd.ocm.software.component-descriptor';
 /** An SBOM the walker will fetch in full even past the materialization cap. */
 const SBOM_FETCH_MAX = 512 * 1024 * 1024;
-/** Markers of a descriptor manifest: ocm.software and legacy gardener spellings. */
-const CD_CONFIG_MARKER = 'component.config';
-const CD_LAYER_MARKER = 'component-descriptor';
+/**
+ * Structure the walk reads even past the materialization budget: the
+ * artifact index and a component descriptor up to the per-entry cap,
+ * manifests and indexes up to the size registries accept.
+ */
+const STRUCTURE_READ_MAX = MATERIALIZE_ENTRY_MAX;
 /** Config media types of OCI artifacts that are never component descriptors. */
 const ARTIFACT_CONFIGS = new Set([
   'application/vnd.oci.image.config.v1+json',
   'application/vnd.docker.container.image.v1+json',
   'application/vnd.cncf.helm.config.v1+json',
   'application/vnd.oci.empty.v1+json',
-]);
-const OCI_MANIFEST_TYPES = new Set([
-  'application/vnd.oci.image.manifest.v1+json',
-  'application/vnd.docker.distribution.manifest.v2+json',
 ]);
 
 /** One tar, indexed: entries by name plus the source their offsets address. */
@@ -282,7 +291,26 @@ async function indexTar(
 ): Promise<TarIndex> {
   const { entries, diagnostics: tarDiagnostics } = await readTarFrom(source, options);
   diagnostics.push(...tarDiagnostics);
-  return { source, byName: new Map(entries.map((e) => [e.name.replace(/^\.\//, ''), e])), options };
+  // The last entry of a name wins, as a tar reader extracts it. A repeated
+  // name is no layout the ocm CLI writes, and the copies may differ: say so.
+  const byName = new Map<string, TarStreamEntry>();
+  const repeated = new Set<string>();
+  for (const entry of entries) {
+    const name = entry.name.replace(/^\.\//, '');
+    if (byName.has(name)) repeated.add(name);
+    byName.set(name, entry);
+  }
+  if (repeated.size > 0) {
+    const sample = [...repeated].slice(0, 3).join(', ');
+    diagnostics.push(
+      diag(
+        'warning',
+        'ARCHIVE_DUPLICATE_ENTRY',
+        `${repeated.size} name(s) occur more than once in the archive (${sample}${repeated.size > 3 ? ', ...' : ''}): the walk reads the last entry of each, and a download hands out only bytes that match the declared digest.`,
+      ),
+    );
+  }
+  return { source, byName, options };
 }
 
 /** CTF: artifact-index.json → per-artifact OCI layout (flat or artifact set). */
@@ -291,9 +319,16 @@ async function walkCtf(
   index: TarIndex,
   walk: DeliveryWalk,
 ): Promise<void> {
+  const indexBytes = await entryBytes(indexEntry, index.source, STRUCTURE_READ_MAX);
+  if (!indexBytes) {
+    walk.diagnostics.push(
+      diag('warning', 'CTF_INDEX_INVALID', `artifact-index.json exceeds ${STRUCTURE_READ_MAX / (1024 * 1024)} MB: falling back to a content sweep.`),
+    );
+    return;
+  }
   let parsedIndex: unknown;
   try {
-    parsedIndex = JSON.parse(decode(indexEntry.bytes ?? new Uint8Array(0)));
+    parsedIndex = JSON.parse(decode(indexBytes));
   } catch {
     walk.diagnostics.push(diag('warning', 'CTF_INDEX_INVALID', 'artifact-index.json is not valid JSON: falling back to a content sweep.'));
     return;
@@ -329,12 +364,12 @@ async function walkCtf(
         const inner = await indexTar(setSource, walk.diagnostics, index.options);
         const innerIndex =
           inner.byName.get('artifact-set-descriptor.json') ?? inner.byName.get('index.json');
-        const manifestEntry = innerIndex ? manifestFromIndex(innerIndex, inner) : undefined;
+        const manifestEntry = innerIndex ? await manifestFromIndex(innerIndex, inner) : undefined;
         await walkOciManifest(manifestEntry, inner, walk);
       } else {
         // Flat layout: the blob is the descriptor manifest or an OCI index
         // around it; layers and stored artifacts are sibling blobs.
-        const manifestEntry = descriptorManifest(blob, index);
+        const manifestEntry = await descriptorManifest(blob, index);
         if (!manifestEntry || walked.has(manifestEntry)) continue;
         walked.add(manifestEntry);
         await walkOciManifest(manifestEntry, index, walk, { ctf: index, superseded: !asString(artifact.tag) });
@@ -348,12 +383,12 @@ async function walkCtf(
 }
 
 /** OCI image index/manifest JSON → find the manifest blob with layers. */
-function manifestFromIndex(indexEntry: TarStreamEntry, index: TarIndex): TarStreamEntry | undefined {
-  const parsed = parseJsonEntry(indexEntry);
+async function manifestFromIndex(indexEntry: TarStreamEntry, index: TarIndex): Promise<TarStreamEntry | undefined> {
+  const parsed = await readJsonEntry(indexEntry, index);
   if (!parsed) return undefined;
   if (Array.isArray(parsed.layers)) return indexEntry; // already a manifest
   const refs = asRecordArray(parsed.manifests);
-  return descriptorInIndex(refs, index) ?? blobEntry(index, refs[0]?.digest);
+  return (await descriptorInIndex(refs, index)) ?? blobEntry(index, refs[0]?.digest);
 }
 
 /**
@@ -363,19 +398,19 @@ function manifestFromIndex(indexEntry: TarStreamEntry, index: TarIndex): TarStre
  * chart manifests: those are resources stored by value, not component
  * versions.
  */
-function descriptorManifest(entry: TarStreamEntry, index: TarIndex): TarStreamEntry | undefined {
-  const parsed = parseJsonEntry(entry);
+async function descriptorManifest(entry: TarStreamEntry, index: TarIndex): Promise<TarStreamEntry | undefined> {
+  const parsed = await readJsonEntry(entry, index);
   if (!parsed) return entry; // not JSON: let the walk report it as before
   if (Array.isArray(parsed.manifests)) return descriptorInIndex(asRecordArray(parsed.manifests), index);
   return manifestRole(parsed) === 'artifact' ? undefined : entry;
 }
 
-function descriptorInIndex(refs: Record<string, unknown>[], index: TarIndex): TarStreamEntry | undefined {
+async function descriptorInIndex(refs: Record<string, unknown>[], index: TarIndex): Promise<TarStreamEntry | undefined> {
   const typed = refs.find((r) => (asString(r.artifactType) ?? '').includes(CD_LAYER_MARKER));
   if (typed) return blobEntry(index, typed.digest);
   for (const ref of refs) {
     const candidate = blobEntry(index, ref.digest);
-    const manifest = candidate ? parseJsonEntry(candidate) : undefined;
+    const manifest = candidate ? await readJsonEntry(candidate, index) : undefined;
     if (manifest && manifestRole(manifest) === 'descriptor') return candidate;
   }
   return undefined;
@@ -383,11 +418,8 @@ function descriptorInIndex(refs: Record<string, unknown>[], index: TarIndex): Ta
 
 /** 'unknown' keeps the legacy behavior: the walk tries it as a descriptor. */
 function manifestRole(manifest: Record<string, unknown>): 'descriptor' | 'artifact' | 'unknown' {
+  if (carriesComponentDescriptor(manifest)) return 'descriptor';
   const config = isRecord(manifest.config) ? (asString(manifest.config.mediaType) ?? '') : '';
-  if (config.includes(CD_CONFIG_MARKER)) return 'descriptor';
-  if (asRecordArray(manifest.layers).some((l) => (asString(l.mediaType) ?? '').includes(CD_LAYER_MARKER))) {
-    return 'descriptor';
-  }
   return ARTIFACT_CONFIGS.has(config) ? 'artifact' : 'unknown';
 }
 
@@ -396,10 +428,33 @@ function blobEntry(index: TarIndex, digest: unknown): TarStreamEntry | undefined
   return value ? index.byName.get(`blobs/${value.replace(':', '.')}`) : undefined;
 }
 
-function parseJsonEntry(entry: TarStreamEntry): Record<string, unknown> | undefined {
-  if (!entry.bytes) return undefined;
+/**
+ * An entry's bytes: as the tar reader loaded them, or read now when the
+ * entry stayed index-only and is at most `max` bytes. Indexes, manifests
+ * and descriptors are read this way, so a delivery past the
+ * materialization budget loses none of its structure.
+ */
+async function entryBytes(
+  entry: TarStreamEntry | undefined,
+  source: ByteSource,
+  max: number,
+): Promise<Uint8Array | undefined> {
+  if (!entry) return undefined;
+  if (entry.bytes) return entry.bytes;
+  if (entry.size > max) return undefined;
   try {
-    const parsed: unknown = JSON.parse(decode(entry.bytes));
+    return await source.read(entry.offset, entry.size);
+  } catch {
+    return undefined;
+  }
+}
+
+/** A manifest or index entry as JSON, read on demand like any structure. */
+async function readJsonEntry(entry: TarStreamEntry, index: TarIndex): Promise<Record<string, unknown> | undefined> {
+  const bytes = await entryBytes(entry, index.source, OCI_MANIFEST_MAX);
+  if (!bytes) return undefined;
+  try {
+    const parsed: unknown = JSON.parse(decode(bytes));
     return isRecord(parsed) ? parsed : undefined;
   } catch {
     return undefined;
@@ -435,14 +490,8 @@ async function walkOciManifest(
   walk: DeliveryWalk,
   options: ManifestWalkOptions = {},
 ): Promise<void> {
-  if (!manifestEntry?.bytes) return;
-  let manifest: unknown;
-  try {
-    manifest = JSON.parse(decode(manifestEntry.bytes));
-  } catch {
-    return;
-  }
-  if (!isRecord(manifest)) return;
+  const manifest = manifestEntry ? await readJsonEntry(manifestEntry, index) : undefined;
+  if (!manifest) return;
   const layers = asRecordArray(manifest.layers);
   if (layers.length === 0) return;
 
@@ -451,21 +500,37 @@ async function walkOciManifest(
     return digest ? index.byName.get(`blobs/${digest.replace(':', '.')}`) : undefined;
   };
 
-  const cdLayer =
-    layers.find((l) => (asString(l.mediaType) ?? '').startsWith(CD_MEDIA_PREFIX)) ?? layers[0]!;
+  const typedLayer = layers.find((l) => (asString(l.mediaType) ?? '').startsWith(CD_MEDIA_PREFIX));
+  const cdLayer = typedLayer ?? layers[0]!;
   const cdEntry = layerEntry(cdLayer);
-  if (!cdEntry?.bytes) return;
+  // A layer known to hold the descriptor is read past the materialization
+  // budget too; the legacy guess (the first layer of an unmarked manifest)
+  // only when the tar reader loaded it anyway.
+  const known = typedLayer !== undefined || carriesComponentDescriptor(manifest);
+  const cdBytes = known ? await entryBytes(cdEntry, index.source, STRUCTURE_READ_MAX) : (cdEntry?.bytes ?? undefined);
+  if (!cdBytes) {
+    if (known && cdEntry && cdEntry.size > STRUCTURE_READ_MAX) {
+      walk.diagnostics.push(
+        diag(
+          'warning',
+          'CTF_ARTIFACT_UNREADABLE',
+          `A component descriptor of ${Math.round(cdEntry.size / (1024 * 1024))} MB exceeds ${STRUCTURE_READ_MAX / (1024 * 1024)} MB and was not read.`,
+        ),
+      );
+    }
+    return;
+  }
 
   let cdText: string;
   const cdMedia = asString(cdLayer.mediaType) ?? '';
-  if (cdMedia.endsWith('+tar') || sniffContainer(cdEntry.bytes) === 'tar') {
-    const innerCd = readTar(cdEntry.bytes).entries.find((e) =>
+  if (cdMedia.endsWith('+tar') || sniffContainer(cdBytes) === 'tar') {
+    const innerCd = readTar(cdBytes).entries.find((e) =>
       e.name.replace(/^\.\//, '').endsWith('component-descriptor.yaml'),
     );
     if (!innerCd) return;
     cdText = decode(innerCd.bytes);
   } else {
-    cdText = decode(cdEntry.bytes);
+    cdText = decode(cdBytes);
   }
 
   // Local blob store: every non-CD layer, keyed by its digest spellings.
@@ -492,7 +557,13 @@ async function walkOciManifest(
 /** Component archive: component-descriptor.yaml + blobs/<algo>.<hex>. */
 async function walkComponentArchive(index: TarIndex, walk: DeliveryWalk): Promise<void> {
   const cd = index.byName.get('component-descriptor.yaml')!;
-  if (!cd.bytes) return;
+  const cdBytes = await entryBytes(cd, index.source, STRUCTURE_READ_MAX);
+  if (!cdBytes) {
+    walk.diagnostics.push(
+      diag('warning', 'CTF_ARTIFACT_UNREADABLE', `component-descriptor.yaml exceeds ${STRUCTURE_READ_MAX / (1024 * 1024)} MB and was not read.`),
+    );
+    return;
+  }
   const blobs = new Map<string, TarStreamEntry>();
   const layerSummaries: CollectedLayer[] = [];
   for (const [name, entry] of index.byName) {
@@ -502,7 +573,7 @@ async function walkComponentArchive(index: TarIndex, walk: DeliveryWalk): Promis
     blobs.set(base.replace('.', ':'), entry);
     layerSummaries.push({ digest: base.replace('.', ':'), size: entry.size });
   }
-  await collectCd(decode(cd.bytes), { source: index.source, byName: blobs }, layerSummaries, walk);
+  await collectCd(decode(cdBytes), { source: index.source, byName: blobs }, layerSummaries, walk);
 }
 
 /**
@@ -556,19 +627,25 @@ async function collectCd(
   const indexedHashes = new Map<string, Promise<string>>();
   const blobInfos = new Map<Record<string, unknown>, OcmBlobInfo>();
   const blobPresent = new Set<string>();
+  const storedByRef = new Map<string, StoredArtifact | null>();
   for (const artifact of [...resources, ...sources]) {
     const access = isRecord(artifact.access) ? artifact.access : {};
     const localReference = asString(access.localReference) ?? asString(access.filename);
     if (!localReference) continue;
     const blob = blobs.byName.get(localReference);
     if (!blob) continue;
-    // An image or chart stored by value: the localReference is its manifest,
-    // and it is only present if every blob the manifest names is there, at
-    // the size the manifest declares (a cheap check that catches a copy cut
+    // An image or chart stored by value, recognised by its bytes (the media
+    // type in the access is not signed): the localReference is its manifest
+    // or index, and it is only present if every blob below it is there, at
+    // the size its manifest declares (a cheap check that catches a copy cut
     // short on its way to the air-gapped side).
-    const stored = storedArtifactParts(blob, access);
+    let stored = storedByRef.get(localReference);
+    if (stored === undefined) {
+      stored = (await storedArtifactAt(blob, blobs)) ?? null;
+      storedByRef.set(localReference, stored);
+    }
     if (stored) {
-      const gap = storedArtifactGap(stored, blobs);
+      const gap = storedArtifactGap(stored.parts, blobs);
       if (gap) {
         walk.diagnostics.push(
           diag(
@@ -579,21 +656,30 @@ async function collectCd(
         );
         continue;
       }
-      layers.push(...stored.map(({ digest, size, mediaType }) => ({ digest, size, mediaType })));
+      layers.push(...stored.parts.map(({ digest, size, mediaType }) => ({ digest, size, mediaType })));
     }
     blobPresent.add(localReference);
     const declared = isRecord(artifact.digest) ? artifact.digest : undefined;
     try {
-      if (blob.bytes) {
+      // A stored artifact's manifest is read even when the tar reader left
+      // it index-only, so it is judged with everything below it.
+      const bytes = blob.bytes ?? stored?.bytes;
+      if (bytes) {
         let inspection = inspections.get(localReference);
         if (!inspection) {
-          inspection = await inspectBlob(blob.bytes, asString(access.mediaType));
+          inspection = await inspectBlob(bytes, asString(access.mediaType));
           inspections.set(localReference, inspection);
         }
-        const digestCheck = await checkDeclaredDigest(
-          stored ? { ...inspection.subjects, manifest: blob.bytes } : inspection.subjects,
+        let digestCheck = await checkDeclaredDigest(
+          stored ? { ...inspection.subjects, manifest: bytes } : inspection.subjects,
           declared,
         );
+        // A matching manifest vouches for nothing it points at: the
+        // manifests, configs and layers of an image or chart stored by value
+        // must match too.
+        if (stored && digestCheck === 'match')
+          digestCheck = await storedPartsVerdict(stored, blobs, walk, indexedHashes);
+        const summary = ({ digest, size, mediaType }: OciPart) => ({ digest, size, mediaType });
         blobInfos.set(artifact, {
           ...inspection.info,
           mediaType: asString(access.mediaType) ?? inspection.info.mediaType,
@@ -601,14 +687,11 @@ async function collectCd(
           ...(stored
             ? {
                 kind: 'oci-artifact' as const,
-                size: blob.size + stored.reduce((sum, part) => sum + part.size, 0),
+                size: blob.size + stored.parts.reduce((sum, part) => sum + part.size, 0),
                 oci: {
-                  layers: stored
-                    .filter((part) => part.role === 'layer')
-                    .map(({ digest, size, mediaType }) => ({ digest, size, mediaType })),
-                  config: stored
-                    .filter((part) => part.role === 'config')
-                    .map(({ digest, size, mediaType }) => ({ digest, size, mediaType }))[0],
+                  layers: stored.parts.filter((part) => part.role === 'layer').map(summary),
+                  // An index has a config per manifest; an image has one.
+                  ...(stored.content.kind === 'manifest' ? { config: summary(stored.content.config) } : {}),
                 },
               }
             : {}),
@@ -768,43 +851,99 @@ function sameCv(raw: Record<string, unknown>, named: Record<string, unknown>): b
   return !!other && other.name === named.name && other.version === named.version;
 }
 
-interface StoredPart extends CollectedLayer {
-  role: 'config' | 'layer';
+/** An image or chart stored by value, as the walk found it. */
+interface StoredArtifact {
+  /** The manifest or index bytes, read even when the tar reader left them index-only. */
+  bytes: Uint8Array;
+  content: OciContent;
+  /** Every blob below the manifest or index, each once. */
+  parts: OciPart[];
+  /** Nested manifests present but not readable as one: what they name is unchecked. */
+  opaque: number;
 }
 
 /**
- * The config and layers an OCI manifest blob names, when the resource's
- * blob is such a manifest (image or chart stored by value). Undefined for
- * every other blob, descriptor manifests included.
+ * The image or chart a resource's blob stores by value, recognised by its
+ * bytes: an OCI manifest or index (never a descriptor manifest), with every
+ * blob below it. Undefined for every other blob.
  */
-function storedArtifactParts(blob: TarStreamEntry, access: Record<string, unknown>): StoredPart[] | undefined {
-  const mediaType = asString(access.mediaType);
-  if (mediaType ? !OCI_MANIFEST_TYPES.has(mediaType) : blob.bytes?.[0] !== 0x7b) return undefined;
-  const manifest = parseJsonEntry(blob);
-  if (!manifest || !isRecord(manifest.config) || !Array.isArray(manifest.layers)) return undefined;
-  if (manifestRole(manifest) === 'descriptor') return undefined;
-  const part = (node: Record<string, unknown>, role: StoredPart['role']): StoredPart | undefined => {
-    const digest = asString(node.digest);
-    if (!digest) return undefined;
-    return { digest, size: typeof node.size === 'number' ? node.size : 0, mediaType: asString(node.mediaType), role };
-  };
-  return [part(manifest.config, 'config'), ...asRecordArray(manifest.layers).map((l) => part(l, 'layer'))].filter(
-    (p): p is StoredPart => p !== undefined,
-  );
+async function storedArtifactAt(blob: TarStreamEntry, blobs: TarIndex): Promise<StoredArtifact | undefined> {
+  if (!blob.bytes) {
+    // Index-only: look at the head before reading a blob in full.
+    if (blob.size === 0 || blob.size > OCI_MANIFEST_MAX) return undefined;
+    const head = await blobs.source.read(blob.offset, Math.min(blob.size, 64)).catch(() => undefined);
+    if (!head || !mayBeOciContent(head)) return undefined;
+  }
+  const bytes = await entryBytes(blob, blobs.source, OCI_MANIFEST_MAX);
+  const content = bytes ? ociContent(bytes) : undefined;
+  if (!bytes || !content || carriesComponentDescriptor(content.raw)) return undefined;
+  const { parts, opaque } = await storedArtifactParts(content, async (digest): Promise<PartRead> => {
+    const entry = blobs.byName.get(digest);
+    if (!entry) return 'absent';
+    return (await entryBytes(entry, blobs.source, OCI_MANIFEST_MAX)) ?? 'unreadable';
+  });
+  return { bytes, content, parts, opaque };
+}
+
+/**
+ * Every blob below an image or chart stored by value, held against the
+ * digest its manifest records (OCI blobs are named by their content
+ * digest). Hashing them counts against the eager-hash budget; past it the
+ * verdict is 'pending', and the on-demand check judges the manifest and
+ * every part (see extract.ts). Only SHA-256 parts are computable.
+ */
+async function storedPartsVerdict(
+  stored: StoredArtifact,
+  blobs: TarIndex,
+  walk: DeliveryWalk,
+  hashes: Map<string, Promise<string>>,
+): Promise<OcmBlobInfo['digestCheck']> {
+  const parts = stored.parts.map((part) => ({
+    part,
+    entry: blobs.byName.get(part.digest),
+    hex: /^sha256:([0-9a-f]{64})$/i.exec(part.digest)?.[1]?.toLowerCase(),
+  }));
+  // Only bytes still to be read count against the budget.
+  const cost = parts
+    .filter(({ part, entry, hex }) => entry && hex && !hashes.has(part.digest))
+    .reduce((sum, { entry }) => sum + entry!.size, 0);
+  if (cost > walk.hashBudgetRemaining) return 'pending';
+  walk.hashBudgetRemaining -= cost;
+  // What a nested manifest the walk could not read names, no one checked.
+  let verdict: OcmBlobInfo['digestCheck'] = stored.opaque > 0 ? 'unchecked' : 'match';
+  for (const { part, entry, hex } of parts) {
+    if (!entry) {
+      if (part.digest.toLowerCase() !== OCI_EMPTY_DIGEST) verdict = 'unchecked';
+      continue;
+    }
+    if (!hex) {
+      verdict = 'unchecked';
+      continue;
+    }
+    let hash = hashes.get(part.digest);
+    if (!hash) {
+      hash = sha256SourceHex(blobs.source, entry.offset, entry.size);
+      hashes.set(part.digest, hash);
+    }
+    if ((await hash) !== hex) return 'mismatch';
+  }
+  return verdict;
 }
 
 /** What keeps a stored artifact from being complete, or undefined. */
-function storedArtifactGap(stored: StoredPart[], blobs: TarIndex): string | undefined {
+function storedArtifactGap(parts: OciPart[], blobs: TarIndex): string | undefined {
   let absent = 0;
   let resized = 0;
-  for (const part of stored) {
+  for (const part of parts) {
     const entry = blobs.byName.get(part.digest);
-    if (!entry) absent++;
-    else if (part.size > 0 && entry.size !== part.size) resized++;
+    if (!entry) {
+      // The empty descriptor's bytes follow from its digest.
+      if (part.digest.toLowerCase() !== OCI_EMPTY_DIGEST) absent++;
+    } else if (part.size > 0 && entry.size !== part.size) resized++;
   }
   const gaps = [
-    absent > 0 ? `${absent} of ${stored.length} blob(s) missing from the delivery` : '',
-    resized > 0 ? `${resized} of ${stored.length} blob(s) not at the declared size` : '',
+    absent > 0 ? `${absent} of ${parts.length} blob(s) missing from the delivery` : '',
+    resized > 0 ? `${resized} of ${parts.length} blob(s) not at the declared size` : '',
   ].filter(Boolean);
   return gaps.length > 0 ? gaps.join(', ') : undefined;
 }

@@ -308,25 +308,31 @@ export function referenceDigestChecker(
     }
     const targets = resolve(componentName, version);
     if (targets.length === 0) return uncheckedReference(`the referenced ${id} is not in this delivery`);
+    // Every copy the delivery carries is compared: a copy that cannot be
+    // compared never hides another one that provably differs.
+    let gap: ReferenceCheck | undefined;
     for (const target of targets) {
       let actual: string;
       try {
         actual = await digestOf(target, normalisation, hash);
       } catch (error) {
         const detail = error instanceof NormalizationError ? `: ${error.message}` : '';
-        return uncheckedReference(`the referenced ${id} cannot be normalised${detail}`);
+        gap ??= uncheckedReference(`the referenced ${id} cannot be normalised${detail}`);
+        continue;
       }
       if (actual === stripPrefix(recorded)) continue;
       // A descriptor stored without its artifact digests cannot reproduce the
       // form that was signed: that is a gap, not proof of a swap.
       if (!carriesDigests(target)) {
-        return uncheckedReference(`the referenced ${id} records no digests for its own artifacts`);
+        gap ??= uncheckedReference(`the referenced ${id} records no digests for its own artifacts`);
+        continue;
       }
       return {
         verdict: 'mismatch',
         reason: `the referenced ${id} in this delivery does not match its recorded digest`,
       };
     }
+    if (gap) return gap;
     // Equal digests mean equal references below: following one target is enough.
     return { target: targets[0]! };
   };

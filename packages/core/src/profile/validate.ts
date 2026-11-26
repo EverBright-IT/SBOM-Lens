@@ -1,5 +1,5 @@
 import { asArray, asString, isRecord } from '../util/narrow';
-import { isUnsafeRegexPattern } from './regex-safety';
+import { compilePattern } from './pattern-matcher';
 import type { ComplianceProfile, CryptoField, ProfileSpecBaseline, DocumentField, PackageField, ProfileCheck } from './model';
 import {
   CRYPTO_FIELDS,
@@ -342,8 +342,11 @@ function validatePattern(raw: unknown, at: string, errors: string[]): string | u
     errors.push(`${at}: "pattern" is not a valid regular expression`);
     return undefined;
   }
-  if (isUnsafeRegexPattern(pattern)) {
-    errors.push(`${at}: "pattern" has nested unbounded quantifiers and is rejected to avoid catastrophic backtracking`);
+  // Patterns are matched by the linear-time matcher, never by RegExp: what
+  // it cannot match is refused here rather than failing every value later.
+  const compiled = compilePattern(pattern);
+  if (!compiled.ok) {
+    errors.push(`${at}: "pattern" cannot be matched (${compiled.reason})`);
     return undefined;
   }
   return pattern;

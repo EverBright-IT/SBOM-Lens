@@ -54,7 +54,17 @@ export function AcceptanceElementSection({ elementId }: { elementId: ElementId }
           <AcceptanceChip verdict={file.verdict} />
           {file.algorithm && <span className="text-slate-400">{file.algorithm}</span>}
         </div>
-        {file.verdict === 'mismatch' && (
+        {file.verdict === 'mismatch' && file.delivered && (
+          <div className="space-y-0.5">
+            <p className="text-slate-500 dark:text-slate-400">{file.reason}; none of them is checked:</p>
+            <ul className="font-mono text-[11px] break-all text-red-600 dark:text-red-400">
+              {file.delivered.map((path) => (
+                <li key={path}>{path}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+        {file.verdict === 'mismatch' && !file.delivered && (
           <div className="space-y-0.5 font-mono text-[11px] break-all">
             <div className="text-slate-500 dark:text-slate-400">declared {file.declared}</div>
             <div className="text-red-600 dark:text-red-400">actual&nbsp;&nbsp; {file.actual}</div>
@@ -79,7 +89,8 @@ export function AcceptanceReportSection() {
   const actions = useAppStore((s) => s.actions);
   if (!report) return null;
   const { summary, files, extra } = report;
-  const mismatches = files.filter((f) => f.verdict === 'mismatch');
+  const mismatches = files.filter((f) => f.verdict === 'mismatch' && !f.delivered);
+  const ambiguous = files.filter((f) => f.verdict === 'mismatch' && f.delivered);
   const missing = files.filter((f) => f.verdict === 'missing');
   const clean = summary.mismatch === 0 && summary.missing === 0 && summary.extra === 0;
 
@@ -119,6 +130,13 @@ export function AcceptanceReportSection() {
         <div className="space-y-2 text-[11px]">
           {mismatches.length > 0 && (
             <AcceptanceList title="Tampered or corrupt" tone="red" items={mismatches.map((f) => f.path)} />
+          )}
+          {ambiguous.length > 0 && (
+            <AcceptanceList
+              title="Ambiguous: several delivered files read as one path"
+              tone="red"
+              items={ambiguous.map((f) => `${f.path} (${f.delivered!.join(', ')})`)}
+            />
           )}
           {missing.length > 0 && (
             <AcceptanceList title="Missing from the delivery" tone="amber" items={missing.map((f) => f.path)} />
